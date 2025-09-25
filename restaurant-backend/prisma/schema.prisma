@@ -1,0 +1,160 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(cuid())
+  email     String   @unique
+  phone     String?  @unique
+  name      String
+  password  String
+  role      UserRole @default(CUSTOMER)
+  verified  Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  orders    Order[]
+  
+  @@map("users")
+}
+
+model Category {
+  id          String     @id @default(cuid())
+  name        String     @unique
+  description String?
+  image       String?
+  active      Boolean    @default(true)
+  sortOrder   Int        @default(0)
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  menuItems   MenuItem[]
+  
+  @@map("categories")
+}
+
+model MenuItem {
+  id          String      @id @default(cuid())
+  name        String
+  description String?
+  price       Float
+  image       String?
+  category    Category    @relation(fields: [categoryId], references: [id])
+  categoryId  String
+  available   Boolean     @default(true)
+  preparationTime Int     @default(15) // in minutes
+  ingredients String[]    @default([])
+  allergens   String[]    @default([])
+  isVeg       Boolean     @default(true)
+  isVegan     Boolean     @default(false)
+  isGlutenFree Boolean    @default(false)
+  spiceLevel  SpiceLevel  @default(MILD)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  orderItems  OrderItem[]
+  
+  @@map("menu_items")
+}
+
+model Table {
+  id       String  @id @default(cuid())
+  number   Int     @unique
+  capacity Int
+  location String? // e.g., "Window side", "Garden area"
+  active   Boolean @default(true)
+  orders   Order[]
+  
+  @@map("tables")
+}
+
+model Order {
+  id            String      @id @default(cuid())
+  user          User        @relation(fields: [userId], references: [id])
+  userId        String
+  table         Table       @relation(fields: [tableId], references: [id])
+  tableId       String
+  status        OrderStatus @default(PENDING)
+  items         OrderItem[]
+  subtotal      Float
+  tax           Float
+  total         Float
+  paymentId     String?     // Razorpay payment ID
+  paymentStatus PaymentStatus @default(PENDING)
+  specialInstructions String?
+  estimatedTime Int?        // in minutes
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  invoice       Invoice?
+  
+  @@map("orders")
+}
+
+model OrderItem {
+  id         String   @id @default(cuid())
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  orderId    String
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  menuItemId String
+  quantity   Int
+  price      Float    // Price at time of order
+  notes      String?  // Special requests for this item
+  
+  @@map("order_items")
+}
+
+model Invoice {
+  id            String        @id @default(cuid())
+  order         Order         @relation(fields: [orderId], references: [id])
+  orderId       String        @unique
+  invoiceNumber String        @unique
+  issuedAt      DateTime      @default(now())
+  sentVia       InvoiceMethod[]
+  emailSent     Boolean       @default(false)
+  smsSent       Boolean       @default(false)
+  pdfPath       String?       // Path to generated PDF
+  
+  @@map("invoices")
+}
+
+enum UserRole {
+  CUSTOMER
+  ADMIN
+  STAFF
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  PREPARING
+  READY
+  SERVED
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum SpiceLevel {
+  NONE
+  MILD
+  MEDIUM
+  HOT
+  EXTRA_HOT
+}
+
+enum InvoiceMethod {
+  EMAIL
+  SMS
+}

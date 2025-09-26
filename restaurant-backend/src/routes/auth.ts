@@ -39,7 +39,10 @@ const generateToken = (userId: string): string => {
   const payload = { id: userId };
   const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
   
-  return jwt.sign(payload, jwtSecret, { expiresIn });
+  // Using explicit type casting for JWT secret and options
+  return jwt.sign(payload, jwtSecret!, {
+    expiresIn,
+  } as jwt.SignOptions);
 };
 
 // POST /api/auth/register

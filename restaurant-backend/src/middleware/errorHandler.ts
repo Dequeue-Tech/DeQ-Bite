@@ -21,27 +21,27 @@ export class AppError extends Error implements ApiError {
 
 export const errorHandler = (
   err: ApiError,
-  req: Request,
+  _req: Request,
   res: Response,
-  next: NextFunction
-) => {
+  _next: NextFunction
+): void => {
   let { statusCode = 500, message } = err;
 
   if (process.env.NODE_ENV === 'development') {
     logger.error('Error details:', {
       message: err.message,
       stack: err.stack,
-      url: req.originalUrl,
-      method: req.method,
-      ip: req.ip,
-      userAgent: req.get('User-Agent'),
+      url: _req.originalUrl,
+      method: _req.method,
+      ip: _req.ip,
+      userAgent: _req.get('User-Agent'),
     });
   } else {
     logger.error('Error occurred:', {
       message: err.message,
-      url: req.originalUrl,
-      method: req.method,
-      ip: req.ip,
+      url: _req.originalUrl,
+      method: _req.method,
+      ip: _req.ip,
     });
   }
 
@@ -76,5 +76,7 @@ export const errorHandler = (
 };
 
 export const asyncHandler = (fn: Function) => (req: Request, res: Response, next: NextFunction) => {
+  // Using Promise.resolve to handle both sync and async functions
+  // Ensuring we pass all three parameters to the wrapped function
   Promise.resolve(fn(req, res, next)).catch(next);
 };

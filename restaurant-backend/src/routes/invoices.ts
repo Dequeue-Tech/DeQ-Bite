@@ -222,7 +222,7 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
       },
     };
 
-    res.status(201).json(response);
+    return res.status(201).json(response);
   } catch (error) {
     logger.error('Invoice generation failed', {
       orderId,

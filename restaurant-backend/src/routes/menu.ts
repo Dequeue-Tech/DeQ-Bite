@@ -4,9 +4,9 @@ import { prisma } from '@/config/database';
 const router = Router();
 
 // Get all menu items with optional category filter
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    const { categoryId } = req.query;
+    const { categoryId } = _req.query;
     
     const menuItems = await prisma.menuItem.findMany({
       where: {
@@ -21,14 +21,14 @@ router.get('/', async (req, res) => {
       }
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: menuItems,
       message: 'Menu items retrieved successfully'
     });
   } catch (error) {
     console.error('Error fetching menu items:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to fetch menu items',
       message: 'An error occurred while retrieving menu items'
@@ -37,9 +37,9 @@ router.get('/', async (req, res) => {
 });
 
 // Get a specific menu item by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (_req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = _req.params;
     
     const menuItem = await prisma.menuItem.findUnique({
       where: {
@@ -66,14 +66,14 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: menuItem,
       message: 'Menu item retrieved successfully'
     });
   } catch (error) {
     console.error('Error fetching menu item:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to fetch menu item',
       message: 'An error occurred while retrieving the menu item'

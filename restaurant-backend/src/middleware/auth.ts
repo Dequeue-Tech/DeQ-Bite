@@ -1,4 +1,4 @@
-import { Request, Response, NextFunction } from 'express';
+import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { prisma } from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
@@ -6,9 +6,9 @@ import { AuthenticatedRequest } from '@/types/api';
 
 export const authenticate = async (
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
@@ -48,7 +48,7 @@ export const authenticate = async (
 };
 
 export const authorize = (...roles: string[]) => {
-  return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+  return (req: AuthenticatedRequest, _res: Response, next: NextFunction) => {
     if (!req.user) {
       return next(new AppError('Access denied. Authentication required.', 401));
     }
@@ -63,9 +63,9 @@ export const authorize = (...roles: string[]) => {
 
 export const optionalAuth = async (
   req: AuthenticatedRequest,
-  res: Response,
+  _res: Response,
   next: NextFunction
-) => {
+): Promise<void> => {
   try {
     const token = req.header('Authorization')?.replace('Bearer ', '');
 

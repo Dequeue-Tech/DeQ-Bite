@@ -8,18 +8,18 @@ const router = Router();
 router.use(authenticate);
 
 // Create a new order
-router.post('/', async (req, res) => {
+router.post('/', async (_req, res) => {
   try {
-    const { tableId, items, specialInstructions } = req.body;
-    const userId = (req as any).user?.id;
+    const { tableId, items, specialInstructions } = _req.body;
+    const userId = (_req as any).user?.id;
 
     // Log the incoming request for debugging
-    console.log('Order request received:', JSON.stringify(req.body, null, 2));
+    console.log('Order request received:', JSON.stringify(_req.body, null, 2));
     console.log('TableId:', tableId);
     console.log('Items:', items);
     console.log('Special instructions:', specialInstructions);
     console.log('UserId:', userId);
-    console.log('Request headers:', req.headers);
+    console.log('Request headers:', _req.headers);
     
     // Validate required fields
     if (!tableId) {
@@ -167,14 +167,14 @@ router.post('/', async (req, res) => {
       }
     });
 
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       data: order,
       message: 'Order created successfully'
     });
   } catch (error) {
     console.error('Error creating order:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Internal server error while creating order'
     });
@@ -182,9 +182,9 @@ router.post('/', async (req, res) => {
 });
 
 // Get all orders for authenticated user
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
-    const userId = (req as any).user?.id;
+    const userId = (_req as any).user?.id;
     
     const orders = await prisma.order.findMany({
       where: {
@@ -203,13 +203,13 @@ router.get('/', async (req, res) => {
       }
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: orders
     });
   } catch (error) {
     console.error('Error fetching orders:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Internal server error while fetching orders'
     });
@@ -217,10 +217,10 @@ router.get('/', async (req, res) => {
 });
 
 // Get order by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (_req, res) => {
   try {
-    const { id } = req.params;
-    const userId = (req as any).user?.id;
+    const { id } = _req.params;
+    const userId = (_req as any).user?.id;
 
     const order = await prisma.order.findUnique({
       where: {
@@ -244,13 +244,13 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: order
     });
   } catch (error) {
     console.error('Error fetching order:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Internal server error while fetching order'
     });

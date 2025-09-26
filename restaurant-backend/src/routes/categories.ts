@@ -4,7 +4,7 @@ import { prisma } from '@/config/database';
 const router = Router();
 
 // Get all categories
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const categories = await prisma.category.findMany({
       where: {
@@ -15,14 +15,14 @@ router.get('/', async (req, res) => {
       }
     });
 
-    res.json({
+    return res.json({
       success: true,
       data: categories,
       message: 'Categories retrieved successfully'
     });
   } catch (error) {
     console.error('Error fetching categories:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to fetch categories',
       message: 'An error occurred while retrieving categories'
@@ -31,9 +31,9 @@ router.get('/', async (req, res) => {
 });
 
 // Get a specific category by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (_req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = _req.params;
     
     const category = await prisma.category.findUnique({
       where: {
@@ -57,14 +57,14 @@ router.get('/:id', async (req, res) => {
       });
     }
 
-    res.json({
+    return res.json({
       success: true,
       data: category,
       message: 'Category retrieved successfully'
     });
   } catch (error) {
     console.error('Error fetching category:', error);
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to fetch category',
       message: 'An error occurred while retrieving the category'

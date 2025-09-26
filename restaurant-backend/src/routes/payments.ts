@@ -13,7 +13,8 @@ import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { sendInvoiceEmail } from '@/lib/email';
-import { sendInvoiceSMS } from '@/lib/sms';
+// Removed unused import
+// import { sendInvoiceSMS } from '@/lib/sms';
 
 const router = Router();
 
@@ -113,7 +114,7 @@ router.post('/create', authenticate, asyncHandler(async (req: AuthenticatedReque
       },
     };
 
-    res.status(201).json(response);
+    return res.status(201).json(response);
   } catch (error) {
     logger.error('Payment order creation failed', {
       orderId,
@@ -355,7 +356,7 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
       },
     };
 
-    res.json(response);
+    return res.json(response);
   } catch (error) {
     logger.error('Payment verification failed', {
       orderId: order.id,
@@ -442,7 +443,7 @@ router.post('/refund', authenticate, asyncHandler(async (req: AuthenticatedReque
       },
     };
 
-    res.json(response);
+    return res.json(response);
   } catch (error) {
     logger.error('Payment refund failed', {
       orderId,

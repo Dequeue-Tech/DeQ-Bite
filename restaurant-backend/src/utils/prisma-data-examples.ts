@@ -164,7 +164,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
 /**
  * Example of fetching menu data with comprehensive Prisma relations
  */
-export const getMenuWithCompleteData = asyncHandler(async (req: Request, res: Response) => {
+export const getMenuWithCompleteData = asyncHandler(async (_req: Request, res: Response) => {
   const menuData = await prisma.category.findMany({
     include: {
       menuItems: {

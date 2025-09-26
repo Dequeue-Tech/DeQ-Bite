@@ -4,16 +4,16 @@ import { prisma } from '@/config/database';
 const router = Router();
 
 // Get all tables
-router.get('/', async (req, res) => {
+router.get('/', async (_req, res) => {
   try {
     const tables = await prisma.table.findMany();
-    res.json({
+    return res.json({
       success: true,
       data: tables,
       message: 'Tables retrieved successfully'
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to retrieve tables',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -22,20 +22,20 @@ router.get('/', async (req, res) => {
 });
 
 // Get available tables
-router.get('/available', async (req, res) => {
+router.get('/available', async (_req, res) => {
   try {
     const availableTables = await prisma.table.findMany({
       where: {
         active: true
       }
     });
-    res.json({
+    return res.json({
       success: true,
       data: availableTables,
       message: 'Available tables retrieved successfully'
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to retrieve available tables',
       message: error instanceof Error ? error.message : 'Unknown error'
@@ -44,9 +44,9 @@ router.get('/available', async (req, res) => {
 });
 
 // Get table by ID
-router.get('/:id', async (req, res) => {
+router.get('/:id', async (_req, res) => {
   try {
-    const { id } = req.params;
+    const { id } = _req.params;
     const table = await prisma.table.findUnique({
       where: {
         id: id
@@ -61,13 +61,13 @@ router.get('/:id', async (req, res) => {
       });
     }
     
-    res.json({
+    return res.json({
       success: true,
       data: table,
       message: 'Table retrieved successfully'
     });
   } catch (error) {
-    res.status(500).json({
+    return res.status(500).json({
       success: false,
       error: 'Failed to retrieve table',
       message: error instanceof Error ? error.message : 'Unknown error'

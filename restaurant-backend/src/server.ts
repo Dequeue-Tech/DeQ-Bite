@@ -71,7 +71,7 @@ app.use(morgan('combined', {
 }));
 
 // Health check endpoint
-app.get('/health', (req, res) => {
+app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'OK',
     timestamp: new Date().toISOString(),

@@ -80,6 +80,12 @@ app.get('/health', (_req, res) => {
   });
 });
 
+app.get('/', (_req, res) => {
+  res.status(200).json({
+    message: 'Welcome to the Restaurant Management System API',
+  });
+});
+
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/payments', paymentRoutes);

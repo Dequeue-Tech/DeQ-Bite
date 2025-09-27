@@ -2,8 +2,8 @@
 require('dotenv').config();
 
 // Map Vercel environment variables to our expected variables
-if (process.env.VERCEL_URL) {
-  process.env.FRONTEND_URL = `https://${process.env.VERCEL_URL}`;
+if (process.env['VERCEL_URL']) {
+  process.env['FRONTEND_URL'] = `https://${process.env['VERCEL_URL']}`;
 }
 
 // Ensure required environment variables are set

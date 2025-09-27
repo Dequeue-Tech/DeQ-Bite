@@ -7,17 +7,28 @@ declare global {
   var __prisma: PrismaClient | undefined;
 }
 
-if (process.env.NODE_ENV === 'production') {
+// Check if we're in a serverless environment (Vercel)
+const isServerless = process.env['VERCEL'];
+
+if (isServerless) {
+  // In serverless environments, always create a new PrismaClient
   prisma = new PrismaClient({
     log: ['error', 'warn'],
   });
 } else {
-  if (!global.__prisma) {
-    global.__prisma = new PrismaClient({
-      log: ['query', 'info', 'warn', 'error'],
+  // In development/production environments, use global prisma instance
+  if (process.env.NODE_ENV === 'production') {
+    prisma = new PrismaClient({
+      log: ['error', 'warn'],
     });
+  } else {
+    if (!global.__prisma) {
+      global.__prisma = new PrismaClient({
+        log: ['query', 'info', 'warn', 'error'],
+      });
+    }
+    prisma = global.__prisma;
   }
-  prisma = global.__prisma;
 }
 
 export const connectDatabase = async () => {

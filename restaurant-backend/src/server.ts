@@ -23,6 +23,9 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 5000;
 
+// Check if we're in a serverless environment (Vercel)
+const isServerless = process.env['VERCEL'];
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -44,9 +47,7 @@ const corsOptions = {
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
 };
 
-// Handle Vercel preflight requests
-app.options('*', cors(corsOptions));
-
+// Handle preflight requests properly
 app.use(cors(corsOptions));
 
 // Rate limiting
@@ -66,14 +67,16 @@ app.use(limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
-// Logging
-app.use(morgan('combined', {
-  stream: {
-    write: (message: string) => {
-      logger.info(message.trim());
+// Logging - only in non-serverless environments
+if (!isServerless) {
+  app.use(morgan('combined', {
+    stream: {
+      write: (message: string) => {
+        logger.info(message.trim());
+      },
     },
-  },
-}));
+  }));
+}
 
 // Health check endpoint
 app.get('/health', (_req, res) => {
@@ -119,25 +122,27 @@ app.use((req, res) => {
 // Error handling middleware
 app.use(errorHandler);
 
-// Graceful shutdown
-process.on('SIGTERM', () => {
-  logger.info('SIGTERM received, shutting down gracefully');
-  process.exit(0);
-});
+// Graceful shutdown - only in non-serverless environments
+if (!isServerless) {
+  process.on('SIGTERM', () => {
+    logger.info('SIGTERM received, shutting down gracefully');
+    process.exit(0);
+  });
 
-process.on('SIGINT', () => {
-  logger.info('SIGINT received, shutting down gracefully');
-  process.exit(0);
-});
+  process.on('SIGINT', () => {
+    logger.info('SIGINT received, shutting down gracefully');
+    process.exit(0);
+  });
+}
 
-// Start server
+// Start server - only in non-serverless environments
 async function startServer() {
   try {
     // Connect to database
     await connectDatabase();
     
     // Only start the server if not running in a serverless environment
-    if (require.main === module) {
+    if (require.main === module && !isServerless) {
       app.listen(PORT, () => {
         logger.info(`🚀 Server running on port ${PORT}`);
         logger.info(`📊 Health check available at http://localhost:${PORT}/health`);

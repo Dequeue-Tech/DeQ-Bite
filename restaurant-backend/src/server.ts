@@ -80,10 +80,14 @@ app.get('/health', (_req, res) => {
   });
 });
 
-app.get('/', (_req, res) => {
-  res.status(200).json({
-    message: 'Welcome to the Restaurant Management System API',
-  });
+// test route
+app.get('/test', (req, res) => {
+  res.status(200).json({ message: '✅ Test route working!' });
+});
+
+// your existing routes here…
+app.get('/', (req, res) => {
+  res.status(200).json({ message: 'Welcome to the API' });
 });
 
 // API routes

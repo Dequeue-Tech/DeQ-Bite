@@ -2,11 +2,12 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+
 
 // Import route modules
 import authRoutes from './routes/auth';
@@ -67,14 +68,8 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests from this IP, please try again later.' },
-  keyGenerator: (req) => {
-    const xForwardedFor = req.headers['x-forwarded-for'];
-    if (Array.isArray(xForwardedFor)) {
-      return xForwardedFor[0]?.split(',')[0] || req.ip || req.connection?.remoteAddress || 'unknown';
-    }
-    return xForwardedFor?.split(',')[0] || req.ip || req.connection?.remoteAddress || 'unknown';
-  },
-});
+  keyGenerator: (req) => req.ip || req.connection.remoteAddress || 'unknown',
+})
 
 app.use(limiter);
 

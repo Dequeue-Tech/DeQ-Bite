@@ -164,25 +164,27 @@ if (!isServerless) {
 }
 
 // Start server - only in non-serverless environments
-async function startServer() {
-  try {
-    // Connect to database
-    await connectDatabase();
-    
-    // Only start the server if not running in a serverless environment
-    if (require.main === module && !isServerless) {
-      app.listen(PORT, () => {
-        logger.info(`🚀 Server running on port ${PORT}`);
-        logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
-        logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-      });
+if (!isServerless) {
+  async function startServer() {
+    try {
+      // Connect to database
+      await connectDatabase();
+      
+      // Only start the server if not running in a serverless environment
+      if (require.main === module && !isServerless) {
+        app.listen(PORT, () => {
+          logger.info(`🚀 Server running on port ${PORT}`);
+          logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
+          logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+        });
+      }
+    } catch (error) {
+      logger.error('Failed to start server:', error);
+      process.exit(1);
     }
-  } catch (error) {
-    logger.error('Failed to start server:', error);
-    process.exit(1);
   }
-}
 
-startServer();
+  startServer();
+}
 
 export default app;

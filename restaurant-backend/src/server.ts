@@ -9,7 +9,6 @@ import { connectDatabase } from './config/database';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request } from 'express';
 
-
 // Import route modules
 import authRoutes from './routes/auth';
 import paymentRoutes from './routes/payments';

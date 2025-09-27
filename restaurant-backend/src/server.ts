@@ -7,7 +7,6 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
-import { Request } from 'express';
 
 // Import route modules
 import authRoutes from './routes/auth';
@@ -60,19 +59,7 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Custom key generator to handle Vercel's forwarded headers and IPv6 addresses
-  keyGenerator: (req: Request) => {
-    // Use X-Forwarded-For header if available (Vercel sets this)
-    const xForwardedFor = req.headers['x-forwarded-for'];
-    if (xForwardedFor && typeof xForwardedFor === 'string') {
-      // Split the header value and take the first IP address
-      const forwardedIps = xForwardedFor.split(',');
-      const firstIp = forwardedIps[0];
-      return firstIp ? firstIp.trim() : (req.ip || 'unknown');
-    }
-    // Fallback to request IP
-    return req.ip || 'unknown';
-  }
+  // Use the default keyGenerator which properly handles IPv6 addresses
 });
 
 app.use(limiter);

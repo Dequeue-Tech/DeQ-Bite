@@ -10,7 +10,8 @@ app.get('/db-test', async (_req, res) => {
     const prisma = getPrismaClient();
     console.log('Prisma client acquired');
     
-    // Simple query to test 
+    // Simple query to test connections
+    
     const count = await prisma.user.count();
     console.log('Database query completed');
     

@@ -32,17 +32,12 @@ export const errorHandler = (
     logger.error('Error details:', {
       message: err.message,
       stack: err.stack,
-      url: _req.originalUrl,
-      method: _req.method,
-      ip: _req.ip,
-      userAgent: _req.get('User-Agent'),
+      // Removed request details to avoid circular references
     });
   } else {
     logger.error('Error occurred:', {
       message: err.message,
-      url: _req.originalUrl,
-      method: _req.method,
-      ip: _req.ip,
+      // Removed request details to avoid circular references
     });
   }
 

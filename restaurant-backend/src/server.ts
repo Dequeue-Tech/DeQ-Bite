@@ -48,8 +48,17 @@ app.get('/debug-timeout', (_req, res) => {
       const handles = (process as any)._getActiveHandles();
       console.log('server.ts: Active handles count:', handles.length);
       // Log first few handles for debugging
-      handles.slice(0, 5).forEach((handle: any, index: number) => {
+      handles.slice(0, 10).forEach((handle: any, index: number) => {
         console.log(`server.ts: Handle ${index}:`, handle.constructor?.name || typeof handle);
+        // If it's a socket, log some additional info
+        if (handle.constructor?.name === 'Socket') {
+          console.log(`server.ts: Socket handle ${index} info:`, {
+            destroyed: handle.destroyed,
+            readyState: handle.readyState,
+            timeout: handle.timeout,
+            allowHalfOpen: handle.allowHalfOpen,
+          });
+        }
       });
     }
     
@@ -75,6 +84,28 @@ app.use((req, res) => {
     path: req.originalUrl,
     method: req.method,
   });
+});
+
+// Add a special middleware to help debug connection issues
+app.use((req, res, next) => {
+  console.log('server.ts: Request middleware hit at:', new Date().toISOString());
+  console.log('server.ts: Request socket info:', {
+    destroyed: req.socket?.destroyed,
+    readyState: req.socket?.readyState,
+    timeout: req.socket?.timeout,
+  });
+  
+  // Add a listener for when the response finishes
+  res.on('finish', () => {
+    console.log('server.ts: Response finished at:', new Date().toISOString());
+    console.log('server.ts: Response socket info:', {
+      destroyed: res.socket?.destroyed,
+      readyState: res.socket?.readyState,
+      timeout: res.socket?.timeout,
+    });
+  });
+  
+  next();
 });
 
 console.log('server.ts: Server setup complete at:', new Date().toISOString());

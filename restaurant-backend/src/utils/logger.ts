@@ -1,6 +1,5 @@
 import winston from 'winston';
-// import path from 'path';  // Commented out unused imports
-// import fs from 'fs';      // Commented out unused imports
+// Removed unused imports
 
 console.log('logger.ts: Starting module load');
 
@@ -29,5 +28,12 @@ export const logger = winston.createLogger({
   transports,
 });
 console.log('logger.ts: Logger instance created');
+
+// Add a function to close the logger gracefully
+export const closeLogger = () => {
+  console.log('logger.ts: Closing logger');
+  logger.close();
+  console.log('logger.ts: Logger closed');
+};
 
 console.log('logger.ts: Module load complete');

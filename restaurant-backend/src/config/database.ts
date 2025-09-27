@@ -28,6 +28,17 @@ export const getPrismaClient = (() => {
         }
       });
       
+      // Add event listeners to track when the client is connected/disconnected
+      if (!isServerless) {
+        prisma.$on('connect', () => {
+          console.log('Prisma client connected');
+        });
+        
+        prisma.$on('disconnect', () => {
+          console.log('Prisma client disconnected');
+        });
+      }
+      
       console.log('Prisma client created');
     }
     

@@ -50,7 +50,7 @@ export default debugHandler;
 
 // Configure the function with appropriate timeout settings
 export const config = {
-  maxDuration: 10,
+  maxDuration: 100,
   memory: 512,
 };
 

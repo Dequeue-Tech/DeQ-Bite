@@ -1,7 +1,7 @@
 import { Request, Response } from 'express';
-import { prisma } from '@/config/database';
-import { AppError, asyncHandler } from '@/middleware/errorHandler';
-import { ApiResponse } from '@/types/api';
+import { prisma } from '../config/database';
+import { AppError, asyncHandler } from '../middleware/errorHandler';
+import { ApiResponse } from '../types/api';
 
 /**
  * Test endpoint to demonstrate comprehensive Prisma data fetching

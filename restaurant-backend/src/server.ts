@@ -26,6 +26,12 @@ const PORT = process.env.PORT || 5000;
 // Check if we're in a serverless environment (Vercel)
 const isServerless = process.env['VERCEL'];
 
+// Enable trust proxy for Vercel environment
+// This is needed to properly handle X-Forwarded-* headers
+if (isServerless) {
+  app.set('trust proxy', 1);
+}
+
 // Security middleware
 app.use(helmet({
   contentSecurityPolicy: {
@@ -50,7 +56,7 @@ const corsOptions = {
 // Handle preflight requests properly
 app.use(cors(corsOptions));
 
-// Rate limiting - updated configuration to handle Vercel environment and IPv6 addresses
+// Rate limiting - updated configuration to handle Vercel environment
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -59,7 +65,7 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Use the default keyGenerator which properly handles IPv6 addresses
+  // Use the default keyGenerator but with trust proxy enabled
 });
 
 app.use(limiter);

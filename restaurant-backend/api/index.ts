@@ -5,7 +5,7 @@ import app from '../src/server';
 // Export the serverless function
 export default serverless(app);
 
-// Optional: Add a warmup endpoint to keep the function warm
+// Configure the function with appropriate timeout settings
 export const config = {
-  maxDuration: 300, // 5 minutes
+  maxDuration: 10, // 10 seconds - functions should respond quickly
 };

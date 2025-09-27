@@ -37,8 +37,11 @@ export const connectDatabase = async () => {
     // Prisma will handle connections automatically
     if (!isServerless) {
       await prisma.$connect();
+      logger.info('✅ Database connected successfully');
+    } else {
+      // In serverless environments, just log that we're using Prisma
+      logger.info('✅ Using Prisma client in serverless environment');
     }
-    logger.info('✅ Database connected successfully');
   } catch (error) {
     logger.error('❌ Database connection failed:', error);
     throw error;
@@ -51,8 +54,8 @@ export const disconnectDatabase = async () => {
     // Prisma will handle connections automatically
     if (!isServerless) {
       await prisma.$disconnect();
+      logger.info('✅ Database disconnected successfully');
     }
-    logger.info('✅ Database disconnected successfully');
   } catch (error) {
     logger.error('❌ Database disconnection failed:', error);
     throw error;

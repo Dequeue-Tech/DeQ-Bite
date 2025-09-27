@@ -163,27 +163,28 @@ if (!isServerless) {
   });
 }
 
-// Start server - only in non-serverless environments
-if (!isServerless) {
-  async function startServer() {
-    try {
-      // Connect to database
-      await connectDatabase();
-      
-      // Only start the server if not running in a serverless environment
-      if (require.main === module && !isServerless) {
-        app.listen(PORT, () => {
-          logger.info(`🚀 Server running on port ${PORT}`);
-          logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
-          logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-        });
-      }
-    } catch (error) {
-      logger.error('Failed to start server:', error);
-      process.exit(1);
+// Export a function to start the server (for non-serverless environments)
+export const startServer = async () => {
+  try {
+    // Connect to database
+    await connectDatabase();
+    
+    // Only start the server if not running in a serverless environment
+    if (require.main === module && !isServerless) {
+      app.listen(PORT, () => {
+        logger.info(`🚀 Server running on port ${PORT}`);
+        logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
+        logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      });
     }
+  } catch (error) {
+    logger.error('Failed to start server:', error);
+    process.exit(1);
   }
+};
 
+// Only start the server if this file is run directly and not in a serverless environment
+if (require.main === module && !isServerless) {
   startServer();
 }
 

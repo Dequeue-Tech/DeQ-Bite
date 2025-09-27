@@ -6,8 +6,8 @@ const logFormat = winston.format.combine(
   winston.format.timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
   winston.format.errors({ stack: true }),
   winston.format.json(),
-  winston.format.printf(({ timestamp, level, message, stack }) => {
-    return `${timestamp} [${level.toUpperCase()}]: ${message}${stack ? '\n' + stack : ''}`;
+  winston.format.printf(({ timestamp, level, message, stack, service }) => {
+    return `${timestamp} [${level.toUpperCase()}]${service ? ` [${service}]` : ''}: ${message}${stack ? '\n' + stack : ''}`;
   })
 );
 
@@ -17,7 +17,11 @@ const isServerless = process.env['VERCEL'] || process.env['NOW_REGION'];
 // Create logs directory if it doesn't exist (only in non-serverless environments)
 const logsDir = path.join(process.cwd(), 'logs');
 if (!isServerless && !fs.existsSync(logsDir)) {
-  fs.mkdirSync(logsDir, { recursive: true });
+  try {
+    fs.mkdirSync(logsDir, { recursive: true });
+  } catch (error) {
+    // Ignore errors in serverless environments
+  }
 }
 
 // Configure transports based on environment
@@ -33,21 +37,25 @@ const transports: winston.transport[] = [
 
 // Only add file transports if we're not in a serverless environment
 if (!isServerless) {
-  transports.push(
-    // Write error logs to file
-    new winston.transports.File({
-      filename: path.join(logsDir, 'error.log'),
-      level: 'error',
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-    // Write all logs to file
-    new winston.transports.File({
-      filename: path.join(logsDir, 'combined.log'),
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-    }),
-  );
+  try {
+    transports.push(
+      // Write error logs to file
+      new winston.transports.File({
+        filename: path.join(logsDir, 'error.log'),
+        level: 'error',
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+      // Write all logs to file
+      new winston.transports.File({
+        filename: path.join(logsDir, 'combined.log'),
+        maxsize: 5242880, // 5MB
+        maxFiles: 5,
+      }),
+    );
+  } catch (error) {
+    // Ignore errors in serverless environments
+  }
 }
 
 export const logger = winston.createLogger({

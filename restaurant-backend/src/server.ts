@@ -7,6 +7,7 @@ import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
 import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
+import { Request, Response } from 'express';
 
 
 // Import route modules
@@ -68,8 +69,12 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests from this IP, please try again later.' },
-  keyGenerator: (req) => req.ip || req.connection.remoteAddress || 'unknown',
-})
+
+  keyGenerator: (req: Request, res: Response): string => {
+    return ipKeyGenerator(req, res);
+  },
+});
+
 
 app.use(limiter);
 

@@ -6,7 +6,6 @@ import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { 
   createRazorpayOrder, 
   verifyRazorpaySignature,
-  fetchPaymentDetails,
   refundRazorpayPayment 
 } from '../lib/razorpay';
 import { AuthenticatedRequest, ApiResponse } from '../types/api';
@@ -199,7 +198,7 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
 
   try {
     // Fetch payment details from Razorpay to ensure payment is successful
-    const paymentDetails = await fetchPaymentDetails(razorpay_payment_id);
+    //const paymentDetails = await fetchPaymentDetails(razorpay_payment_id);
     
     // Update order status to completed
     const updatedOrder = await prisma.order.update({

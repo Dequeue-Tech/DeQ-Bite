@@ -88,7 +88,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
   const favoriteMenuItems = await prisma.menuItem.findMany({
     where: {
       id: {
-        in: favoriteItems.map(item => item.menuItemId),
+        in: favoriteItems.map((item: any) => item.menuItemId),
       },
     },
     include: {
@@ -112,7 +112,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
   });
 
   // Process monthly spending (this would typically be done with raw SQL for better date grouping)
-  const monthlySpending = spendingPattern.reduce((acc: any, order) => {
+  const monthlySpending: Record<string, any> = spendingPattern.reduce((acc: Record<string, any>, order: any) => {
     const month = new Date(order.createdAt).toISOString().slice(0, 7); // YYYY-MM format
     if (!acc[month]) {
       acc[month] = { total: 0, count: 0 };
@@ -139,11 +139,11 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
       },
       statistics: {
         ordersByStatus: userStats,
-        totalSpent: userStats.reduce((sum, stat) => sum + (stat._sum.total || 0), 0),
-        completedOrders: userStats.find(s => s.paymentStatus === 'COMPLETED')?._count.id || 0,
+        totalSpent: userStats.reduce((sum: number, stat: any) => sum + (stat._sum.total || 0), 0),
+        completedOrders: userStats.find((s: any) => s.paymentStatus === 'COMPLETED')?._count.id || 0,
       },
       preferences: {
-        favoriteItems: favoriteMenuItems.map((item, index) => ({
+        favoriteItems: favoriteMenuItems.map((item: any, index: number) => ({
           ...item,
           orderCount: favoriteItems[index]?._count.menuItemId || 0,
           totalQuantity: favoriteItems[index]?._sum.quantity || 0,
@@ -152,7 +152,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
       analytics: {
         monthlySpending,
         averageOrderValue: userData.orders.length > 0 
-          ? userData.orders.reduce((sum, order) => sum + order.total, 0) / userData.orders.length 
+          ? userData.orders.reduce((sum: number, order: any) => sum + order.total, 0) / userData.orders.length 
           : 0,
       },
     },
@@ -188,10 +188,10 @@ export const getMenuWithCompleteData = asyncHandler(async (_req: Request, res: R
   });
 
   // Calculate popularity for each menu item
-  const enhancedMenuData = menuData.map(category => ({
+  const enhancedMenuData = menuData.map((category: any) => ({
     ...category,
-    menuItems: category.menuItems.map(item => {
-      const totalOrdered = item.orderItems.reduce((sum, orderItem) => {
+    menuItems: category.menuItems.map((item: any) => {
+      const totalOrdered = item.orderItems.reduce((sum: number, orderItem: any) => {
         return orderItem.order.paymentStatus === 'COMPLETED' ? sum + orderItem.quantity : sum;
       }, 0);
       
@@ -224,9 +224,9 @@ export const getMenuWithCompleteData = asyncHandler(async (_req: Request, res: R
       categories: enhancedMenuData,
       summary: {
         totalCategories: menuData.length,
-        totalItems: menuData.reduce((sum, cat) => sum + cat.menuItems.length, 0),
-        availableItems: menuData.reduce((sum, cat) => 
-          sum + cat.menuItems.filter(item => item.available).length, 0),
+        totalItems: menuData.reduce((sum: number, cat: any) => sum + cat.menuItems.length, 0),
+        availableItems: menuData.reduce((sum: number, cat: any) => 
+          sum + cat.menuItems.filter((item: any) => item.available).length, 0),
       },
     },
   };

@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
+import { Request } from 'express';
 
 // Import route modules
 import authRoutes from './routes/auth';
@@ -50,7 +51,7 @@ const corsOptions = {
 // Handle preflight requests properly
 app.use(cors(corsOptions));
 
-// Rate limiting - updated configuration to handle Vercel environment
+// Rate limiting - updated configuration to handle Vercel environment and IPv6 addresses
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -59,13 +60,17 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
-  // Custom key generator to handle Vercel's forwarded headers
-  keyGenerator: (req) => {
+  // Custom key generator to handle Vercel's forwarded headers and IPv6 addresses
+  keyGenerator: (req: Request) => {
     // Use X-Forwarded-For header if available (Vercel sets this)
-    if (req.headers['x-forwarded-for']) {
-      return req.headers['x-forwarded-for'] as string;
+    const xForwardedFor = req.headers['x-forwarded-for'];
+    if (xForwardedFor && typeof xForwardedFor === 'string') {
+      // Split the header value and take the first IP address
+      const forwardedIps = xForwardedFor.split(',');
+      const firstIp = forwardedIps[0];
+      return firstIp ? firstIp.trim() : (req.ip || 'unknown');
     }
-    // Fallback to remote address
+    // Fallback to request IP
     return req.ip || 'unknown';
   }
 });

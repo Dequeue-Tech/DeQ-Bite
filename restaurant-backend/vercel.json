@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/minimal-index.ts",
+      "src": "api/ultra-minimal-v2.ts",
       "use": "@vercel/node"
     },
     {
@@ -24,9 +24,17 @@
     {
       "src": "api/minimal-fix.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/minimal-index.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
+    {
+      "src": "/ultra-minimal-v2",
+      "dest": "/api/ultra-minimal-v2.ts"
+    },
     {
       "src": "/ultra-minimal",
       "dest": "/api/ultra-minimal.ts"
@@ -61,7 +69,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/api/minimal-index.ts"
+      "dest": "/api/ultra-minimal-v2.ts"
     }
   ]
 }

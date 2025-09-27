@@ -19,7 +19,32 @@ app.get('/test-simple', (_req, res) => {
   });
 });
 
-console.log('test-simple.ts: Route configured at:', new Date().toISOString());
+// Add debug endpoint
+app.get('/test-debug', (_req, res) => {
+  console.log('test-simple.ts: /test-debug endpoint hit at:', new Date().toISOString());
+  
+  // Try to check for active handles
+  try {
+    if ((process as any)._getActiveHandles) {
+      const handles = (process as any)._getActiveHandles();
+      console.log('test-simple debug: Active handles count:', handles.length);
+    }
+    
+    if ((process as any)._getActiveRequests) {
+      const requests = (process as any)._getActiveRequests();
+      console.log('test-simple debug: Active requests count:', requests.length);
+    }
+  } catch (error) {
+    console.log('test-simple debug: Error checking handles:', error);
+  }
+  
+  res.status(200).json({ 
+    message: 'Simple debug test working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+console.log('test-simple.ts: Routes configured at:', new Date().toISOString());
 
 const handler = serverless(app);
 console.log('test-simple.ts: Serverless function created at:', new Date().toISOString());

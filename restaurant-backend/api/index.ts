@@ -20,8 +20,9 @@ console.log('api/index.ts: Serverless function created at:', new Date().toISOStr
 const debugHandler = async (event: any, context: any) => {
   console.log('api/index.ts: Handler called at:', new Date().toISOString());
   
-  // Log the event for debugging
-  console.log('api/index.ts: Event:', JSON.stringify(event, null, 2));
+  // Log basic event information without circular references
+  console.log('api/index.ts: Event type:', typeof event);
+  console.log('api/index.ts: Event keys:', Object.keys(event || {}));
   
   // Log context information
   console.log('api/index.ts: Context:', {

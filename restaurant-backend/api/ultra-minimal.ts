@@ -1,20 +1,47 @@
-// Ultra minimal test with timing
+// Ultra minimal test with timing and debugging
 console.log('Ultra minimal test starting at:', new Date().toISOString());
 
-// Ultra minimal test - no imports from our codebase
 import serverless from 'serverless-http';
 import express from 'express';
 
 const app = express();
 
 app.get('/ultra-minimal', (_req, res) => {
+  console.log('Ultra minimal endpoint hit at:', new Date().toISOString());
   res.status(200).json({ 
     message: 'Ultra minimal test working!',
     timestamp: new Date().toISOString()
   });
 });
 
-export default serverless(app);
+// Add a debug endpoint to check for active handles
+app.get('/ultra-debug', (_req, res) => {
+  console.log('Ultra debug endpoint hit at:', new Date().toISOString());
+  
+  // Try to check for active handles (this might not work in all environments)
+  try {
+    if ((process as any)._getActiveHandles) {
+      const handles = (process as any)._getActiveHandles();
+      console.log('Ultra debug: Active handles count:', handles.length);
+    }
+    
+    if ((process as any)._getActiveRequests) {
+      const requests = (process as any)._getActiveRequests();
+      console.log('Ultra debug: Active requests count:', requests.length);
+    }
+  } catch (error) {
+    console.log('Ultra debug: Error checking handles:', error);
+  }
+  
+  res.status(200).json({ 
+    message: 'Ultra debug test working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
+const handler = serverless(app);
+
+export default handler;
 
 export const config = {
   maxDuration: 5,

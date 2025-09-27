@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Test Content-Length Fix</title>
+</head>
+<body>
+    <h1>Testing Content-Length Fix</h1>
+    <button id="testButton">Test Endpoint</button>
+    <div id="result"></div>
+
+    <script>
+        document.getElementById('testButton').addEventListener('click', async () => {
+            const resultDiv = document.getElementById('result');
+            resultDiv.innerHTML = 'Testing...';
+            
+            try {
+                // Using fetch API to test our endpoint
+                const response = await fetch('https://de-q-restaurants.vercel.app/test-content-length', {
+                    method: 'GET',
+                    headers: {
+                        'Content-Length': '297', // This is what was causing the issue
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                resultDiv.innerHTML = `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+            } catch (error) {
+                resultDiv.innerHTML = `<p style="color: red;">Error: ${error.message}</p>`;
+                console.error('Error:', error);
+            }
+        });
+    </script>
+</body>
+</html>

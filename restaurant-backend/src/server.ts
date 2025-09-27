@@ -81,12 +81,12 @@ app.get('/health', (_req, res) => {
 });
 
 // test route
-app.get('/test', (req, res) => {
+app.get('/test', (_req, res) => {
   res.status(200).json({ message: '✅ Test route working!' });
 });
 
 // your existing routes here…
-app.get('/', (req, res) => {
+app.get('/', (_req, res) => {
   res.status(200).json({ message: 'Welcome to the API' });
 });
 

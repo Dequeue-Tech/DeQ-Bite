@@ -38,6 +38,7 @@
     "nodemailer": "^6.10.1",
     "prisma": "^6.16.2",
     "razorpay": "^2.9.6",
+    "serverless-http": "^4.0.0",
     "twilio": "^5.10.0",
     "uuid": "^13.0.0",
     "winston": "^3.14.2",

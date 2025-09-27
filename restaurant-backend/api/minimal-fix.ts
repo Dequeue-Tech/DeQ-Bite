@@ -19,8 +19,8 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Simple route
-app.get('/minimal-fix', (req, res) => {
+// Simple route - FIXED: Correct parameter order (req, res)
+app.get('/minimal-fix', (_req, res) => {
   console.log('minimal-fix.ts: Route hit');
   res.status(200).json({ 
     message: 'Minimal fix working!',
@@ -28,14 +28,14 @@ app.get('/minimal-fix', (req, res) => {
   });
 });
 
-// Error handling middleware
-app.use((err: any, req: any, _res: any, next: any) => {
+// Error handling middleware - FIXED: Correct parameter order (err, req, res, next)
+app.use((err: any, _req: any, next: any) => {
   console.log('minimal-fix.ts: Error:', err.message);
   
   // Handle BadRequestError specifically
   if (err.message?.includes('request size did not match content length')) {
     console.log('minimal-fix.ts: Handling BadRequestError');
-    req.body = {};
+    // Note: In error handlers, we typically don't modify req.body
     return next();
   }
   

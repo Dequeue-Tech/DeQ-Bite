@@ -1,14 +1,14 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '../utils/logger';
 
+// Check if we're in a serverless environment (Vercel)
+const isServerless = process.env['VERCEL'];
+
 let prisma: PrismaClient;
 
 declare global {
   var __prisma: PrismaClient | undefined;
 }
-
-// Check if we're in a serverless environment (Vercel)
-const isServerless = process.env['VERCEL'];
 
 if (isServerless) {
   // In serverless environments, always create a new PrismaClient

@@ -142,6 +142,9 @@ async function startServer() {
   }
 }
 
-startServer();
+// Only start the server if not running in a serverless environment
+if (require.main === module) {
+  startServer();
+}
 
 export default app;

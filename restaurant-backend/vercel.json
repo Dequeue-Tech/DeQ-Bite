@@ -2,6 +2,10 @@
   "version": 2,
   "builds": [
     {
+      "src": "api/ultra-minimal-js.js",
+      "use": "@vercel/node"
+    },
+    {
       "src": "api/ultra-minimal-v2.ts",
       "use": "@vercel/node"
     },
@@ -31,6 +35,10 @@
     }
   ],
   "routes": [
+    {
+      "src": "/ultra-minimal-js",
+      "dest": "/api/ultra-minimal-js.js"
+    },
     {
       "src": "/ultra-minimal-v2",
       "dest": "/api/ultra-minimal-v2.ts"
@@ -69,7 +77,7 @@
     },
     {
       "src": "/(.*)",
-      "dest": "/api/ultra-minimal-v2.ts"
+      "dest": "/api/ultra-minimal-js.js"
     }
   ]
 }

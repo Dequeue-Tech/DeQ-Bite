@@ -15,14 +15,14 @@
       }
     },
     {
-      "src": "api/test-minimal.ts",
+      "src": "api/ultra-minimal.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/test-minimal",
-      "dest": "/api/test-minimal.ts"
+      "src": "/ultra-minimal",
+      "dest": "/api/ultra-minimal.ts"
     },
     {
       "src": "/(.*)",

@@ -2,6 +2,7 @@ console.log('server.ts: Starting module load at:', new Date().toISOString());
 
 import express from 'express';
 import dotenv from 'dotenv';
+import { errorHandler } from './middleware/errorHandler';
 
 console.log('server.ts: Core modules imported at:', new Date().toISOString());
 
@@ -17,6 +18,12 @@ app.use((req, _res, next) => {
   console.log('server.ts: Request middleware hit at:', new Date().toISOString());
   console.log('server.ts: Request headers:', req.headers);
   
+  // Handle content-length issues
+  const contentLength = req.headers['content-length'];
+  if (contentLength) {
+    console.log('server.ts: Content-Length header:', contentLength);
+  }
+  
   // Set proper content length handling
   req.on('error', (err) => {
     console.log('server.ts: Request error:', err);
@@ -25,24 +32,81 @@ app.use((req, _res, next) => {
   next();
 });
 
-// Simple middleware - no complex middleware that might keep connections open
-// Configure body parsing with proper limits
-app.use(express.json({ 
-  limit: '10mb',
-  verify: (_req, _res, buf, encoding) => {
-    // Verify request body integrity
-    console.log('server.ts: JSON body verification - length:', buf.length, 'encoding:', encoding);
+// Simple middleware - handle body parsing with proper error handling
+// Only parse bodies for POST, PUT, PATCH requests to avoid issues with GET requests
+app.use((req, res, next) => {
+  console.log('server.ts: Body parsing middleware hit at:', new Date().toISOString());
+  console.log('server.ts: Request method:', req.method);
+  
+  // For GET, HEAD, DELETE requests, skip body parsing entirely
+  // This prevents issues with requests that have content-length headers but shouldn't have bodies
+  if (['GET', 'HEAD', 'DELETE'].includes(req.method)) {
+    console.log('server.ts: Skipping body parsing for', req.method, 'request');
+    // Explicitly set body to empty to avoid any body parsing attempts
+    req.body = {};
+    return next();
   }
-}));
+  
+  // Only parse bodies for methods that typically have bodies
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    console.log('server.ts: Parsing body for', req.method);
+    express.json({ 
+      limit: '10mb',
+      verify: (_req, _res, buf, encoding) => {
+        // Verify request body integrity
+        console.log('server.ts: JSON body verification - length:', buf.length, 'encoding:', encoding);
+      }
+    })(req, res, (err) => {
+      if (err) {
+        console.log('server.ts: JSON parsing error:', err);
+        // Don't let body parsing errors prevent the request from being handled
+        // Set an empty body and continue
+        req.body = {};
+        return next();
+      }
+      next();
+    });
+  } else {
+    console.log('server.ts: Skipping body parsing for', req.method);
+    // For any other methods, set empty body
+    req.body = {};
+    next();
+  }
+});
 
-app.use(express.urlencoded({ 
-  extended: true, 
-  limit: '10mb',
-  verify: (_req, _res, buf, encoding) => {
-    // Verify request body integrity
-    console.log('server.ts: URL encoded body verification - length:', buf.length, 'encoding:', encoding);
+app.use((req, res, next) => {
+  console.log('server.ts: URL encoding middleware hit at:', new Date().toISOString());
+  console.log('server.ts: Request method:', req.method);
+  
+  // For GET, HEAD, DELETE requests, skip URL encoding parsing entirely
+  if (['GET', 'HEAD', 'DELETE'].includes(req.method)) {
+    console.log('server.ts: Skipping URL encoding parsing for', req.method, 'request');
+    return next();
   }
-}));
+  
+  // Only parse bodies for methods that typically have bodies
+  if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
+    console.log('server.ts: Parsing URL encoded body for', req.method);
+    express.urlencoded({ 
+      extended: true, 
+      limit: '10mb',
+      verify: (_req, _res, buf, encoding) => {
+        // Verify request body integrity
+        console.log('server.ts: URL encoded body verification - length:', buf.length, 'encoding:', encoding);
+      }
+    })(req, res, (err) => {
+      if (err) {
+        console.log('server.ts: URL encoding parsing error:', err);
+        // Don't let body parsing errors prevent the request from being handled
+        return next();
+      }
+      next();
+    });
+  } else {
+    console.log('server.ts: Skipping URL encoding parsing for', req.method);
+    next();
+  }
+});
 
 console.log('server.ts: Middleware configured at:', new Date().toISOString());
 
@@ -66,6 +130,26 @@ app.get('/test', (_req, res) => {
 app.get('/', (_req, res) => {
   console.log('server.ts: / endpoint hit at:', new Date().toISOString());
   res.status(200).json({ message: 'Welcome to the API' });
+});
+
+// Add a specific test endpoint for debugging the content-length issue
+app.get('/test-content-length', (req, res) => {
+  console.log('server.ts: /test-content-length endpoint hit at:', new Date().toISOString());
+  console.log('server.ts: Request headers:', req.headers);
+  
+  // Check if there's a content-length header
+  const contentLength = req.headers['content-length'];
+  if (contentLength) {
+    console.log('server.ts: Content-Length header present:', contentLength);
+  }
+  
+  // Send response immediately
+  res.status(200).json({ 
+    message: 'Content-length test endpoint working!',
+    contentLength: contentLength || 'none',
+    method: req.method,
+    timestamp: new Date().toISOString()
+  });
 });
 
 // Add a special endpoint to help debug the timeout issue
@@ -106,42 +190,26 @@ app.get('/debug-timeout', (_req, res) => {
   });
 });
 
-// Simple 404 handler
-app.use((req, res) => {
-  console.log('server.ts: 404 handler hit at:', new Date().toISOString());
-  res.status(404).json({
-    error: 'Endpoint not found',
-    path: req.originalUrl,
-    method: req.method,
-  });
+// Add error handling middleware specifically for BadRequestError
+app.use((err: any, req: any, _res: any, next: any) => {
+  console.log('server.ts: Error handling middleware hit at:', new Date().toISOString());
+  console.log('server.ts: Error type:', err.constructor?.name || typeof err);
+  console.log('server.ts: Error message:', err.message);
+  
+  // Handle BadRequestError specifically
+  if (err.type === 'entity.parse.failed' || err.message?.includes('request size did not match content length')) {
+    console.log('server.ts: Handling BadRequestError specifically');
+    // For body parsing errors, we can still continue with an empty body
+    req.body = req.body || {};
+    return next(); // Continue to next middleware
+  }
+  
+  // For any other errors, pass them along
+  next(err);
 });
 
-// Add a special middleware to help debug connection issues
-app.use((req, res, next) => {
-  console.log('server.ts: Request middleware hit at:', new Date().toISOString());
-  console.log('server.ts: Request socket info:', {
-    destroyed: req.socket?.destroyed,
-    readyState: req.socket?.readyState,
-    timeout: req.socket?.timeout,
-  });
-  
-  // Add a listener for when the response finishes
-  res.on('finish', () => {
-    console.log('server.ts: Response finished at:', new Date().toISOString());
-    console.log('server.ts: Response socket info:', {
-      destroyed: res.socket?.destroyed,
-      readyState: res.socket?.readyState,
-      timeout: res.socket?.timeout,
-    });
-  });
-  
-  // Add a listener for when the response is closed
-  res.on('close', () => {
-    console.log('server.ts: Response closed at:', new Date().toISOString());
-  });
-  
-  next();
-});
+// Add the centralized error handler middleware
+app.use(errorHandler);
 
 console.log('server.ts: Server setup complete at:', new Date().toISOString());
 

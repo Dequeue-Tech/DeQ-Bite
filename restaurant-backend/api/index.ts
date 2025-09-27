@@ -51,7 +51,18 @@ const debugHandler = async (event: any, context: any) => {
     return result;
   } catch (error) {
     console.error('api/index.ts: Handler error at:', new Date().toISOString(), error);
-    throw error;
+    // Even if there's an error, we should still return something to prevent hanging
+    // Return a proper error response
+    return {
+      statusCode: 500,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        error: 'Internal Server Error',
+        message: 'An error occurred while processing the request'
+      })
+    };
   } finally {
     console.log('api/index.ts: Handler finally block at:', new Date().toISOString());
   }

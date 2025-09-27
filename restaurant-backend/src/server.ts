@@ -6,8 +6,8 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
-import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
-import { Request, Response } from 'express';
+import rateLimit from 'express-rate-limit';
+import { Request } from 'express';
 
 
 // Import route modules
@@ -69,9 +69,8 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests from this IP, please try again later.' },
-
-  keyGenerator: (req: Request, res: Response): string => {
-    return ipKeyGenerator(req, res);
+  keyGenerator: (req: Request): string => {
+    return req.ip || (req.connection ? req.connection.remoteAddress : 'unknown') || 'unknown';
   },
 });
 

@@ -13,16 +13,28 @@ console.log('api/index.ts: App imported at:', new Date().toISOString());
 console.log('api/index.ts: Creating serverless function at:', new Date().toISOString());
 const handler = serverless(app, {
   binary: ['*/*'],
+  // Add request/response transformation for better debugging
+  request: (request: any) => {
+    console.log('api/index.ts: Processing request at:', new Date().toISOString());
+    console.log('api/index.ts: Request method:', request.method);
+    console.log('api/index.ts: Request url:', request.url);
+    console.log('api/index.ts: Request headers keys:', Object.keys(request.headers || {}));
+    return request;
+  },
+  response: (response: any) => {
+    console.log('api/index.ts: Processing response at:', new Date().toISOString());
+    console.log('api/index.ts: Response status code:', response.statusCode);
+    return response;
+  }
 });
 console.log('api/index.ts: Serverless function created at:', new Date().toISOString());
 
-// Add debugging to see when the handler is called and when it completes
 const debugHandler = async (event: any, context: any) => {
   console.log('api/index.ts: Handler called at:', new Date().toISOString());
   
-  // Log basic event information without circular references
+  // Log basic event information
   console.log('api/index.ts: Event type:', typeof event);
-  console.log('api/index.ts: Event keys:', Object.keys(event || {}));
+  console.log('api/index.ts: Event keys:', Object.keys(event || {}).slice(0, 10)); // Only first 10 keys
   
   // Log context information
   console.log('api/index.ts: Context:', {
@@ -40,6 +52,8 @@ const debugHandler = async (event: any, context: any) => {
   } catch (error) {
     console.error('api/index.ts: Handler error at:', new Date().toISOString(), error);
     throw error;
+  } finally {
+    console.log('api/index.ts: Handler finally block at:', new Date().toISOString());
   }
 };
 
@@ -50,7 +64,7 @@ export default debugHandler;
 
 // Configure the function with appropriate timeout settings
 export const config = {
-  maxDuration: 100,
+  maxDuration: 10, // Back to 10 seconds for faster feedback
   memory: 512,
 };
 

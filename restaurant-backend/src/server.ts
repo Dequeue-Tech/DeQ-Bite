@@ -12,8 +12,38 @@ console.log('server.ts: Environment variables loaded at:', new Date().toISOStrin
 const app = express();
 console.log('server.ts: Express app created at:', new Date().toISOString());
 
+// Configure Express to handle the request size issue
+app.use((req, _res, next) => {
+  console.log('server.ts: Request middleware hit at:', new Date().toISOString());
+  console.log('server.ts: Request headers:', req.headers);
+  
+  // Set proper content length handling
+  req.on('error', (err) => {
+    console.log('server.ts: Request error:', err);
+  });
+  
+  next();
+});
+
 // Simple middleware - no complex middleware that might keep connections open
-app.use(express.json({ limit: '10mb' }));
+// Configure body parsing with proper limits
+app.use(express.json({ 
+  limit: '10mb',
+  verify: (_req, _res, buf, encoding) => {
+    // Verify request body integrity
+    console.log('server.ts: JSON body verification - length:', buf.length, 'encoding:', encoding);
+  }
+}));
+
+app.use(express.urlencoded({ 
+  extended: true, 
+  limit: '10mb',
+  verify: (_req, _res, buf, encoding) => {
+    // Verify request body integrity
+    console.log('server.ts: URL encoded body verification - length:', buf.length, 'encoding:', encoding);
+  }
+}));
+
 console.log('server.ts: Middleware configured at:', new Date().toISOString());
 
 // Health check endpoint (keep this simple and fast)
@@ -103,6 +133,11 @@ app.use((req, res, next) => {
       readyState: res.socket?.readyState,
       timeout: res.socket?.timeout,
     });
+  });
+  
+  // Add a listener for when the response is closed
+  res.on('close', () => {
+    console.log('server.ts: Response closed at:', new Date().toISOString());
   });
   
   next();

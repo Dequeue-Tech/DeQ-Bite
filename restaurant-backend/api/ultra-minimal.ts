@@ -24,8 +24,17 @@ app.get('/ultra-debug', (_req, res) => {
       const handles = (process as any)._getActiveHandles();
       console.log('Ultra debug: Active handles count:', handles.length);
       // Log first few handles for debugging
-      handles.slice(0, 5).forEach((handle: any, index: number) => {
+      handles.slice(0, 10).forEach((handle: any, index: number) => {
         console.log(`Ultra debug: Handle ${index}:`, handle.constructor?.name || typeof handle);
+        // If it's a socket, log some additional info
+        if (handle.constructor?.name === 'Socket') {
+          console.log(`Ultra debug: Socket handle ${index} info:`, {
+            destroyed: handle.destroyed,
+            readyState: handle.readyState,
+            timeout: handle.timeout,
+            allowHalfOpen: handle.allowHalfOpen,
+          });
+        }
       });
     }
     
@@ -43,7 +52,17 @@ app.get('/ultra-debug', (_req, res) => {
   });
 });
 
-const handler = serverless(app);
+const handler = serverless(app, {
+  // Add request/response transformation for better debugging
+  request: (request: any) => {
+    console.log('Ultra minimal: Processing request at:', new Date().toISOString());
+    return request;
+  },
+  response: (response: any) => {
+    console.log('Ultra minimal: Processing response at:', new Date().toISOString());
+    return response;
+  }
+});
 
 export default handler;
 

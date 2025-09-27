@@ -13,6 +13,14 @@ export const getPrismaClient = (() => {
     if (!prisma) {
       prisma = new PrismaClient({
         log: isServerless ? ['error', 'warn'] : ['query', 'info', 'warn', 'error'],
+        // Optimize for serverless environments
+        datasources: {
+          db: {
+            url: isServerless 
+              ? `${process.env.DATABASE_URL}?connection_limit=1&pool_timeout=0` 
+              : process.env.DATABASE_URL
+          }
+        }
       });
       
       // In non-serverless environments, we might want to handle connection events

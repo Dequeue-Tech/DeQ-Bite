@@ -160,7 +160,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
   res.json(response);
 }));
 
-// GET /api/auth/me - Enhanced with comprehensive user data
+// GET /api/auth/me - Simplified user data for faster response
 router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const prisma = getPrismaClient(); // Lazy initialization
   const user = await prisma.user.findUnique({
@@ -174,29 +174,7 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, r
       verified: true,
       createdAt: true,
       updatedAt: true,
-      // Include recent orders
-      orders: {
-        take: 10,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          status: true,
-          total: true,
-          createdAt: true,
-          table: {
-            select: {
-              number: true,
-              location: true,
-            },
-          },
-        },
-      },
-      // Count total orders
-      _count: {
-        select: {
-          orders: true,
-        },
-      },
+      // Remove complex nested queries for faster response
     },
   });
 
@@ -207,20 +185,17 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, r
   const response: ApiResponse = {
     success: true,
     data: { 
-      user: {
-        ...user,
-        totalOrders: user._count.orders,
-        recentOrders: user.orders,
-      },
+      user,
     },
   };
 
   res.json(response);
 }));
 
-// GET /api/auth/profile - Enhanced profile with comprehensive data
+// GET /api/auth/profile - Keep comprehensive data but optimize queries
 router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const prisma = getPrismaClient(); // Lazy initialization
+  // Split complex query into simpler ones for better performance
   const userProfile = await prisma.user.findUnique({
     where: { id: req.user!.id },
     select: {
@@ -232,46 +207,6 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
       verified: true,
       createdAt: true,
       updatedAt: true,
-      // Recent orders with detailed information
-      orders: {
-        take: 5,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          status: true,
-          paymentStatus: true,
-          total: true,
-          createdAt: true,
-          table: {
-            select: {
-              number: true,
-              location: true,
-            },
-          },
-          items: {
-            select: {
-              quantity: true,
-              price: true,
-              menuItem: {
-                select: {
-                  name: true,
-                  category: {
-                    select: {
-                      name: true,
-                    },
-                  },
-                },
-              },
-            },
-          },
-        },
-      },
-      // Order statistics
-      _count: {
-        select: {
-          orders: true,
-        },
-      },
     },
   });
 
@@ -279,8 +214,33 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
     throw new AppError('User profile not found', 404);
   }
 
-  // Calculate total spent from Prisma
-  const totalSpent = await prisma.order.aggregate({
+  // Get recent orders separately
+  const recentOrders = await prisma.order.findMany({
+    where: { userId: req.user!.id },
+    take: 5,
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      status: true,
+      paymentStatus: true,
+      total: true,
+      createdAt: true,
+      table: {
+        select: {
+          number: true,
+          location: true,
+        },
+      },
+    },
+  });
+
+  // Get order count
+  const orderCount = await prisma.order.count({
+    where: { userId: req.user!.id },
+  });
+
+  // Calculate total spent
+  const totalSpentResult = await prisma.order.aggregate({
     where: {
       userId: req.user!.id,
       paymentStatus: 'COMPLETED',
@@ -295,9 +255,9 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
     data: {
       user: {
         ...userProfile,
-        totalOrders: userProfile._count.orders,
-        totalSpent: totalSpent._sum.total || 0,
-        recentOrders: userProfile.orders,
+        totalOrders: orderCount,
+        totalSpent: totalSpentResult._sum.total || 0,
+        recentOrders: recentOrders,
       },
     },
   };

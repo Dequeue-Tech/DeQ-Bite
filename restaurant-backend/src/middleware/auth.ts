@@ -16,6 +16,7 @@ export const authenticate = async (
       throw new AppError('Access denied. No token provided.', 401);
     }
 
+    // Verify token first before database query to reduce unnecessary DB calls
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
     
     const prisma = getPrismaClient(); // Lazy initialization
@@ -71,21 +72,26 @@ export const optionalAuth = async (
     const token = req.header('Authorization')?.replace('Bearer ', '');
 
     if (token) {
-      const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
-      
-      const prisma = getPrismaClient(); // Lazy initialization
-      const user = await prisma.user.findUnique({
-        where: { id: decoded.id },
-        select: {
-          id: true,
-          email: true,
-          name: true,
-          role: true,
-        },
-      });
+      // Verify token first before database query to reduce unnecessary DB calls
+      try {
+        const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
+        
+        const prisma = getPrismaClient(); // Lazy initialization
+        const user = await prisma.user.findUnique({
+          where: { id: decoded.id },
+          select: {
+            id: true,
+            email: true,
+            name: true,
+            role: true,
+          },
+        });
 
-      if (user) {
-        req.user = user;
+        if (user) {
+          req.user = user;
+        }
+      } catch (error) {
+        // Invalid token, continue without authentication
       }
     }
 

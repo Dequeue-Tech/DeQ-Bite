@@ -30,11 +30,9 @@ const isServerless = process.env['VERCEL'];
 
 // Enable trust proxy for Vercel environment
 // This is needed to properly handle X-Forwarded-* headers
-// if (isServerless) {
-//   app.set('trust proxy', 1);
-// }
+app.set('trust proxy', 1);
 
-// Security middleware
+// Security middleware - optimized for serverless
 app.use(helmet({
   contentSecurityPolicy: {
     directives: {
@@ -45,6 +43,8 @@ app.use(helmet({
     },
   },
   crossOriginEmbedderPolicy: false,
+  // Disable HSTS in serverless environments to reduce response time
+  hsts: !isServerless,
 }));
 
 // CORS configuration
@@ -53,6 +53,8 @@ const corsOptions = {
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  // Reduce preflight cache time in serverless for better flexibility
+  maxAge: isServerless ? 600 : 86400, // 10 minutes in serverless, 24 hours otherwise
 };
 
 // Handle preflight requests properly
@@ -60,12 +62,10 @@ app.use(cors(corsOptions));
 
 // Rate limiting - updated configuration to handle Vercel environment
 // trust proxy BEFORE rate limit
-app.set('trust proxy', 1); // Always trust first proxy hop
-
-// Rate limiting
+// Reduce rate limiting strictness in serverless environments
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000,
-  max: 100,
+  windowMs: 15 * 60 * 1000, // 15 minutes
+  max: isServerless ? 200 : 100, // Higher limit for serverless
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests from this IP, please try again later.' },
@@ -73,12 +73,16 @@ const limiter = rateLimit({
     // Use ipKeyGenerator to properly handle IPv6 addresses
     return ipKeyGenerator(req.ip || (req.connection ? req.connection.remoteAddress : 'unknown') || 'unknown');
   },
+  // Skip rate limiting for health check endpoints
+  skip: (req: Request) => {
+    return req.path === '/health' || req.path === '/test';
+  }
 });
 
 app.use(limiter);
 
-
-// Body parsing middleware - only parse bodies for POST, PUT, PATCH requests
+// Body parsing middleware - optimized for serverless
+// Only parse bodies for POST, PUT, PATCH requests
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
     express.json({ limit: '10mb' })(req, res, next);
@@ -89,7 +93,7 @@ app.use((req, res, next) => {
 
 app.use((req, res, next) => {
   if (['POST', 'PUT', 'PATCH'].includes(req.method)) {
-    express.urlencoded({ extended: true })(req, res, next);
+    express.urlencoded({ extended: true, limit: '10mb' })(req, res, next);
   } else {
     next();
   }

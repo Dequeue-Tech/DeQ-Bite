@@ -1,75 +1,69 @@
-import { Router } from 'express';
-import { prisma } from '../config/database';
+import { Router, Request, Response } from 'express';
+import { getPrismaClient } from '../config/database'; // Use lazy initialization
+import { asyncHandler } from '../middleware/errorHandler';
 
 const router = Router();
 
 // Get all categories
-router.get('/', async (_req, res) => {
-  try {
-    const categories = await prisma.category.findMany({
-      where: {
-        active: true
-      },
-      orderBy: {
-        sortOrder: 'asc'
-      }
-    });
+router.get('/', asyncHandler(async (_req: Request, res: Response) => {
+  const prisma = getPrismaClient(); // Lazy initialization
+  const categories = await prisma.category.findMany({
+    where: {
+      active: true
+    },
+    orderBy: {
+      sortOrder: 'asc'
+    }
+  });
 
-    return res.json({
-      success: true,
-      data: categories,
-      message: 'Categories retrieved successfully'
-    });
-  } catch (error) {
-    console.error('Error fetching categories:', error);
-    return res.status(500).json({
-      success: false,
-      error: 'Failed to fetch categories',
-      message: 'An error occurred while retrieving categories'
-    });
-  }
-});
+  return res.json({
+    success: true,
+    data: categories,
+    message: 'Categories retrieved successfully'
+  });
+}));
 
 // Get a specific category by ID
-router.get('/:id', async (_req, res) => {
-  try {
-    const { id } = _req.params;
-    
-    const category = await prisma.category.findUnique({
-      where: {
-        id
-      }
-    });
-
-    if (!category) {
-      return res.status(404).json({
-        success: false,
-        error: 'Category not found',
-        message: 'The requested category could not be found'
-      });
-    }
-
-    if (!category.active) {
-      return res.status(404).json({
-        success: false,
-        error: 'Category not active',
-        message: 'This category is currently not active'
-      });
-    }
-
-    return res.json({
-      success: true,
-      data: category,
-      message: 'Category retrieved successfully'
-    });
-  } catch (error) {
-    console.error('Error fetching category:', error);
-    return res.status(500).json({
+router.get('/:id', asyncHandler(async (_req: Request, res: Response) => {
+  const prisma = getPrismaClient(); // Lazy initialization
+  const { id } = _req.params;
+  
+  // Check if id is provided
+  if (!id) {
+    return res.status(400).json({
       success: false,
-      error: 'Failed to fetch category',
-      message: 'An error occurred while retrieving the category'
+      error: 'Missing ID',
+      message: 'Category ID is required'
     });
   }
-});
+  
+  const category = await prisma.category.findUnique({
+    where: {
+      id: id
+    }
+  });
+
+  if (!category) {
+    return res.status(404).json({
+      success: false,
+      error: 'Category not found',
+      message: 'The requested category could not be found'
+    });
+  }
+
+  if (!category.active) {
+    return res.status(404).json({
+      success: false,
+      error: 'Category not active',
+      message: 'This category is currently not active'
+    });
+  }
+
+  return res.json({
+    success: true,
+    data: category,
+    message: 'Category retrieved successfully'
+  });
+}));
 
 export default router;

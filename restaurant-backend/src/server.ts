@@ -28,9 +28,9 @@ const isServerless = process.env['VERCEL'];
 
 // Enable trust proxy for Vercel environment
 // This is needed to properly handle X-Forwarded-* headers
-if (isServerless) {
-  app.set('trust proxy', 1);
-}
+// if (isServerless) {
+//   app.set('trust proxy', 1);
+// }
 
 // Security middleware
 app.use(helmet({
@@ -57,18 +57,27 @@ const corsOptions = {
 app.use(cors(corsOptions));
 
 // Rate limiting - updated configuration to handle Vercel environment
+// trust proxy BEFORE rate limit
+app.set('trust proxy', 1); // Always trust first proxy hop
+
+// Rate limiting
 const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-  },
+  windowMs: 15 * 60 * 1000,
+  max: 100,
   standardHeaders: true,
   legacyHeaders: false,
-  // Use the default keyGenerator but with trust proxy enabled
+  message: { error: 'Too many requests from this IP, please try again later.' },
+  keyGenerator: (req) => {
+    const xForwardedFor = req.headers['x-forwarded-for'];
+    if (Array.isArray(xForwardedFor)) {
+      return xForwardedFor[0]?.split(',')[0] || req.ip || req.connection?.remoteAddress || 'unknown';
+    }
+    return xForwardedFor?.split(',')[0] || req.ip || req.connection?.remoteAddress || 'unknown';
+  },
 });
 
 app.use(limiter);
+
 
 // Body parsing middleware - only parse bodies for POST, PUT, PATCH requests
 app.use((req, res, next) => {

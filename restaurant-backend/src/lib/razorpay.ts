@@ -1,6 +1,6 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 let razorpayInstance: Razorpay | null = null;
 

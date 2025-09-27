@@ -1,5 +1,5 @@
 import { Twilio } from 'twilio';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 // Initialize Twilio client
 let twilioClient: Twilio | null = null;

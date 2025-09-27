@@ -11,7 +11,8 @@
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
     "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset --force && npm run db:seed"
+    "db:reset": "prisma migrate reset --force && npm run db:seed",
+    "vercel-build": "node build-vercel.js"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
@@ -49,6 +50,8 @@
     "@types/jsonwebtoken": "^9.0.10",
     "@types/node": "^20",
     "eslint": "^9",
+    "ts-node": "^10.9.2",
+    "tsconfig-paths": "^4.2.0",
     "tsx": "^4.20.5",
     "typescript": "^5"
   },

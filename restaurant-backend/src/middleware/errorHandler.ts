@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export interface ApiError extends Error {
   statusCode?: number;
@@ -27,6 +27,7 @@ export const errorHandler = (
 ): void => {
   let { statusCode = 500, message } = err;
 
+  // Log error details
   if (process.env.NODE_ENV === 'development') {
     logger.error('Error details:', {
       message: err.message,
@@ -66,6 +67,11 @@ export const errorHandler = (
   // Don't leak error details in production
   if (process.env.NODE_ENV === 'production' && !err.isOperational) {
     message = 'Something went wrong';
+  }
+
+  // Ensure we haven't already sent a response
+  if (res.headersSent) {
+    return _next(err);
   }
 
   res.status(statusCode).json({

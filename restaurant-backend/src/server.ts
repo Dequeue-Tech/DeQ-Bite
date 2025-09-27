@@ -4,18 +4,18 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import dotenv from 'dotenv';
-import { errorHandler } from '@/middleware/errorHandler';
-import { logger } from '@/utils/logger';
-import { connectDatabase } from '@/config/database';
+import { errorHandler } from './middleware/errorHandler';
+import { logger } from './utils/logger';
+import { connectDatabase } from './config/database';
 
 // Import route modules
-import authRoutes from '@/routes/auth';
-import paymentRoutes from '@/routes/payments';
-import orderRoutes from '@/routes/orders';
-import invoiceRoutes from '@/routes/invoices';
-import menuRoutes from '@/routes/menu';
-import categoryRoutes from '@/routes/categories';
-import tableRoutes from '@/routes/tables';
+import authRoutes from './routes/auth';
+import paymentRoutes from './routes/payments';
+import orderRoutes from './routes/orders';
+import invoiceRoutes from './routes/invoices';
+import menuRoutes from './routes/menu';
+import categoryRoutes from './routes/categories';
+import tableRoutes from './routes/tables';
 
 // Load environment variables
 dotenv.config();
@@ -37,12 +37,17 @@ app.use(helmet({
 }));
 
 // CORS configuration
-app.use(cors({
-  origin: process.env.FRONTEND_URL || 'http://localhost:5174',
+const corsOptions = {
+  origin: process.env.FRONTEND_URL || 'http://localhost:3000',
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
-}));
+};
+
+// Handle Vercel preflight requests
+app.options('*', cors(corsOptions));
+
+app.use(cors(corsOptions));
 
 // Rate limiting
 const limiter = rateLimit({
@@ -131,20 +136,20 @@ async function startServer() {
     // Connect to database
     await connectDatabase();
     
-    app.listen(PORT, () => {
-      logger.info(`🚀 Server running on port ${PORT}`);
-      logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
-      logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
-    });
+    // Only start the server if not running in a serverless environment
+    if (require.main === module) {
+      app.listen(PORT, () => {
+        logger.info(`🚀 Server running on port ${PORT}`);
+        logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
+        logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      });
+    }
   } catch (error) {
     logger.error('Failed to start server:', error);
     process.exit(1);
   }
 }
 
-// Only start the server if not running in a serverless environment
-if (require.main === module) {
-  startServer();
-}
+startServer();
 
 export default app;

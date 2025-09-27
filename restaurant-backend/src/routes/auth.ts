@@ -2,10 +2,10 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { prisma } from '@/config/database';
-import { authenticate } from '@/middleware/auth'; 
-import { AppError, asyncHandler } from '@/middleware/errorHandler';
-import { AuthenticatedRequest, ApiResponse } from '@/types/api';
+import { prisma } from '../config/database';
+import { authenticate } from '../middleware/auth'; 
+import { AppError, asyncHandler } from '../middleware/errorHandler';
+import { AuthenticatedRequest, ApiResponse } from '../types/api';
 
 const router = Router();
 

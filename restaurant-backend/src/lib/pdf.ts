@@ -1,7 +1,7 @@
 import jsPDF from 'jspdf';
 import path from 'path';
 import fs from 'fs/promises';
-import { logger } from '@/utils/logger';
+import { logger } from '../utils/logger';
 
 export interface InvoiceData {
   customerName: string;

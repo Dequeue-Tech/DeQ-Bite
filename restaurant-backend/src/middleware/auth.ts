@@ -1,8 +1,8 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { prisma } from '@/config/database';
-import { AppError } from '@/middleware/errorHandler';
-import { AuthenticatedRequest } from '@/types/api';
+import { prisma } from '../config/database';
+import { AppError } from './errorHandler';
+import { AuthenticatedRequest } from '../types/api';
 
 export const authenticate = async (
   req: AuthenticatedRequest,

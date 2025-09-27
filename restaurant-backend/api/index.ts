@@ -1,4 +1,6 @@
+import '../vercel-env';
+import 'tsconfig-paths/register';
 import serverless from 'serverless-http';
-import app from '../src/server'; // Import the Express app from src directory
+import app from '../src/server';
 
 export default serverless(app);

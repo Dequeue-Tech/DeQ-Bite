@@ -1,20 +1,20 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
-import { prisma } from '@/config/database';
-import { authenticate } from '@/middleware/auth';
-import { AppError, asyncHandler } from '@/middleware/errorHandler';
+import { prisma } from '../config/database';
+import { authenticate } from '../middleware/auth';
+import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { 
   createRazorpayOrder, 
   verifyRazorpaySignature,
   fetchPaymentDetails,
   refundRazorpayPayment 
-} from '@/lib/razorpay';
-import { AuthenticatedRequest, ApiResponse } from '@/types/api';
-import { logger } from '@/utils/logger';
-import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
-import { sendInvoiceEmail } from '@/lib/email';
+} from '../lib/razorpay';
+import { AuthenticatedRequest, ApiResponse } from '../types/api';
+import { logger } from '../utils/logger';
+import { generateInvoicePDF, savePDFToStorage } from '../lib/pdf';
+import { sendInvoiceEmail } from '../lib/email';
 // Removed unused import
-// import { sendInvoiceSMS } from '@/lib/sms';
+// import { sendInvoiceSMS } from '../lib/sms';
 
 const router = Router();
 

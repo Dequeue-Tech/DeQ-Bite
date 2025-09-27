@@ -3,15 +3,11 @@ import cors from 'cors';
 import helmet from 'helmet';
 import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
-// import { logger } from './utils/logger'; // Comment out unused import
 
 // Load environment variables
 dotenv.config();
 
 const app = express();
-
-// Check if we're in a serverless environment (Vercel)
-// const isServerless = process.env['VERCEL']; // Comment out unused variable
 
 // Enable trust proxy for Vercel environment
 app.set('trust proxy', 1);
@@ -42,7 +38,7 @@ app.use(cors(corsOptions));
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true, limit: '10mb' }));
 
-// Health check endpoint (keep this simple)
+// Health check endpoint (keep this simple and fast)
 app.get('/health', (_req, res) => {
   res.status(200).json({
     status: 'OK',
@@ -61,106 +57,37 @@ app.get('/', (_req, res) => {
   res.status(200).json({ message: 'Welcome to the API' });
 });
 
-// Lazy load routes only when they are accessed
-let authRoutes: any;
-let paymentRoutes: any;
-let orderRoutes: any;
-let invoiceRoutes: any;
-let menuRoutes: any;
-let categoryRoutes: any;
-let tableRoutes: any;
-
-// Use a middleware to load routes on first access
-const lazyLoadRoutes = (routeName: string) => {
+// Lazy loading implementation - only import routes when needed
+const lazyLoadRoute = (routePath: string) => {
+  let routeModule: any = null;
+  
   return (req: any, res: any, next: any) => {
-    try {
-      switch (routeName) {
-        case 'auth':
-          if (!authRoutes) {
-            console.log('Lazy loading auth routes');
-            authRoutes = require('./routes/auth').default;
-          }
-          req.lazyRoute = authRoutes;
-          break;
-        case 'payments':
-          if (!paymentRoutes) {
-            console.log('Lazy loading payment routes');
-            paymentRoutes = require('./routes/payments').default;
-          }
-          req.lazyRoute = paymentRoutes;
-          break;
-        case 'orders':
-          if (!orderRoutes) {
-            console.log('Lazy loading order routes');
-            orderRoutes = require('./routes/orders').default;
-          }
-          req.lazyRoute = orderRoutes;
-          break;
-        case 'invoices':
-          if (!invoiceRoutes) {
-            console.log('Lazy loading invoice routes');
-            invoiceRoutes = require('./routes/invoices').default;
-          }
-          req.lazyRoute = invoiceRoutes;
-          break;
-        case 'menu':
-          if (!menuRoutes) {
-            console.log('Lazy loading menu routes');
-            menuRoutes = require('./routes/menu').default;
-          }
-          req.lazyRoute = menuRoutes;
-          break;
-        case 'categories':
-          if (!categoryRoutes) {
-            console.log('Lazy loading category routes');
-            categoryRoutes = require('./routes/categories').default;
-          }
-          req.lazyRoute = categoryRoutes;
-          break;
-        case 'tables':
-          if (!tableRoutes) {
-            console.log('Lazy loading table routes');
-            tableRoutes = require('./routes/tables').default;
-          }
-          req.lazyRoute = tableRoutes;
-          break;
+    // If route module is not loaded yet, load it now
+    if (!routeModule) {
+      try {
+        console.log(`Dynamically importing route: ${routePath}`);
+        // Use dynamic import to load the route module
+        routeModule = require(routePath).default;
+        console.log(`Successfully loaded route: ${routePath}`);
+      } catch (error) {
+        console.error(`Failed to load route module ${routePath}:`, error);
+        return res.status(500).json({ error: `Failed to load ${routePath} routes` });
       }
-      next();
-    } catch (error) {
-      console.error(`Error loading ${routeName} routes:`, error);
-      res.status(500).json({ error: `Failed to load ${routeName} routes` });
     }
+    
+    // Pass control to the loaded route module
+    routeModule(req, res, next);
   };
 };
 
-// API routes with lazy loading
-app.use('/api/auth', lazyLoadRoutes('auth'), (req: any, res: any, next: any) => {
-  req.lazyRoute(req, res, next);
-});
-
-app.use('/api/payments', lazyLoadRoutes('payments'), (req: any, res: any, next: any) => {
-  req.lazyRoute(req, res, next);
-});
-
-app.use('/api/orders', lazyLoadRoutes('orders'), (req: any, res: any, next: any) => {
-  req.lazyRoute(req, res, next);
-});
-
-app.use('/api/invoices', lazyLoadRoutes('invoices'), (req: any, res: any, next: any) => {
-  req.lazyRoute(req, res, next);
-});
-
-app.use('/api/menu', lazyLoadRoutes('menu'), (req: any, res: any, next: any) => {
-  req.lazyRoute(req, res, next);
-});
-
-app.use('/api/categories', lazyLoadRoutes('categories'), (req: any, res: any, next: any) => {
-  req.lazyRoute(req, res, next);
-});
-
-app.use('/api/tables', lazyLoadRoutes('tables'), (req: any, res: any, next: any) => {
-  req.lazyRoute(req, res, next);
-});
+// API routes with true lazy loading
+app.use('/api/auth', lazyLoadRoute('./routes/auth'));
+app.use('/api/payments', lazyLoadRoute('./routes/payments'));
+app.use('/api/orders', lazyLoadRoute('./routes/orders'));
+app.use('/api/invoices', lazyLoadRoute('./routes/invoices'));
+app.use('/api/menu', lazyLoadRoute('./routes/menu'));
+app.use('/api/categories', lazyLoadRoute('./routes/categories'));
+app.use('/api/tables', lazyLoadRoute('./routes/tables'));
 
 // Static files for invoices
 app.use('/invoices', express.static('public/invoices'));

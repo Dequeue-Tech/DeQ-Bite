@@ -1,6 +1,6 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
-import { prisma } from '../config/database';
+import { getPrismaClient } from '../config/database'; // Use lazy initialization
 import { AppError } from './errorHandler';
 import { AuthenticatedRequest } from '../types/api';
 
@@ -18,6 +18,7 @@ export const authenticate = async (
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
     
+    const prisma = getPrismaClient(); // Lazy initialization
     const user = await prisma.user.findUnique({
       where: { id: decoded.id },
       select: {
@@ -72,6 +73,7 @@ export const optionalAuth = async (
     if (token) {
       const decoded = jwt.verify(token, process.env.JWT_SECRET!) as any;
       
+      const prisma = getPrismaClient(); // Lazy initialization
       const user = await prisma.user.findUnique({
         where: { id: decoded.id },
         select: {

@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 import { z } from 'zod';
-import { prisma } from '../config/database';
+import { getPrismaClient } from '../config/database'; // Use lazy initialization
 import { authenticate } from '../middleware/auth'; 
 import { AppError, asyncHandler } from '../middleware/errorHandler';
 import { AuthenticatedRequest, ApiResponse } from '../types/api';
@@ -47,6 +47,7 @@ const generateToken = (userId: string): string => {
 
 // POST /api/auth/register
 router.post('/register', asyncHandler(async (req: Request, res: Response) => {
+  const prisma = getPrismaClient(); // Lazy initialization
   const { name, email, phone, password, role } = registerSchema.parse(req.body);
 
   // Check if user already exists
@@ -104,6 +105,7 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
 
 // POST /api/auth/login
 router.post('/login', asyncHandler(async (req: Request, res: Response) => {
+  const prisma = getPrismaClient(); // Lazy initialization
   const { email, password } = loginSchema.parse(req.body);
 
   // Find user with comprehensive data from Prisma
@@ -160,6 +162,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
 
 // GET /api/auth/me - Enhanced with comprehensive user data
 router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const prisma = getPrismaClient(); // Lazy initialization
   const user = await prisma.user.findUnique({
     where: { id: req.user!.id },
     select: {
@@ -217,6 +220,7 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, r
 
 // GET /api/auth/profile - Enhanced profile with comprehensive data
 router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const prisma = getPrismaClient(); // Lazy initialization
   const userProfile = await prisma.user.findUnique({
     where: { id: req.user!.id },
     select: {
@@ -303,6 +307,7 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
 
 // PUT /api/auth/change-password
 router.put('/change-password', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const prisma = getPrismaClient(); // Lazy initialization
   const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
 
   // Get current user with password

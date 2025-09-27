@@ -4,30 +4,50 @@ import { logger } from '../utils/logger';
 // Check if we're in a serverless environment (Vercel)
 const isServerless = process.env['VERCEL'];
 
-let prisma: PrismaClient;
+// Create a function to get the Prisma client instance
+// This ensures lazy initialization and prevents blocking during module import
+export const getPrismaClient = (() => {
+  let prisma: PrismaClient | null = null;
+  
+  return () => {
+    if (!prisma) {
+      prisma = new PrismaClient({
+        log: isServerless ? ['error', 'warn'] : ['query', 'info', 'warn', 'error'],
+      });
+      
+      // In non-serverless environments, we might want to handle connection events
+      if (!isServerless) {
+        // @ts-ignore - TypeScript might not recognize this event type
+        prisma.$on('beforeExit', async () => {
+          logger.info('Prisma client is about to exit');
+        });
+      }
+    }
+    
+    return prisma;
+  };
+})();
+
+// For backward compatibility, we still export a direct instance
+// but only initialize it when needed
+let prismaInstance: PrismaClient | null = null;
 
 declare global {
   var __prisma: PrismaClient | undefined;
 }
 
 if (isServerless) {
-  // In serverless environments, always create a new PrismaClient
-  prisma = new PrismaClient({
-    log: ['error', 'warn'],
-  });
+  // In serverless environments, use the lazy initialization approach
+  prismaInstance = getPrismaClient();
 } else {
   // In development/production environments, use global prisma instance
   if (process.env.NODE_ENV === 'production') {
-    prisma = new PrismaClient({
-      log: ['error', 'warn'],
-    });
+    prismaInstance = getPrismaClient();
   } else {
     if (!global.__prisma) {
-      global.__prisma = new PrismaClient({
-        log: ['query', 'info', 'warn', 'error'],
-      });
+      global.__prisma = getPrismaClient();
     }
-    prisma = global.__prisma;
+    prismaInstance = global.__prisma;
   }
 }
 
@@ -36,6 +56,7 @@ export const connectDatabase = async () => {
     // In serverless environments, we don't need to explicitly connect
     // Prisma will handle connections automatically
     if (!isServerless) {
+      const prisma = getPrismaClient();
       await prisma.$connect();
       logger.info('✅ Database connected successfully');
     } else {
@@ -53,6 +74,7 @@ export const disconnectDatabase = async () => {
     // In serverless environments, we don't need to explicitly disconnect
     // Prisma will handle connections automatically
     if (!isServerless) {
+      const prisma = getPrismaClient();
       await prisma.$disconnect();
       logger.info('✅ Database disconnected successfully');
     }
@@ -62,4 +84,5 @@ export const disconnectDatabase = async () => {
   }
 };
 
-export { prisma };
+// Export the prisma instance for backward compatibility
+export const prisma = prismaInstance!;

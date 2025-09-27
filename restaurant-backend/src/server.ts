@@ -6,7 +6,7 @@ import dotenv from 'dotenv';
 import { errorHandler } from './middleware/errorHandler';
 import { logger } from './utils/logger';
 import { connectDatabase } from './config/database';
-import rateLimit from 'express-rate-limit';
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit';
 import { Request } from 'express';
 
 
@@ -69,11 +69,11 @@ const limiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   message: { error: 'Too many requests from this IP, please try again later.' },
-  keyGenerator: (req: Request): string => {
-    return req.ip || (req.connection ? req.connection.remoteAddress : 'unknown') || 'unknown';
+  keyGenerator: (req: Request) => {
+    // Use ipKeyGenerator to properly handle IPv6 addresses
+    return ipKeyGenerator(req.ip || (req.connection ? req.connection.remoteAddress : 'unknown') || 'unknown');
   },
 });
-
 
 app.use(limiter);
 

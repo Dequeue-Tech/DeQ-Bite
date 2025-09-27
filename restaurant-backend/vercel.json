@@ -2,19 +2,6 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.js",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "dist/**",
-          "src/**",
-          "prisma/**",
-          "public/**",
-          "node_modules/.prisma/client/**"
-        ]
-      }
-    },
-    {
       "src": "api/index.ts",
       "use": "@vercel/node",
       "config": {
@@ -28,58 +15,14 @@
       }
     },
     {
-      "src": "api/test.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/db-test.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/minimal.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/connection-test.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/ultra-minimal.ts",
+      "src": "api/test-minimal.ts",
       "use": "@vercel/node"
     }
   ],
   "routes": [
     {
-      "src": "/ultra-minimal",
-      "dest": "/api/ultra-minimal.ts"
-    },
-    {
-      "src": "/ultra-health",
-      "dest": "/api/ultra-minimal.ts"
-    },
-    {
-      "src": "/connection-test",
-      "dest": "/api/connection-test.ts"
-    },
-    {
-      "src": "/minimal/(.*)",
-      "dest": "/api/minimal.ts"
-    },
-    {
       "src": "/test-minimal",
-      "dest": "/api/test.ts"
-    },
-    {
-      "src": "/health-minimal",
-      "dest": "/api/test.ts"
-    },
-    {
-      "src": "/db-test",
-      "dest": "/api/db-test.ts"
-    },
-    {
-      "src": "/js-version/(.*)",
-      "dest": "/api/index.js"
+      "dest": "/api/test-minimal.ts"
     },
     {
       "src": "/(.*)",

@@ -45,8 +45,9 @@ declare global {
 }
 
 if (isServerless) {
-  // In serverless environments, use the lazy initialization approach
-  prismaInstance = getPrismaClient();
+  // In serverless environments, DO NOT create the instance immediately
+  // Let it be created lazily when needed
+  prismaInstance = null; // Changed from getPrismaClient() to null
 } else {
   // In development/production environments, use global prisma instance
   if (process.env.NODE_ENV === 'production') {
@@ -93,4 +94,5 @@ export const disconnectDatabase = async () => {
 };
 
 // Export the prisma instance for backward compatibility
-export const prisma = prismaInstance!;
+// In serverless environments, this will be null until getPrismaClient() is called
+export const prisma = prismaInstance as PrismaClient;

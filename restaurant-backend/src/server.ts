@@ -16,6 +16,7 @@ console.log('server.ts: Express app created at:', new Date().toISOString());
 // Configure Express to handle the request size issue
 app.use((req, _res, next) => {
   console.log('server.ts: Request middleware hit at:', new Date().toISOString());
+  console.log('server.ts: Request method:', req.method);
   console.log('server.ts: Request headers:', req.headers);
   
   // Handle content-length issues

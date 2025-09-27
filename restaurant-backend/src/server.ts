@@ -50,7 +50,7 @@ const corsOptions = {
 // Handle preflight requests properly
 app.use(cors(corsOptions));
 
-// Rate limiting
+// Rate limiting - updated configuration to handle Vercel environment
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
   max: 100, // limit each IP to 100 requests per windowMs
@@ -59,6 +59,15 @@ const limiter = rateLimit({
   },
   standardHeaders: true,
   legacyHeaders: false,
+  // Custom key generator to handle Vercel's forwarded headers
+  keyGenerator: (req) => {
+    // Use X-Forwarded-For header if available (Vercel sets this)
+    if (req.headers['x-forwarded-for']) {
+      return req.headers['x-forwarded-for'] as string;
+    }
+    // Fallback to remote address
+    return req.ip || 'unknown';
+  }
 });
 
 app.use(limiter);

@@ -1,5 +1,5 @@
 import { PrismaClient } from '@prisma/client';
-import { logger } from '../utils/logger';
+// import { logger } from '../utils/logger';  // Commented out to avoid circular dependencies
 
 console.log('Database module loading...');
 
@@ -28,13 +28,6 @@ export const getPrismaClient = (() => {
         }
       });
       
-      // In non-serverless environments, we might want to handle connection events
-      if (!isServerless) {
-        // @ts-ignore - TypeScript might not recognize this event type
-        prisma.$on('beforeExit', async () => {
-          logger.info('Prisma client is about to exit');
-        });
-      }
       console.log('Prisma client created');
     }
     
@@ -72,6 +65,7 @@ if (isServerless) {
 
 console.log('Exporting functions...');
 
+// Simplified connect/disconnect functions without logger
 export const connectDatabase = async () => {
   try {
     console.log('connectDatabase called');
@@ -80,13 +74,13 @@ export const connectDatabase = async () => {
     if (!isServerless) {
       const prisma = getPrismaClient();
       await prisma.$connect();
-      logger.info('✅ Database connected successfully');
+      console.log('✅ Database connected successfully');
     } else {
       // In serverless environments, just log that we're using Prisma
-      logger.info('✅ Using Prisma client in serverless environment');
+      console.log('✅ Using Prisma client in serverless environment');
     }
   } catch (error) {
-    logger.error('❌ Database connection failed:', error);
+    console.error('❌ Database connection failed:', error);
     throw error;
   }
 };
@@ -99,10 +93,10 @@ export const disconnectDatabase = async () => {
     if (!isServerless) {
       const prisma = getPrismaClient();
       await prisma.$disconnect();
-      logger.info('✅ Database disconnected successfully');
+      console.log('✅ Database disconnected successfully');
     }
   } catch (error) {
-    logger.error('❌ Database disconnection failed:', error);
+    console.error('❌ Database disconnection failed:', error);
     throw error;
   }
 };

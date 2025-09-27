@@ -48,6 +48,27 @@ app.use((req, res) => {
   });
 });
 
+// Add a special endpoint to help debug the timeout issue
+app.get('/debug-timeout', (_req, res) => {
+  console.log('server.ts: /debug-timeout endpoint hit at:', new Date().toISOString());
+  
+  // Log all active handles
+  if ((process as any)._getActiveHandles) {
+    const handles = (process as any)._getActiveHandles();
+    console.log('server.ts: Active handles count:', handles.length);
+  }
+  
+  if ((process as any)._getActiveRequests) {
+    const requests = (process as any)._getActiveRequests();
+    console.log('server.ts: Active requests count:', requests.length);
+  }
+  
+  res.status(200).json({ 
+    message: 'Debug timeout endpoint working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 console.log('server.ts: Server setup complete at:', new Date().toISOString());
 
 export default app;

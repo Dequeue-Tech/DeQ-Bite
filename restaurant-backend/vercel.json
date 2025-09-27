@@ -17,12 +17,20 @@
     {
       "src": "api/ultra-minimal.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/test-simple.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
     {
       "src": "/ultra-minimal",
       "dest": "/api/ultra-minimal.ts"
+    },
+    {
+      "src": "/test-simple",
+      "dest": "/api/test-simple.ts"
     },
     {
       "src": "/(.*)",

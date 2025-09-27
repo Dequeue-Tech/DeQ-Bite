@@ -16,10 +16,36 @@ const handler = serverless(app, {
 });
 console.log('api/index.ts: Serverless function created at:', new Date().toISOString());
 
+// Add debugging to see when the handler is called and when it completes
+const debugHandler = async (event: any, context: any) => {
+  console.log('api/index.ts: Handler called at:', new Date().toISOString());
+  
+  // Log the event for debugging
+  console.log('api/index.ts: Event:', JSON.stringify(event, null, 2));
+  
+  // Log context information
+  console.log('api/index.ts: Context:', {
+    awsRequestId: context.awsRequestId,
+    functionName: context.functionName,
+    functionVersion: context.functionVersion,
+    memoryLimitInMB: context.memoryLimitInMB,
+    timeout: context.getRemainingTimeInMillis ? context.getRemainingTimeInMillis() : 'unknown'
+  });
+  
+  try {
+    const result = await handler(event, context);
+    console.log('api/index.ts: Handler completed successfully at:', new Date().toISOString());
+    return result;
+  } catch (error) {
+    console.error('api/index.ts: Handler error at:', new Date().toISOString(), error);
+    throw error;
+  }
+};
+
 console.log('api/index.ts: Exporting handler at:', new Date().toISOString());
 
 // Export the serverless function
-export default handler;
+export default debugHandler;
 
 // Configure the function with appropriate timeout settings
 export const config = {

@@ -2,17 +2,8 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.ts",
-      "use": "@vercel/node",
-      "config": {
-        "includeFiles": [
-          "dist/**",
-          "src/**",
-          "prisma/**",
-          "public/**",
-          "node_modules/.prisma/client/**"
-        ]
-      }
+      "src": "api/minimal-index.ts",
+      "use": "@vercel/node"
     },
     {
       "src": "api/ultra-minimal.ts",
@@ -65,8 +56,12 @@
       "dest": "/api/minimal-fix.ts"
     },
     {
+      "src": "/minimal-index",
+      "dest": "/api/minimal-index.ts"
+    },
+    {
       "src": "/(.*)",
-      "dest": "/api/index.ts"
+      "dest": "/api/minimal-index.ts"
     }
   ]
 }

@@ -29,6 +29,10 @@
     {
       "src": "api/test-content-length.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/minimal-fix.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
@@ -55,6 +59,10 @@
     {
       "src": "/test-content-length",
       "dest": "/api/test-content-length.ts"
+    },
+    {
+      "src": "/minimal-fix",
+      "dest": "/api/minimal-fix.ts"
     },
     {
       "src": "/(.*)",

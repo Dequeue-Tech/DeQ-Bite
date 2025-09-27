@@ -4,77 +4,9 @@
     {
       "src": "api/ultra-minimal-js.js",
       "use": "@vercel/node"
-    },
-    {
-      "src": "api/ultra-minimal-v2.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/ultra-minimal.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/test-simple.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/test-minimal-app.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/test-content-length.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/minimal-fix.ts",
-      "use": "@vercel/node"
-    },
-    {
-      "src": "api/minimal-index.ts",
-      "use": "@vercel/node"
     }
   ],
   "routes": [
-    {
-      "src": "/ultra-minimal-js",
-      "dest": "/api/ultra-minimal-js.js"
-    },
-    {
-      "src": "/ultra-minimal-v2",
-      "dest": "/api/ultra-minimal-v2.ts"
-    },
-    {
-      "src": "/ultra-minimal",
-      "dest": "/api/ultra-minimal.ts"
-    },
-    {
-      "src": "/ultra-debug",
-      "dest": "/api/ultra-minimal.ts"
-    },
-    {
-      "src": "/test-simple",
-      "dest": "/api/test-simple.ts"
-    },
-    {
-      "src": "/test-debug",
-      "dest": "/api/test-simple.ts"
-    },
-    {
-      "src": "/test-minimal-app",
-      "dest": "/api/test-minimal-app.ts"
-    },
-    {
-      "src": "/test-content-length",
-      "dest": "/api/test-content-length.ts"
-    },
-    {
-      "src": "/minimal-fix",
-      "dest": "/api/minimal-fix.ts"
-    },
-    {
-      "src": "/minimal-index",
-      "dest": "/api/minimal-index.ts"
-    },
     {
       "src": "/(.*)",
       "dest": "/api/ultra-minimal-js.js"

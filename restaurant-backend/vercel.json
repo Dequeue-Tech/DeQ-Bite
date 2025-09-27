@@ -21,6 +21,10 @@
     {
       "src": "api/test-simple.ts",
       "use": "@vercel/node"
+    },
+    {
+      "src": "api/test-minimal-app.ts",
+      "use": "@vercel/node"
     }
   ],
   "routes": [
@@ -29,8 +33,20 @@
       "dest": "/api/ultra-minimal.ts"
     },
     {
+      "src": "/ultra-debug",
+      "dest": "/api/ultra-minimal.ts"
+    },
+    {
       "src": "/test-simple",
       "dest": "/api/test-simple.ts"
+    },
+    {
+      "src": "/test-debug",
+      "dest": "/api/test-simple.ts"
+    },
+    {
+      "src": "/test-minimal-app",
+      "dest": "/api/test-minimal-app.ts"
     },
     {
       "src": "/(.*)",

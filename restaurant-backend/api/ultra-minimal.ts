@@ -23,6 +23,10 @@ app.get('/ultra-debug', (_req, res) => {
     if ((process as any)._getActiveHandles) {
       const handles = (process as any)._getActiveHandles();
       console.log('Ultra debug: Active handles count:', handles.length);
+      // Log first few handles for debugging
+      handles.slice(0, 5).forEach((handle: any, index: number) => {
+        console.log(`Ultra debug: Handle ${index}:`, handle.constructor?.name || typeof handle);
+      });
     }
     
     if ((process as any)._getActiveRequests) {

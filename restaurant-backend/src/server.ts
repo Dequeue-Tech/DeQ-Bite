@@ -12,7 +12,7 @@ console.log('server.ts: Environment variables loaded at:', new Date().toISOStrin
 const app = express();
 console.log('server.ts: Express app created at:', new Date().toISOString());
 
-// Simple middleware
+// Simple middleware - no complex middleware that might keep connections open
 app.use(express.json({ limit: '10mb' }));
 console.log('server.ts: Middleware configured at:', new Date().toISOString());
 
@@ -38,6 +38,35 @@ app.get('/', (_req, res) => {
   res.status(200).json({ message: 'Welcome to the API' });
 });
 
+// Add a special endpoint to help debug the timeout issue
+app.get('/debug-timeout', (_req, res) => {
+  console.log('server.ts: /debug-timeout endpoint hit at:', new Date().toISOString());
+  
+  // Try to check for active handles
+  try {
+    if ((process as any)._getActiveHandles) {
+      const handles = (process as any)._getActiveHandles();
+      console.log('server.ts: Active handles count:', handles.length);
+      // Log first few handles for debugging
+      handles.slice(0, 5).forEach((handle: any, index: number) => {
+        console.log(`server.ts: Handle ${index}:`, handle.constructor?.name || typeof handle);
+      });
+    }
+    
+    if ((process as any)._getActiveRequests) {
+      const requests = (process as any)._getActiveRequests();
+      console.log('server.ts: Active requests count:', requests.length);
+    }
+  } catch (error) {
+    console.log('server.ts: Error checking handles:', error);
+  }
+  
+  res.status(200).json({ 
+    message: 'Debug timeout endpoint working!',
+    timestamp: new Date().toISOString()
+  });
+});
+
 // Simple 404 handler
 app.use((req, res) => {
   console.log('server.ts: 404 handler hit at:', new Date().toISOString());
@@ -45,27 +74,6 @@ app.use((req, res) => {
     error: 'Endpoint not found',
     path: req.originalUrl,
     method: req.method,
-  });
-});
-
-// Add a special endpoint to help debug the timeout issue
-app.get('/debug-timeout', (_req, res) => {
-  console.log('server.ts: /debug-timeout endpoint hit at:', new Date().toISOString());
-  
-  // Log all active handles
-  if ((process as any)._getActiveHandles) {
-    const handles = (process as any)._getActiveHandles();
-    console.log('server.ts: Active handles count:', handles.length);
-  }
-  
-  if ((process as any)._getActiveRequests) {
-    const requests = (process as any)._getActiveRequests();
-    console.log('server.ts: Active requests count:', requests.length);
-  }
-  
-  res.status(200).json({ 
-    message: 'Debug timeout endpoint working!',
-    timestamp: new Date().toISOString()
   });
 });
 

@@ -288,7 +288,7 @@ router.get('/', authenticate, asyncHandler(async (req: AuthenticatedRequest, res
   const response: ApiResponse = {
     success: true,
     data: {
-      invoices: invoices.map(invoice => ({
+      invoices: invoices.map((invoice: any) => ({
         id: invoice.id,
         invoiceNumber: invoice.invoiceNumber,
         pdfUrl: invoice.pdfPath,

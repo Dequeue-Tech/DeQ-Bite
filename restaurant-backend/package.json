@@ -2,11 +2,11 @@
   "name": "restaurant-backend",
   "version": "1.0.0",
   "description": "Restaurant backend API server with secure payment processing",
-  "main": "dist/server.js",
+  "main": "./dist/server.js",
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc && tsc-alias",
-    "start": "node dist/server.js",
+    "start": "node ./dist/server.js",
     "postbuild": "mkdir dist\\public 2>nul & robocopy public dist\\public /E 2>nul & exit 0",
     "lint": "eslint src/**/*.ts",
     "db:migrate": "prisma migrate dev",

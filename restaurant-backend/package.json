@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "tsc",
-    "start": "node dist/server.js",
+    "start": "node -r tsconfig-paths/register dist/server.js",
     "lint": "eslint src/**/*.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
@@ -32,6 +32,7 @@
     "nodemailer": "^6.10.1",
     "prisma": "^6.16.2",
     "razorpay": "^2.9.6",
+    "tsconfig-paths": "^4.2.0",
     "twilio": "^5.10.0",
     "uuid": "^13.0.0",
     "winston": "^3.14.2",

@@ -1,7 +1,7 @@
 {
   "compilerOptions": {
     "target": "ES2022",
-    "lib": ["ES2022", "dom"],
+    "lib": ["ES2022"],
     "module": "commonjs",
     "moduleResolution": "node",
     "outDir": "./dist",
@@ -35,7 +35,9 @@
       "@/utils/*": ["utils/*"],
       "@/types/*": ["types/*"],
       "@/config/*": ["config/*"]
-    }
+    },
+    "types": ["node"],
+    "typeRoots": ["./node_modules/@types"]
   },
   "include": [
     "src/**/*"

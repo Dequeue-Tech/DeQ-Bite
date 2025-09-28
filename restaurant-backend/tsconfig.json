@@ -36,6 +36,7 @@
       "@/types/*": ["types/*"],
       "@/config/*": ["config/*"]
     },
+    "types": ["node"],
     "typeRoots": ["./node_modules/@types"]
   },
   "include": [

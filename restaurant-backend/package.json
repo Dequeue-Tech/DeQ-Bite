@@ -7,6 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "tsc && tsc-alias",
     "start": "node dist/server.js",
+    "postbuild": "mkdir dist\\public 2>nul & robocopy public dist\\public /E 2>nul & exit 0",
     "lint": "eslint src/**/*.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",
@@ -32,8 +33,8 @@
     "nodemailer": "^6.10.1",
     "prisma": "^6.16.2",
     "razorpay": "^2.9.6",
-    "twilio": "^5.10.0",
     "tsconfig-paths": "^4.2.0",
+    "twilio": "^5.10.0",
     "uuid": "^13.0.0",
     "winston": "^3.14.2",
     "zod": "^4.1.11"
@@ -53,6 +54,7 @@
     "@types/uuid": "^10.0.0",
     "@types/winston": "^2.4.4",
     "eslint": "^9",
+    "ncp": "^2.0.0",
     "tsc-alias": "^1.8.10",
     "tsx": "^4.20.5",
     "typescript": "^5"

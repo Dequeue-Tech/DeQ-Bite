@@ -110,7 +110,7 @@ class ApiClient {
       headers: {
         'Content-Type': 'application/json',
       },
-      timeout: 30000, // 30 seconds
+      timeout: 45000, // Increased to 45 seconds
     });
 
     // Request interceptor to add auth token
@@ -136,7 +136,9 @@ class ApiClient {
         if (error.response?.status === 401) {
           // Token expired or invalid
           this.clearAuthToken();
-          window.location.href = '/auth/signin';
+          if (typeof window !== 'undefined') {
+            window.location.href = '/auth/signin';
+          }
         }
         return Promise.reject(error);
       }
@@ -230,11 +232,36 @@ class ApiClient {
     razorpay_payment_id: string;
     razorpay_signature: string;
   }): Promise<any> {
-    const response = await this.api.post<ApiResponse>('/payments/verify', paymentData);
-    if (response.data.success) {
-      return response.data.data;
+    try {
+      const response = await this.api.post<ApiResponse>('/payments/verify', paymentData);
+      if (response.data.success) {
+        return response.data.data;
+      }
+      
+      // Provide more specific error messages based on backend response
+      const errorMessage = response.data.error || 'Payment verification failed';
+      
+      // Handle specific error cases
+      if (errorMessage.includes('signature')) {
+        throw new Error('Payment verification failed due to invalid signature. Please try again.');
+      } else if (errorMessage.includes('not found')) {
+        throw new Error('Order not found. Please contact support.');
+      } else if (errorMessage.includes('successful')) {
+        throw new Error('Payment was not successful. Please check your payment method and try again.');
+      } else if (errorMessage.includes('already')) {
+        throw new Error('Payment already verified.');
+      }
+      
+      throw new Error(errorMessage);
+    } catch (error: any) {
+      // Provide more specific error messages
+      if (error.code === 'ECONNABORTED') {
+        throw new Error('Network timeout. Please check your internet connection and try again.');
+      } else if (!error.response) {
+        throw new Error('Network error. Please check your internet connection and try again.');
+      }
+      throw error;
     }
-    throw new Error(response.data.error || 'Payment verification failed');
   }
 
   async getPaymentStatus(orderId: string): Promise<any> {

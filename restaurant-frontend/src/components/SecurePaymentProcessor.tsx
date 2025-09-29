@@ -180,6 +180,8 @@ export default function SecurePaymentProcessor({
           errorMessage = 'Order not found. Please contact support.';
         } else if (error.message.includes('timeout')) {
           errorMessage = 'Payment verification timed out. Please check your internet connection and try again.';
+        } else if (error.message.includes('successful')) {
+          errorMessage = 'Payment was not successful. Please check your payment method and try again.';
         } else {
           errorMessage = error.message;
         }

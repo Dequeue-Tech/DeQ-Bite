@@ -144,11 +144,13 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         razorpay_order_id,
         razorpay_payment_id,
         userId: req.user!.id,
+        expectedSignature: 'Calculated on backend',
+        receivedSignature: 'Provided by frontend',
       });
       
       return res.status(400).json({
         success: false,
-        error: 'Invalid payment signature. Payment verification failed.',
+        error: 'Invalid payment signature. Payment verification failed. Please try again or contact support if the issue persists.',
       });
     }
 
@@ -186,9 +188,14 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
     });
 
     if (!order) {
+      logger.warn('Order not found during payment verification', {
+        razorpay_order_id,
+        userId: req.user!.id,
+      });
+      
       return res.status(404).json({
         success: false,
-        error: 'Order not found',
+        error: 'Order not found. The payment reference does not match any order in our system. Please contact support.',
       });
     }
 
@@ -207,9 +214,16 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
       const paymentDetails = await fetchPaymentDetails(razorpay_payment_id);
       
       if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
+        logger.warn('Payment not successful', {
+          razorpay_order_id,
+          razorpay_payment_id,
+          status: paymentDetails.status,
+          userId: req.user!.id,
+        });
+        
         return res.status(400).json({
           success: false,
-          error: 'Payment not successful',
+          error: `Payment not successful. Current status: ${paymentDetails.status}. Please check your payment method and try again.`,
         });
       }
 
@@ -369,36 +383,40 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
       return res.json(response);
     } catch (error) {
       logger.error('Payment verification failed', {
-        orderId: order.id,
+        orderId: order?.id,
         razorpay_order_id,
         razorpay_payment_id,
         userId: req.user!.id,
         error: error instanceof Error ? error.message : 'Unknown error',
+        stack: error instanceof Error ? error.stack : undefined,
       });
 
-      // Update order status to failed
-      await prisma.order.update({
-        where: { id: order.id },
-        data: {
-          paymentStatus: 'FAILED',
-          updatedAt: new Date(),
-        },
-      });
+      // Update order status to failed if order exists
+      if (order?.id) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            paymentStatus: 'FAILED',
+            updatedAt: new Date(),
+          },
+        });
+      }
 
       return res.status(500).json({
         success: false,
-        error: 'Payment verification failed',
+        error: 'Payment verification failed. Please try again or contact support if the issue persists.',
       });
     }
   } catch (error) {
     logger.error('Unexpected error during payment verification', {
       userId: req.user!.id,
       error: error instanceof Error ? error.message : 'Unknown error',
+      stack: error instanceof Error ? error.stack : undefined,
     });
     
     return res.status(500).json({
       success: false,
-      error: 'An unexpected error occurred during payment verification',
+      error: 'An unexpected error occurred during payment verification. Please try again or contact support.',
     });
   }
 }));

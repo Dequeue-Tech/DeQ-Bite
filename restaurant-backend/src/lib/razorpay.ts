@@ -77,7 +77,18 @@ export function verifyRazorpaySignature(
       orderId,
       paymentId,
       isValid,
+      expectedSignature: expectedSignature.substring(0, 10) + '...', // Log only part of signature for security
+      receivedSignature: signature.substring(0, 10) + '...', // Log only part of signature for security
     });
+    
+    if (!isValid) {
+      logger.warn('Signature mismatch details', {
+        orderId,
+        paymentId,
+        expectedLength: expectedSignature.length,
+        receivedLength: signature.length,
+      });
+    }
     
     return isValid;
   } catch (error) {

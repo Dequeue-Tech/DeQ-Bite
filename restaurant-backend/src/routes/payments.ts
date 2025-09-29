@@ -131,87 +131,41 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = 
     verifyPaymentSchema.parse(req.body);
 
-  // Verify the payment signature
-  const isValidSignature = verifyRazorpaySignature(
-    razorpay_order_id,
-    razorpay_payment_id,
-    razorpay_signature
-  );
-
-  if (!isValidSignature) {
-    logger.warn('Invalid payment signature detected', {
+  try {
+    // Verify the payment signature
+    const isValidSignature = verifyRazorpaySignature(
       razorpay_order_id,
       razorpay_payment_id,
-      userId: req.user!.id,
-    });
-    
-    throw new AppError('Invalid payment signature. Payment verification failed.', 400);
-  }
+      razorpay_signature
+    );
 
-  // Find the order by Razorpay order ID
-  const order = await prisma.order.findFirst({
-    where: {
-      paymentId: razorpay_order_id,
-      userId: req.user!.id,
-    },
-    include: {
-      user: {
-        select: {
-          name: true,
-          email: true,
-          phone: true,
-        },
-      },
-      table: {
-        select: {
-          number: true,
-          location: true,
-        },
-      },
-      items: {
-        include: {
-          menuItem: {
-            select: {
-              name: true,
-              price: true,
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!order) {
-    throw new AppError('Order not found', 404);
-  }
-
-  // Check if payment is already verified
-  if (order.paymentStatus === 'COMPLETED') {
-    const response: ApiResponse = {
-      success: true,
-      message: 'Payment already verified',
-      data: { order },
-    };
-    return res.json(response);
-  }
-
-  try {
-    // Fetch payment details from Razorpay to ensure payment is successful
-    const paymentDetails = await fetchPaymentDetails(razorpay_payment_id);
-    
-    if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
-      throw new AppError('Payment not successful', 400);
+    if (!isValidSignature) {
+      logger.warn('Invalid payment signature detected', {
+        razorpay_order_id,
+        razorpay_payment_id,
+        userId: req.user!.id,
+      });
+      
+      return res.status(400).json({
+        success: false,
+        error: 'Invalid payment signature. Payment verification failed.',
+      });
     }
 
-    // Update order status to completed
-    const updatedOrder = await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: 'COMPLETED',
-        status: 'CONFIRMED',
-        updatedAt: new Date(),
+    // Find the order by Razorpay order ID
+    const order = await prisma.order.findFirst({
+      where: {
+        paymentId: razorpay_order_id,
+        userId: req.user!.id,
       },
       include: {
+        user: {
+          select: {
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
         table: {
           select: {
             number: true,
@@ -231,151 +185,221 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
       },
     });
 
-    logger.info('Payment verified successfully', {
-      orderId: order.id,
-      razorpay_order_id,
-      razorpay_payment_id,
-      userId: req.user!.id,
-      amount: order.total,
-    });
-
-    // Automatically generate and send invoice after successful payment
-    try {
-      // Check if invoice already exists
-      let invoice = await prisma.invoice.findUnique({
-        where: { orderId: order.id },
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        error: 'Order not found',
       });
-
-      // Generate unique invoice number if not exists
-      const invoiceNumber = invoice?.invoiceNumber || 
-        `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-
-      // Prepare invoice data
-      const invoiceData = {
-        customerName: order.user.name,
-        customerEmail: order.user.email,
-        customerPhone: order.user.phone || '', // Handle null phone
-        invoiceNumber,
-        orderDate: order.createdAt.toLocaleDateString('en-IN'),
-        items: order.items.map((item: any) => ({
-          name: item.menuItem.name,
-          quantity: item.quantity,
-          price: item.price,
-          total: item.price * item.quantity,
-        })),
-        subtotal: order.subtotal,
-        tax: order.tax,
-        total: order.total,
-        tableNumber: order.table.number,
-        restaurantName: process.env.APP_NAME || 'Restaurant',
-        restaurantAddress: 'Your Restaurant Address Here',
-        restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-        paymentMethod: 'Online Payment (Razorpay)',
-      };
-
-      // Generate PDF
-      const pdfBuffer = generateInvoicePDF(invoiceData);
-      const pdfFileName = `invoice-${invoiceNumber}.pdf`;
-      const pdfPath = await savePDFToStorage(pdfBuffer, pdfFileName);
-
-      // Track delivery results
-      const results = {
-        emailSent: false,
-        smsSent: false,
-        pdfGenerated: true,
-        pdfPath,
-      };
-
-      // Send email automatically
-      if (order.user.email) {
-        results.emailSent = await sendInvoiceEmail(
-          order.user.email,
-          {
-            customerName: order.user.name,
-            invoiceNumber,
-            orderDate: invoiceData.orderDate,
-            total: order.total,
-            tableNumber: order.table.number,
-            restaurantName: invoiceData.restaurantName,
-          },
-          pdfBuffer
-        );
-      }
-
-      // Create or update invoice record
-      if (!invoice) {
-        invoice = await prisma.invoice.create({
-          data: {
-            orderId: order.id,
-            invoiceNumber,
-            sentVia: ['EMAIL'], // Default to email
-            emailSent: results.emailSent,
-            smsSent: results.smsSent,
-            pdfPath: results.pdfPath,
-          },
-        });
-      } else {
-        // Update existing invoice
-        const updatedSentVia = [...invoice.sentVia];
-        if (!updatedSentVia.includes('EMAIL')) {
-          updatedSentVia.push('EMAIL');
-        }
-        
-        invoice = await prisma.invoice.update({
-          where: { id: invoice.id },
-          data: {
-            sentVia: updatedSentVia,
-            emailSent: invoice.emailSent || results.emailSent,
-            smsSent: invoice.smsSent || results.smsSent,
-            pdfPath: results.pdfPath,
-          },
-        });
-      }
-
-      logger.info('Invoice automatically generated and sent', {
-        orderId: order.id,
-        invoiceNumber,
-        userId: req.user!.id,
-        results,
-      });
-    } catch (invoiceError) {
-      logger.error('Automatic invoice generation failed', {
-        orderId: order.id,
-        userId: req.user!.id,
-        error: invoiceError instanceof Error ? invoiceError.message : 'Unknown error',
-      });
-      // Don't fail the payment process if invoice generation fails
     }
 
-    const response: ApiResponse = {
-      success: true,
-      message: 'Payment verified successfully',
-      data: {
-        order: updatedOrder,
-        paymentId: razorpay_payment_id,
-      },
-    };
+    // Check if payment is already verified
+    if (order.paymentStatus === 'COMPLETED') {
+      const response: ApiResponse = {
+        success: true,
+        message: 'Payment already verified',
+        data: { order },
+      };
+      return res.json(response);
+    }
 
-    return res.json(response);
+    try {
+      // Fetch payment details from Razorpay to ensure payment is successful
+      const paymentDetails = await fetchPaymentDetails(razorpay_payment_id);
+      
+      if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
+        return res.status(400).json({
+          success: false,
+          error: 'Payment not successful',
+        });
+      }
+
+      // Update order status to completed
+      const updatedOrder = await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: 'COMPLETED',
+          status: 'CONFIRMED',
+          updatedAt: new Date(),
+        },
+        include: {
+          table: {
+            select: {
+              number: true,
+              location: true,
+            },
+          },
+          items: {
+            include: {
+              menuItem: {
+                select: {
+                  name: true,
+                  price: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      logger.info('Payment verified successfully', {
+        orderId: order.id,
+        razorpay_order_id,
+        razorpay_payment_id,
+        userId: req.user!.id,
+        amount: order.total,
+      });
+
+      // Automatically generate and send invoice after successful payment
+      try {
+        // Check if invoice already exists
+        let invoice = await prisma.invoice.findUnique({
+          where: { orderId: order.id },
+        });
+
+        // Generate unique invoice number if not exists
+        const invoiceNumber = invoice?.invoiceNumber || 
+          `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+
+        // Prepare invoice data
+        const invoiceData = {
+          customerName: order.user.name,
+          customerEmail: order.user.email,
+          customerPhone: order.user.phone || '', // Handle null phone
+          invoiceNumber,
+          orderDate: order.createdAt.toLocaleDateString('en-IN'),
+          items: order.items.map((item: any) => ({
+            name: item.menuItem.name,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.price * item.quantity,
+          })),
+          subtotal: order.subtotal,
+          tax: order.tax,
+          total: order.total,
+          tableNumber: order.table.number,
+          restaurantName: process.env.APP_NAME || 'Restaurant',
+          restaurantAddress: 'Your Restaurant Address Here',
+          restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
+          paymentMethod: 'Online Payment (Razorpay)',
+        };
+
+        // Generate PDF
+        const pdfBuffer = generateInvoicePDF(invoiceData);
+        const pdfFileName = `invoice-${invoiceNumber}.pdf`;
+        const pdfPath = await savePDFToStorage(pdfBuffer, pdfFileName);
+
+        // Track delivery results
+        const results = {
+          emailSent: false,
+          smsSent: false,
+          pdfGenerated: true,
+          pdfPath,
+        };
+
+        // Send email automatically
+        if (order.user.email) {
+          results.emailSent = await sendInvoiceEmail(
+            order.user.email,
+            {
+              customerName: order.user.name,
+              invoiceNumber,
+              orderDate: invoiceData.orderDate,
+              total: order.total,
+              tableNumber: order.table.number,
+              restaurantName: invoiceData.restaurantName,
+            },
+            pdfBuffer
+          );
+        }
+
+        // Create or update invoice record
+        if (!invoice) {
+          invoice = await prisma.invoice.create({
+            data: {
+              orderId: order.id,
+              invoiceNumber,
+              sentVia: ['EMAIL'], // Default to email
+              emailSent: results.emailSent,
+              smsSent: results.smsSent,
+              pdfPath: results.pdfPath,
+            },
+          });
+        } else {
+          // Update existing invoice
+          const updatedSentVia = [...invoice.sentVia];
+          if (!updatedSentVia.includes('EMAIL')) {
+            updatedSentVia.push('EMAIL');
+          }
+          
+          invoice = await prisma.invoice.update({
+            where: { id: invoice.id },
+            data: {
+              sentVia: updatedSentVia,
+              emailSent: invoice.emailSent || results.emailSent,
+              smsSent: invoice.smsSent || results.smsSent,
+              pdfPath: results.pdfPath,
+            },
+          });
+        }
+
+        logger.info('Invoice automatically generated and sent', {
+          orderId: order.id,
+          invoiceNumber,
+          userId: req.user!.id,
+          results,
+        });
+      } catch (invoiceError) {
+        logger.error('Automatic invoice generation failed', {
+          orderId: order.id,
+          userId: req.user!.id,
+          error: invoiceError instanceof Error ? invoiceError.message : 'Unknown error',
+        });
+        // Don't fail the payment process if invoice generation fails
+      }
+
+      const response: ApiResponse = {
+        success: true,
+        message: 'Payment verified successfully',
+        data: {
+          order: updatedOrder,
+          paymentId: razorpay_payment_id,
+        },
+      };
+
+      return res.json(response);
+    } catch (error) {
+      logger.error('Payment verification failed', {
+        orderId: order.id,
+        razorpay_order_id,
+        razorpay_payment_id,
+        userId: req.user!.id,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      });
+
+      // Update order status to failed
+      await prisma.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: 'FAILED',
+          updatedAt: new Date(),
+        },
+      });
+
+      return res.status(500).json({
+        success: false,
+        error: 'Payment verification failed',
+      });
+    }
   } catch (error) {
-    logger.error('Payment verification failed', {
-      orderId: order.id,
-      razorpay_order_id,
-      razorpay_payment_id,
+    logger.error('Unexpected error during payment verification', {
       userId: req.user!.id,
       error: error instanceof Error ? error.message : 'Unknown error',
     });
-
-    // Update order status to failed
-    await prisma.order.update({
-      where: { id: order.id },
-      data: {
-        paymentStatus: 'FAILED',
-        updatedAt: new Date(),
-      },
+    
+    return res.status(500).json({
+      success: false,
+      error: 'An unexpected error occurred during payment verification',
     });
-
-    throw new AppError('Payment verification failed', 500);
   }
 }));
 

@@ -140,20 +140,29 @@ export default function SecurePaymentProcessor({
   const handlePaymentSuccess = async (paymentResponse: RazorpayResponse) => {
     setVerificationStatus('verifying');
 
+    // Set a timeout for the verification process
+    const timeoutPromise = new Promise((_, reject) => {
+      setTimeout(() => {
+        reject(new Error('Payment verification timed out. Please check your internet connection and try again.'));
+      }, 30000); // 30 seconds timeout
+    });
+
     try {
-      // Verify payment signature on our secure backend
-      const verificationResult = await apiClient.verifyPayment({
-        razorpay_order_id: paymentResponse.razorpay_order_id,
-        razorpay_payment_id: paymentResponse.razorpay_payment_id,
-        razorpay_signature: paymentResponse.razorpay_signature,
-      });
+      // Race between verification and timeout
+      const verificationResult = await Promise.race([
+        apiClient.verifyPayment({
+          razorpay_order_id: paymentResponse.razorpay_order_id,
+          razorpay_payment_id: paymentResponse.razorpay_payment_id,
+          razorpay_signature: paymentResponse.razorpay_signature,
+        }),
+        timeoutPromise
+      ]);
 
       setVerificationStatus('success');
       setPaymentLoading(false);
       setPaymentSuccess(true);
 
       // Call onPaymentSuccess to transition to step 3
-      // Use setTimeout to ensure state updates are processed first
       setTimeout(() => {
         onPaymentSuccess();
       }, 1000);
@@ -161,9 +170,22 @@ export default function SecurePaymentProcessor({
       console.error('Payment verification error:', error);
       setVerificationStatus('failed');
       setPaymentLoading(false);
-      onPaymentError(
-        error instanceof Error ? error.message : 'Payment verification failed. Please contact support.'
-      );
+      
+      // Provide more specific error messages
+      let errorMessage = 'Payment verification failed. Please contact support.';
+      if (error instanceof Error) {
+        if (error.message.includes('signature')) {
+          errorMessage = 'Payment verification failed due to invalid signature. Please try again.';
+        } else if (error.message.includes('not found')) {
+          errorMessage = 'Order not found. Please contact support.';
+        } else if (error.message.includes('timeout')) {
+          errorMessage = 'Payment verification timed out. Please check your internet connection and try again.';
+        } else {
+          errorMessage = error.message;
+        }
+      }
+      
+      onPaymentError(errorMessage);
     }
   };
 
@@ -183,11 +205,11 @@ export default function SecurePaymentProcessor({
   const getVerificationMessage = () => {
     switch (verificationStatus) {
       case 'verifying':
-        return 'Verifying payment security...';
+        return 'Verifying payment security... This may take a few moments.';
       case 'success':
         return 'Payment verified successfully!';
       case 'failed':
-        return 'Payment verification failed';
+        return 'Payment verification failed. Please try again or contact support.';
       default:
         return '';
     }
@@ -202,11 +224,19 @@ export default function SecurePaymentProcessor({
         <p className="text-gray-600 mb-4">
           Your order has been confirmed and you'll be redirected shortly.
         </p>
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4">
+        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
           <p className="text-green-800 font-medium">Order Details:</p>
           <p className="text-green-700">Order ID: #{order.id.substring(0, 8).toUpperCase()}</p>
           <p className="text-green-700">Amount: ₹{order.total.toFixed(2)}</p>
           <p className="text-green-700">Table: {order.table.number}</p>
+        </div>
+        <div className="flex justify-center space-x-3">
+          <button
+            onClick={() => onPaymentSuccess()}
+            className="bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors"
+          >
+            Continue to Order Summary
+          </button>
         </div>
       </div>
     );

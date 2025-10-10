@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: restaurant-frontend
+    env: static
+    buildCommand: npm run build
+    startCommand: npm start
+    staticPublishPath: ./.next
+    envVars:
+      - key: NODE_ENV
+        value: production

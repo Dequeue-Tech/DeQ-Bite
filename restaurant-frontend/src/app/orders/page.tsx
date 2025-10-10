@@ -128,39 +128,39 @@ export default function OrdersPage() {
       if (order && order.paymentStatus === 'COMPLETED') {
         // First check if invoice already exists
         try {
-        //   const invoiceResponse = await apiClient.getInvoice(orderId);
-        //   if (invoiceResponse && invoiceResponse.invoice && invoiceResponse.invoice.pdfUrl) {
-        //     // Download existing PDF directly
-        //     const pdfUrl = `${apiClient.getBaseURL()}${invoiceResponse.invoice.pdfUrl}`;
-        //     window.open(pdfUrl, '_blank');
-        //     toast.success('Invoice downloaded successfully!');
-        //   } else {
+          const invoiceResponse = await apiClient.getInvoice(orderId);
+          if (invoiceResponse && invoiceResponse.invoice && invoiceResponse.invoice.id) {
+            // Download PDF using the new PDF endpoint
+            const pdfUrl = `${apiClient.getBaseURL()}/api/pdf/invoice/${invoiceResponse.invoice.id}`;
+            window.open(pdfUrl, '_blank');
+            toast.success('Invoice downloaded successfully!');
+          } else {
             // Generate new invoice with no delivery methods (just PDF)
             const response = await apiClient.generateInvoice(orderId, []);
-            
-            if (response && response.invoice && response.invoice.pdfUrl) {
-              // Download the newly generated PDF
-              const pdfUrl = `${apiClient.getBaseURL()}${response.invoice.pdfUrl}`;
+          
+            if (response && response.invoice && response.invoice.id) {
+              // Download the newly generated PDF using the new PDF endpoint
+              const pdfUrl = `${apiClient.getBaseURL()}/api/pdf/invoice/${response.invoice.id}`;
               window.open(pdfUrl, '_blank');
               toast.success('Invoice generated and downloaded successfully!');
-              
+            
               // Refresh orders to show updated status
               await fetchOrders();
             } else {
               toast.error('Failed to generate invoice. Please try again.');
             }
-          //}
+          }
         } catch (error) {
           // If getting invoice fails, generate a new one
           try {
             const response = await apiClient.generateInvoice(orderId, []);
-            
-            if (response && response.invoice && response.invoice.pdfUrl) {
-              // Download the newly generated PDF
-              const pdfUrl = `${apiClient.getBaseURL()}${response.invoice.pdfUrl}`;
+          
+            if (response && response.invoice && response.invoice.id) {
+              // Download the newly generated PDF using the new PDF endpoint
+              const pdfUrl = `${apiClient.getBaseURL()}/api/pdf/invoice/${response.invoice.id}`;
               window.open(pdfUrl, '_blank');
               toast.success('Invoice generated and downloaded successfully!');
-              
+            
               // Refresh orders to show updated status
               await fetchOrders();
             } else {

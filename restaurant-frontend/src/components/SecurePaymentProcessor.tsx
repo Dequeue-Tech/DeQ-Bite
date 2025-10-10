@@ -143,8 +143,8 @@ export default function SecurePaymentProcessor({
     // Set a timeout for the verification process
     const timeoutPromise = new Promise((_, reject) => {
       setTimeout(() => {
-        reject(new Error('Payment verification timed out. Please check your internet connection and try again.'));
-      }, 30000); // 30 seconds timeout
+        reject(new Error('Payment verification timed out. The server is taking too long to respond. Please check your internet connection and try again.'));
+      }, 25000); // Reduced to 25 seconds timeout
     });
 
     try {
@@ -179,7 +179,7 @@ export default function SecurePaymentProcessor({
         } else if (error.message.includes('not found')) {
           errorMessage = 'Order not found. Please contact support.';
         } else if (error.message.includes('timeout')) {
-          errorMessage = 'Payment verification timed out. Please check your internet connection and try again.';
+          errorMessage = 'Payment verification timed out. The server is taking too long to respond. Please check your internet connection and try again, or contact support if the issue persists.';
         } else if (error.message.includes('successful')) {
           errorMessage = 'Payment was not successful. Please check your payment method and try again.';
         } else {

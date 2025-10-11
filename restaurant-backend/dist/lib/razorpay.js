@@ -29,16 +29,19 @@ function getRazorpayInstance() {
 exports.razorpay = getRazorpayInstance;
 async function createRazorpayOrder(options) {
     try {
+        const createStartTime = Date.now();
         const order = await getRazorpayInstance().orders.create({
             amount: Math.round(options.amount * 100),
             currency: options.currency || 'INR',
             receipt: options.receipt,
             notes: options.notes || {},
         });
+        const createDuration = Date.now() - createStartTime;
         logger_1.logger.info('Razorpay order created successfully', {
             orderId: order.id,
             amount: order.amount,
             receipt: options.receipt,
+            duration: `${createDuration}ms`,
         });
         return order;
     }
@@ -63,7 +66,17 @@ function verifyRazorpaySignature(orderId, paymentId, signature) {
             orderId,
             paymentId,
             isValid,
+            expectedSignature: expectedSignature.substring(0, 10) + '...',
+            receivedSignature: signature.substring(0, 10) + '...',
         });
+        if (!isValid) {
+            logger_1.logger.warn('Signature mismatch details', {
+                orderId,
+                paymentId,
+                expectedLength: expectedSignature.length,
+                receivedLength: signature.length,
+            });
+        }
         return isValid;
     }
     catch (error) {
@@ -124,11 +137,14 @@ async function refundRazorpayPayment(paymentId, amount, reason) {
 }
 async function fetchPaymentDetails(paymentId) {
     try {
+        const fetchStartTime = Date.now();
         const payment = await getRazorpayInstance().payments.fetch(paymentId);
+        const fetchDuration = Date.now() - fetchStartTime;
         logger_1.logger.info('Payment details fetched', {
             paymentId,
             status: payment.status,
             amount: payment.amount,
+            duration: `${fetchDuration}ms`,
         });
         return payment;
     }

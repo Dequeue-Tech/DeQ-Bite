@@ -11,8 +11,8 @@ import { connectDatabase } from '@/config/database';
 // Import route modules
 import authRoutes from '@/routes/auth';
 import paymentRoutes from '@/routes/payments';
-import orderRoutes from '@/routes/orders';
 import invoiceRoutes from '@/routes/invoices';
+import pdfRoutes from '@/routes/pdf';
 import menuRoutes from '@/routes/menu';
 import categoryRoutes from '@/routes/categories';
 import tableRoutes from '@/routes/tables';
@@ -42,7 +42,8 @@ app.use(cors({
     const allowedOrigins = [
       process.env.FRONTEND_URL?.replace(/\/$/, ''), // Remove trailing slash
       'http://localhost:5174',
-      'http://localhost:3000'
+      'http://localhost:3000',
+      'https://deq-restaurants-frontend.onrender.com' // Add your frontend Render URL
     ].filter(Boolean);
     
     // Allow requests with no origin (like mobile apps or curl requests)
@@ -104,8 +105,8 @@ app.get('/', (_req, res) => {
 // API routes
 app.use('/api/auth', authRoutes);
 app.use('/api/payments', paymentRoutes);
-app.use('/api/orders', orderRoutes);
 app.use('/api/invoices', invoiceRoutes);
+app.use('/api/pdf', pdfRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/tables', tableRoutes);

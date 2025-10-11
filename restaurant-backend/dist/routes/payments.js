@@ -7,8 +7,6 @@ const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
 const razorpay_1 = require("../lib/razorpay");
 const logger_1 = require("../utils/logger");
-const pdf_1 = require("../lib/pdf");
-const email_1 = require("../lib/email");
 const router = (0, express_1.Router)();
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
@@ -104,70 +102,58 @@ router.post('/create', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
 }));
 router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = verifyPaymentSchema.parse(req.body);
-    const isValidSignature = (0, razorpay_1.verifyRazorpaySignature)(razorpay_order_id, razorpay_payment_id, razorpay_signature);
-    if (!isValidSignature) {
-        logger_1.logger.warn('Invalid payment signature detected', {
+    const startTime = Date.now();
+    logger_1.logger.info('Payment verification started', {
+        razorpay_order_id,
+        razorpay_payment_id,
+        userId: req.user.id,
+        startTime,
+    });
+    try {
+        logger_1.logger.info('Starting signature verification', {
             razorpay_order_id,
-            razorpay_payment_id,
             userId: req.user.id,
         });
-        throw new errorHandler_1.AppError('Invalid payment signature. Payment verification failed.', 400);
-    }
-    const order = await database_1.prisma.order.findFirst({
-        where: {
-            paymentId: razorpay_order_id,
+        const signatureVerificationStart = Date.now();
+        const isValidSignature = (0, razorpay_1.verifyRazorpaySignature)(razorpay_order_id, razorpay_payment_id, razorpay_signature);
+        const signatureVerificationTime = Date.now() - signatureVerificationStart;
+        logger_1.logger.info('Signature verification completed', {
+            razorpay_order_id,
             userId: req.user.id,
-        },
-        include: {
-            user: {
-                select: {
-                    name: true,
-                    email: true,
-                    phone: true,
-                },
-            },
-            table: {
-                select: {
-                    number: true,
-                    location: true,
-                },
-            },
-            items: {
-                include: {
-                    menuItem: {
-                        select: {
-                            name: true,
-                            price: true,
-                        },
-                    },
-                },
-            },
-        },
-    });
-    if (!order) {
-        throw new errorHandler_1.AppError('Order not found', 404);
-    }
-    if (order.paymentStatus === 'COMPLETED') {
-        const response = {
-            success: true,
-            message: 'Payment already verified',
-            data: { order },
-        };
-        return res.json(response);
-    }
-    try {
-        const paymentDetails = await (0, razorpay_1.fetchPaymentDetails)(razorpay_payment_id);
-        if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
-            throw new errorHandler_1.AppError('Payment not successful', 400);
+            duration: `${signatureVerificationTime}ms`,
+            isValid: isValidSignature,
+        });
+        if (!isValidSignature) {
+            logger_1.logger.warn('Invalid payment signature detected', {
+                razorpay_order_id,
+                razorpay_payment_id,
+                userId: req.user.id,
+                expectedSignature: 'Calculated on backend',
+                receivedSignature: 'Provided by frontend',
+            });
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid payment signature. Payment verification failed. Please try again or contact support if the issue persists.',
+            });
         }
-        const updatedOrder = await database_1.prisma.order.update({
-            where: { id: order.id },
-            data: {
-                paymentStatus: 'COMPLETED',
-                status: 'CONFIRMED',
-                updatedAt: new Date(),
+        logger_1.logger.info('Starting order lookup', {
+            razorpay_order_id,
+            userId: req.user.id,
+        });
+        const orderLookupStart = Date.now();
+        const order = await database_1.prisma.order.findFirst({
+            where: {
+                paymentId: razorpay_order_id,
+                userId: req.user.id,
             },
             include: {
+                user: {
+                    select: {
+                        name: true,
+                        email: true,
+                        phone: true,
+                    },
+                },
                 table: {
                     select: {
                         number: true,
@@ -186,126 +172,169 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                 },
             },
         });
-        logger_1.logger.info('Payment verified successfully', {
-            orderId: order.id,
+        const orderLookupTime = Date.now() - orderLookupStart;
+        logger_1.logger.info('Order lookup completed', {
             razorpay_order_id,
-            razorpay_payment_id,
             userId: req.user.id,
-            amount: order.total,
+            duration: `${orderLookupTime}ms`,
+            orderFound: !!order,
         });
+        if (!order) {
+            logger_1.logger.warn('Order not found during payment verification', {
+                razorpay_order_id,
+                userId: req.user.id,
+            });
+            return res.status(404).json({
+                success: false,
+                error: 'Order not found. The payment reference does not match any order in our system. Please contact support.',
+            });
+        }
+        if (order.paymentStatus === 'COMPLETED') {
+            const response = {
+                success: true,
+                message: 'Payment already verified',
+                data: { order },
+            };
+            return res.json(response);
+        }
         try {
-            let invoice = await database_1.prisma.invoice.findUnique({
-                where: { orderId: order.id },
+            logger_1.logger.info('Starting payment details fetch from Razorpay', {
+                razorpay_payment_id,
+                userId: req.user.id,
             });
-            const invoiceNumber = invoice?.invoiceNumber ||
-                `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-            const invoiceData = {
-                customerName: order.user.name,
-                customerEmail: order.user.email,
-                customerPhone: order.user.phone || '',
-                invoiceNumber,
-                orderDate: order.createdAt.toLocaleDateString('en-IN'),
-                items: order.items.map((item) => ({
-                    name: item.menuItem.name,
-                    quantity: item.quantity,
-                    price: item.price,
-                    total: item.price * item.quantity,
-                })),
-                subtotal: order.subtotal,
-                tax: order.tax,
-                total: order.total,
-                tableNumber: order.table.number,
-                restaurantName: process.env.APP_NAME || 'Restaurant',
-                restaurantAddress: 'Your Restaurant Address Here',
-                restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-                paymentMethod: 'Online Payment (Razorpay)',
-            };
-            const pdfBuffer = (0, pdf_1.generateInvoicePDF)(invoiceData);
-            const pdfFileName = `invoice-${invoiceNumber}.pdf`;
-            const pdfPath = await (0, pdf_1.savePDFToStorage)(pdfBuffer, pdfFileName);
-            const results = {
-                emailSent: false,
-                smsSent: false,
-                pdfGenerated: true,
-                pdfPath,
-            };
-            if (order.user.email) {
-                results.emailSent = await (0, email_1.sendInvoiceEmail)(order.user.email, {
-                    customerName: order.user.name,
-                    invoiceNumber,
-                    orderDate: invoiceData.orderDate,
-                    total: order.total,
-                    tableNumber: order.table.number,
-                    restaurantName: invoiceData.restaurantName,
-                }, pdfBuffer);
-            }
-            if (!invoice) {
-                invoice = await database_1.prisma.invoice.create({
-                    data: {
-                        orderId: order.id,
-                        invoiceNumber,
-                        sentVia: ['EMAIL'],
-                        emailSent: results.emailSent,
-                        smsSent: results.smsSent,
-                        pdfPath: results.pdfPath,
-                    },
+            const paymentFetchStart = Date.now();
+            const paymentDetails = await (0, razorpay_1.fetchPaymentDetails)(razorpay_payment_id);
+            const paymentFetchTime = Date.now() - paymentFetchStart;
+            logger_1.logger.info('Payment details fetch completed', {
+                razorpay_payment_id,
+                userId: req.user.id,
+                duration: `${paymentFetchTime}ms`,
+                status: paymentDetails.status,
+            });
+            if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
+                logger_1.logger.warn('Payment not successful', {
+                    razorpay_order_id,
+                    razorpay_payment_id,
+                    status: paymentDetails.status,
+                    userId: req.user.id,
+                });
+                return res.status(400).json({
+                    success: false,
+                    error: `Payment not successful. Current status: ${paymentDetails.status}. Please check your payment method and try again.`,
                 });
             }
-            else {
-                const updatedSentVia = [...invoice.sentVia];
-                if (!updatedSentVia.includes('EMAIL')) {
-                    updatedSentVia.push('EMAIL');
+            const updatedOrder = await database_1.prisma.order.update({
+                where: { id: order.id },
+                data: {
+                    paymentStatus: 'COMPLETED',
+                    status: 'CONFIRMED',
+                    updatedAt: new Date(),
+                },
+                include: {
+                    table: {
+                        select: {
+                            number: true,
+                            location: true,
+                        },
+                    },
+                    items: {
+                        include: {
+                            menuItem: {
+                                select: {
+                                    name: true,
+                                    price: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+            logger_1.logger.info('Payment verified successfully', {
+                orderId: order.id,
+                razorpay_order_id,
+                razorpay_payment_id,
+                userId: req.user.id,
+                amount: order.total,
+            });
+            logger_1.logger.info('Payment verification process completed', {
+                orderId: order.id,
+                userId: req.user.id,
+                totalTime: `${Date.now() - startTime}ms`,
+            });
+            try {
+                let invoice = await database_1.prisma.invoice.findUnique({
+                    where: { orderId: order.id },
+                });
+                const invoiceNumber = invoice?.invoiceNumber ||
+                    `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+                if (!invoice) {
+                    invoice = await database_1.prisma.invoice.create({
+                        data: {
+                            orderId: order.id,
+                            invoiceNumber,
+                            sentVia: [],
+                            emailSent: false,
+                            smsSent: false,
+                        },
+                    });
                 }
-                invoice = await database_1.prisma.invoice.update({
-                    where: { id: invoice.id },
+                logger_1.logger.info('Invoice record created', {
+                    orderId: order.id,
+                    invoiceNumber,
+                    userId: req.user.id,
+                });
+            }
+            catch (invoiceError) {
+                logger_1.logger.error('Invoice record creation failed', {
+                    orderId: order.id,
+                    userId: req.user.id,
+                    error: invoiceError instanceof Error ? invoiceError.message : 'Unknown error',
+                });
+            }
+            const response = {
+                success: true,
+                message: 'Payment verified successfully',
+                data: {
+                    order: updatedOrder,
+                    paymentId: razorpay_payment_id,
+                },
+            };
+            return res.json(response);
+        }
+        catch (error) {
+            logger_1.logger.error('Payment verification failed', {
+                orderId: order?.id,
+                razorpay_order_id,
+                razorpay_payment_id,
+                userId: req.user.id,
+                error: error instanceof Error ? error.message : 'Unknown error',
+                stack: error instanceof Error ? error.stack : undefined,
+            });
+            if (order?.id) {
+                await database_1.prisma.order.update({
+                    where: { id: order.id },
                     data: {
-                        sentVia: updatedSentVia,
-                        emailSent: invoice.emailSent || results.emailSent,
-                        smsSent: invoice.smsSent || results.smsSent,
-                        pdfPath: results.pdfPath,
+                        paymentStatus: 'FAILED',
+                        updatedAt: new Date(),
                     },
                 });
             }
-            logger_1.logger.info('Invoice automatically generated and sent', {
-                orderId: order.id,
-                invoiceNumber,
-                userId: req.user.id,
-                results,
+            return res.status(500).json({
+                success: false,
+                error: 'Payment verification failed. Please try again or contact support if the issue persists.',
             });
         }
-        catch (invoiceError) {
-            logger_1.logger.error('Automatic invoice generation failed', {
-                orderId: order.id,
-                userId: req.user.id,
-                error: invoiceError instanceof Error ? invoiceError.message : 'Unknown error',
-            });
-        }
-        const response = {
-            success: true,
-            message: 'Payment verified successfully',
-            data: {
-                order: updatedOrder,
-                paymentId: razorpay_payment_id,
-            },
-        };
-        return res.json(response);
     }
     catch (error) {
-        logger_1.logger.error('Payment verification failed', {
-            orderId: order.id,
-            razorpay_order_id,
-            razorpay_payment_id,
+        logger_1.logger.error('Unexpected error during payment verification', {
             userId: req.user.id,
             error: error instanceof Error ? error.message : 'Unknown error',
+            stack: error instanceof Error ? error.stack : undefined,
         });
-        await database_1.prisma.order.update({
-            where: { id: order.id },
-            data: {
-                paymentStatus: 'FAILED',
-                updatedAt: new Date(),
-            },
+        return res.status(500).json({
+            success: false,
+            error: 'An unexpected error occurred during payment verification. Please try again or contact support.',
         });
-        throw new errorHandler_1.AppError('Payment verification failed', 500);
     }
 }));
 router.post('/refund', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {

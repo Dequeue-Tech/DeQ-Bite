@@ -14,8 +14,8 @@ const logger_1 = require("./utils/logger");
 const database_1 = require("./config/database");
 const auth_1 = __importDefault(require("./routes/auth"));
 const payments_1 = __importDefault(require("./routes/payments"));
-const orders_1 = __importDefault(require("./routes/orders"));
 const invoices_1 = __importDefault(require("./routes/invoices"));
+const pdf_1 = __importDefault(require("./routes/pdf"));
 const menu_1 = __importDefault(require("./routes/menu"));
 const categories_1 = __importDefault(require("./routes/categories"));
 const tables_1 = __importDefault(require("./routes/tables"));
@@ -34,7 +34,22 @@ app.use((0, helmet_1.default)({
     crossOriginEmbedderPolicy: false,
 }));
 app.use((0, cors_1.default)({
-    origin: process.env.FRONTEND_URL || 'http://localhost:5174',
+    origin: (origin, callback) => {
+        const allowedOrigins = [
+            process.env.FRONTEND_URL?.replace(/\/$/, ''),
+            'http://localhost:5174',
+            'http://localhost:3000',
+            'https://deq-restaurants-frontend.onrender.com'
+        ].filter(Boolean);
+        if (!origin)
+            return callback(null, true);
+        if (allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+            callback(null, true);
+        }
+        else {
+            callback(new Error('Not allowed by CORS'));
+        }
+    },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
@@ -73,8 +88,8 @@ app.get('/', (_req, res) => {
 });
 app.use('/api/auth', auth_1.default);
 app.use('/api/payments', payments_1.default);
-app.use('/api/orders', orders_1.default);
 app.use('/api/invoices', invoices_1.default);
+app.use('/api/pdf', pdf_1.default);
 app.use('/api/menu', menu_1.default);
 app.use('/api/categories', categories_1.default);
 app.use('/api/tables', tables_1.default);

@@ -32,17 +32,20 @@ export interface RazorpayOrderOptions {
  */
 export async function createRazorpayOrder(options: RazorpayOrderOptions) {
   try {
+    const createStartTime = Date.now();
     const order = await getRazorpayInstance().orders.create({
       amount: Math.round(options.amount * 100), // Convert to paisa
       currency: options.currency || 'INR',
       receipt: options.receipt,
       notes: options.notes || {},
     });
+    const createDuration = Date.now() - createStartTime;
     
     logger.info('Razorpay order created successfully', {
       orderId: order.id,
       amount: order.amount,
       receipt: options.receipt,
+      duration: `${createDuration}ms`,
     });
     
     return order;
@@ -170,12 +173,15 @@ export async function refundRazorpayPayment(
  */
 export async function fetchPaymentDetails(paymentId: string) {
   try {
+    const fetchStartTime = Date.now();
     const payment = await getRazorpayInstance().payments.fetch(paymentId);
+    const fetchDuration = Date.now() - fetchStartTime;
     
     logger.info('Payment details fetched', {
       paymentId,
       status: payment.status,
       amount: payment.amount,
+      duration: `${fetchDuration}ms`,
     });
     
     return payment;

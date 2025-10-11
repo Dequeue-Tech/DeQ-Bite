@@ -7,8 +7,6 @@ exports.generateInvoicePDF = generateInvoicePDF;
 exports.savePDFToStorage = savePDFToStorage;
 exports.cleanupOldInvoices = cleanupOldInvoices;
 const jspdf_1 = __importDefault(require("jspdf"));
-const path_1 = __importDefault(require("path"));
-const promises_1 = __importDefault(require("fs/promises"));
 const logger_1 = require("../utils/logger");
 function generateInvoicePDF(invoiceData) {
     try {
@@ -97,49 +95,25 @@ function generateInvoicePDF(invoiceData) {
 }
 async function savePDFToStorage(pdfBuffer, filename) {
     try {
-        const invoicesDir = path_1.default.join(process.cwd(), 'public', 'invoices');
-        await promises_1.default.mkdir(invoicesDir, { recursive: true });
-        const filePath = path_1.default.join(invoicesDir, filename);
-        await promises_1.default.writeFile(filePath, pdfBuffer);
-        logger_1.logger.info('PDF saved to storage', {
+        logger_1.logger.info('PDF prepared for database storage', {
             filename,
-            path: filePath,
+            size: pdfBuffer.length,
         });
-        return `/invoices/${filename}`;
+        return {
+            pdfPath: null,
+            pdfData: pdfBuffer,
+            pdfName: filename,
+        };
     }
     catch (error) {
-        logger_1.logger.error('Failed to save PDF to storage', {
+        logger_1.logger.error('Failed to prepare PDF for database storage', {
             error: error instanceof Error ? error.message : 'Unknown error',
             filename,
         });
-        throw new Error('Failed to save PDF invoice');
+        throw new Error('Failed to prepare PDF for database storage');
     }
 }
-async function cleanupOldInvoices(daysOld = 30) {
-    try {
-        const invoicesDir = path_1.default.join(process.cwd(), 'public', 'invoices');
-        const files = await promises_1.default.readdir(invoicesDir);
-        const cutoffDate = new Date();
-        cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-        let deletedCount = 0;
-        for (const file of files) {
-            const filePath = path_1.default.join(invoicesDir, file);
-            const stats = await promises_1.default.stat(filePath);
-            if (stats.mtime < cutoffDate) {
-                await promises_1.default.unlink(filePath);
-                deletedCount++;
-            }
-        }
-        logger_1.logger.info('Old invoices cleaned up', {
-            deletedCount,
-            daysOld,
-        });
-    }
-    catch (error) {
-        logger_1.logger.error('Failed to cleanup old invoices', {
-            error: error instanceof Error ? error.message : 'Unknown error',
-            daysOld,
-        });
-    }
+async function cleanupOldInvoices(_daysOld = 30) {
+    logger_1.logger.info('cleanupOldInvoices function is deprecated with database storage');
 }
 //# sourceMappingURL=pdf.js.map

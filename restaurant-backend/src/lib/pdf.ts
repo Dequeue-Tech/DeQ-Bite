@@ -1,6 +1,4 @@
 import jsPDF from 'jspdf';
-import path from 'path';
-import fs from 'fs/promises';
 import { logger } from '@/utils/logger';
 
 export interface InvoiceData {
@@ -148,70 +146,41 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
 }
 
 /**
- * Save PDF to secure storage
+ * Save PDF to database storage
  */
 export async function savePDFToStorage(
   pdfBuffer: Buffer,
   filename: string
-): Promise<string> {
+): Promise<{ pdfPath: string | null; pdfData: Buffer | null; pdfName: string | null }> {
   try {
-    const invoicesDir = path.join(process.cwd(), 'public', 'invoices');
+    // In database storage, we don't need a file path
+    // Instead, we return the PDF data and filename to be stored in the database
     
-    // Ensure directory exists
-    await fs.mkdir(invoicesDir, { recursive: true });
-    
-    const filePath = path.join(invoicesDir, filename);
-    
-    // Save file
-    await fs.writeFile(filePath, pdfBuffer);
-    
-    logger.info('PDF saved to storage', {
+    logger.info('PDF prepared for database storage', {
       filename,
-      path: filePath,
+      size: pdfBuffer.length,
     });
     
-    return `/invoices/${filename}`;
+    return {
+      pdfPath: null, // No file path needed
+      pdfData: pdfBuffer, // PDF data to store in database
+      pdfName: filename, // Filename for reference
+    };
   } catch (error) {
-    logger.error('Failed to save PDF to storage', {
+    logger.error('Failed to prepare PDF for database storage', {
       error: error instanceof Error ? error.message : 'Unknown error',
       filename,
     });
     
-    throw new Error('Failed to save PDF invoice');
+    throw new Error('Failed to prepare PDF for database storage');
   }
 }
 
 /**
- * Clean up old invoice files (optional maintenance function)
+ * Clean up old invoice files (deprecated - no longer needed with database storage)
  */
-export async function cleanupOldInvoices(daysOld: number = 30): Promise<void> {
-  try {
-    const invoicesDir = path.join(process.cwd(), 'public', 'invoices');
-    const files = await fs.readdir(invoicesDir);
-    
-    const cutoffDate = new Date();
-    cutoffDate.setDate(cutoffDate.getDate() - daysOld);
-    
-    let deletedCount = 0;
-    
-    for (const file of files) {
-      const filePath = path.join(invoicesDir, file);
-      const stats = await fs.stat(filePath);
-      
-      if (stats.mtime < cutoffDate) {
-        await fs.unlink(filePath);
-        deletedCount++;
-      }
-    }
-    
-    logger.info('Old invoices cleaned up', {
-      deletedCount,
-      daysOld,
-    });
-  } catch (error) {
-    logger.error('Failed to cleanup old invoices', {
-      error: error instanceof Error ? error.message : 'Unknown error',
-      daysOld,
-    });
-  }
+export async function cleanupOldInvoices(_daysOld: number = 30): Promise<void> {
+  // This function is no longer needed with database storage
+  // Using _daysOld to avoid unused parameter error
+  logger.info('cleanupOldInvoices function is deprecated with database storage');
 }

@@ -11,10 +11,6 @@ import {
 } from '@/lib/razorpay';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { logger } from '@/utils/logger';
-import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
-import { sendInvoiceEmail } from '@/lib/email';
-// Removed unused import
-// import { sendInvoiceSMS } from '@/lib/sms';
 
 const router = Router();
 
@@ -131,13 +127,35 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
   const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = 
     verifyPaymentSchema.parse(req.body);
 
+  const startTime = Date.now();
+  logger.info('Payment verification started', {
+    razorpay_order_id,
+    razorpay_payment_id,
+    userId: req.user!.id,
+    startTime,
+  });
+
   try {
     // Verify the payment signature
+    logger.info('Starting signature verification', {
+      razorpay_order_id,
+      userId: req.user!.id,
+    });
+    
+    const signatureVerificationStart = Date.now();
     const isValidSignature = verifyRazorpaySignature(
       razorpay_order_id,
       razorpay_payment_id,
       razorpay_signature
     );
+    const signatureVerificationTime = Date.now() - signatureVerificationStart;
+    
+    logger.info('Signature verification completed', {
+      razorpay_order_id,
+      userId: req.user!.id,
+      duration: `${signatureVerificationTime}ms`,
+      isValid: isValidSignature,
+    });
 
     if (!isValidSignature) {
       logger.warn('Invalid payment signature detected', {
@@ -155,6 +173,12 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
     }
 
     // Find the order by Razorpay order ID
+    logger.info('Starting order lookup', {
+      razorpay_order_id,
+      userId: req.user!.id,
+    });
+    
+    const orderLookupStart = Date.now();
     const order = await prisma.order.findFirst({
       where: {
         paymentId: razorpay_order_id,
@@ -186,6 +210,14 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         },
       },
     });
+    const orderLookupTime = Date.now() - orderLookupStart;
+    
+    logger.info('Order lookup completed', {
+      razorpay_order_id,
+      userId: req.user!.id,
+      duration: `${orderLookupTime}ms`,
+      orderFound: !!order,
+    });
 
     if (!order) {
       logger.warn('Order not found during payment verification', {
@@ -211,7 +243,21 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
 
     try {
       // Fetch payment details from Razorpay to ensure payment is successful
+      logger.info('Starting payment details fetch from Razorpay', {
+        razorpay_payment_id,
+        userId: req.user!.id,
+      });
+      
+      const paymentFetchStart = Date.now();
       const paymentDetails = await fetchPaymentDetails(razorpay_payment_id);
+      const paymentFetchTime = Date.now() - paymentFetchStart;
+      
+      logger.info('Payment details fetch completed', {
+        razorpay_payment_id,
+        userId: req.user!.id,
+        duration: `${paymentFetchTime}ms`,
+        status: paymentDetails.status,
+      });
       
       if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
         logger.warn('Payment not successful', {
@@ -262,8 +308,15 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         userId: req.user!.id,
         amount: order.total,
       });
+      
+      // Log completion time
+      logger.info('Payment verification process completed', {
+        orderId: order.id,
+        userId: req.user!.id,
+        totalTime: `${Date.now() - startTime}ms`,
+      });
 
-      // Automatically generate and send invoice after successful payment
+      // Simplified invoice handling - just create record without PDF generation
       try {
         // Check if invoice already exists
         let invoice = await prisma.invoice.findUnique({
@@ -274,101 +327,31 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         const invoiceNumber = invoice?.invoiceNumber || 
           `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
 
-        // Prepare invoice data
-        const invoiceData = {
-          customerName: order.user.name,
-          customerEmail: order.user.email,
-          customerPhone: order.user.phone || '', // Handle null phone
-          invoiceNumber,
-          orderDate: order.createdAt.toLocaleDateString('en-IN'),
-          items: order.items.map((item: any) => ({
-            name: item.menuItem.name,
-            quantity: item.quantity,
-            price: item.price,
-            total: item.price * item.quantity,
-          })),
-          subtotal: order.subtotal,
-          tax: order.tax,
-          total: order.total,
-          tableNumber: order.table.number,
-          restaurantName: process.env.APP_NAME || 'Restaurant',
-          restaurantAddress: 'Your Restaurant Address Here',
-          restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-          paymentMethod: 'Online Payment (Razorpay)',
-        };
-
-        // Generate PDF
-        const pdfBuffer = generateInvoicePDF(invoiceData);
-        const pdfFileName = `invoice-${invoiceNumber}.pdf`;
-        const pdfPath = await savePDFToStorage(pdfBuffer, pdfFileName);
-
-        // Track delivery results
-        const results = {
-          emailSent: false,
-          smsSent: false,
-          pdfGenerated: true,
-          pdfPath,
-        };
-
-        // Send email automatically
-        if (order.user.email) {
-          results.emailSent = await sendInvoiceEmail(
-            order.user.email,
-            {
-              customerName: order.user.name,
-              invoiceNumber,
-              orderDate: invoiceData.orderDate,
-              total: order.total,
-              tableNumber: order.table.number,
-              restaurantName: invoiceData.restaurantName,
-            },
-            pdfBuffer
-          );
-        }
-
-        // Create or update invoice record
+        // Create or update invoice record without PDF generation
         if (!invoice) {
           invoice = await prisma.invoice.create({
             data: {
               orderId: order.id,
               invoiceNumber,
-              sentVia: ['EMAIL'], // Default to email
-              emailSent: results.emailSent,
-              smsSent: results.smsSent,
-              pdfPath: results.pdfPath,
-            },
-          });
-        } else {
-          // Update existing invoice
-          const updatedSentVia = [...invoice.sentVia];
-          if (!updatedSentVia.includes('EMAIL')) {
-            updatedSentVia.push('EMAIL');
-          }
-          
-          invoice = await prisma.invoice.update({
-            where: { id: invoice.id },
-            data: {
-              sentVia: updatedSentVia,
-              emailSent: invoice.emailSent || results.emailSent,
-              smsSent: invoice.smsSent || results.smsSent,
-              pdfPath: results.pdfPath,
+              sentVia: [], // Will be updated when actually sent
+              emailSent: false,
+              smsSent: false,
             },
           });
         }
 
-        logger.info('Invoice automatically generated and sent', {
+        logger.info('Invoice record created', {
           orderId: order.id,
           invoiceNumber,
           userId: req.user!.id,
-          results,
         });
       } catch (invoiceError) {
-        logger.error('Automatic invoice generation failed', {
+        logger.error('Invoice record creation failed', {
           orderId: order.id,
           userId: req.user!.id,
           error: invoiceError instanceof Error ? invoiceError.message : 'Unknown error',
         });
-        // Don't fail the payment process if invoice generation fails
+        // Don't fail the payment process if invoice record creation fails
       }
 
       const response: ApiResponse = {

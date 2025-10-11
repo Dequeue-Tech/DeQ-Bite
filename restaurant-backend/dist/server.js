@@ -19,6 +19,7 @@ const pdf_1 = __importDefault(require("./routes/pdf"));
 const menu_1 = __importDefault(require("./routes/menu"));
 const categories_1 = __importDefault(require("./routes/categories"));
 const tables_1 = __importDefault(require("./routes/tables"));
+const orders_1 = __importDefault(require("./routes/orders"));
 dotenv_1.default.config();
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
@@ -93,6 +94,7 @@ app.use('/api/pdf', pdf_1.default);
 app.use('/api/menu', menu_1.default);
 app.use('/api/categories', categories_1.default);
 app.use('/api/tables', tables_1.default);
+app.use('/api/orders', orders_1.default);
 app.use('/invoices', express_1.default.static('public/invoices'));
 app.use((req, res) => {
     res.status(404).json({

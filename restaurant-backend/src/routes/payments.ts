@@ -374,6 +374,7 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         };
 
         console.log('Invoice generated successfully')
+        console.log('Delivery results:', results)
 
         // Send email automatically
         // if (order.user.email) {

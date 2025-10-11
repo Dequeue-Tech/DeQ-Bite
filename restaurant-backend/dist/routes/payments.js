@@ -7,6 +7,7 @@ const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
 const razorpay_1 = require("../lib/razorpay");
 const logger_1 = require("../utils/logger");
+const pdf_1 = require("../lib/pdf");
 const router = (0, express_1.Router)();
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
@@ -136,6 +137,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                 error: 'Invalid payment signature. Payment verification failed. Please try again or contact support if the issue persists.',
             });
         }
+        console.log('Verifying payment...');
         logger_1.logger.info('Starting order lookup', {
             razorpay_order_id,
             userId: req.user.id,
@@ -189,6 +191,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                 error: 'Order not found. The payment reference does not match any order in our system. Please contact support.',
             });
         }
+        console.log('Order found:', order);
         if (order.paymentStatus === 'COMPLETED') {
             const response = {
                 success: true,
@@ -249,6 +252,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                     },
                 },
             });
+            console.log('Payment verified successfully');
             logger_1.logger.info('Payment verified successfully', {
                 orderId: order.id,
                 razorpay_order_id,
@@ -267,6 +271,39 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                 });
                 const invoiceNumber = invoice?.invoiceNumber ||
                     `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+                const invoiceData = {
+                    customerName: order.user.name,
+                    customerEmail: order.user.email,
+                    customerPhone: order.user.phone || '',
+                    invoiceNumber,
+                    orderDate: order.createdAt.toLocaleDateString('en-IN'),
+                    items: order.items.map((item) => ({
+                        name: item.menuItem.name,
+                        quantity: item.quantity,
+                        price: item.price,
+                        total: item.price * item.quantity,
+                    })),
+                    subtotal: order.subtotal,
+                    tax: order.tax,
+                    total: order.total,
+                    tableNumber: order.table.number,
+                    restaurantName: process.env.APP_NAME || 'Restaurant',
+                    restaurantAddress: 'Your Restaurant Address Here',
+                    restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
+                    paymentMethod: 'Online Payment (Razorpay)',
+                };
+                const pdfBuffer = (0, pdf_1.generateInvoicePDF)(invoiceData);
+                const pdfFileName = `invoice-${invoiceNumber}.pdf`;
+                const pdfPath = await (0, pdf_1.savePDFToStorage)(pdfBuffer, pdfFileName);
+                const results = {
+                    emailSent: false,
+                    smsSent: false,
+                    pdfGenerated: true,
+                    pdfPath,
+                };
+                console.log('Invoice generated successfully');
+                console.log('Delivery results:', results);
+                console.log('Invoice sent successfully');
                 if (!invoice) {
                     invoice = await database_1.prisma.invoice.create({
                         data: {

@@ -128,12 +128,15 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
     // Create or update invoice record with PDF data using raw query due to type issues
     if (!invoice) {
       // Use raw query to insert PDF data since TypeScript types might not be updated
+      const formattedSentVia = `{${sentVia.map(method => `"${method}"`).join(',')}}`;
+      const newInvoiceId = require('crypto').randomBytes(16).toString('hex');
+      
       await prisma.$executeRaw`
         INSERT INTO "invoices" 
         ("id", "orderId", "invoiceNumber", "sentVia", "emailSent", "smsSent", "pdfData", "pdfName")
         VALUES 
-        (${require('crypto').randomBytes(16).toString('hex')}, ${order.id}, ${invoiceNumber}, ${JSON.stringify(sentVia)}, ${results.emailSent}, ${results.smsSent}, ${pdfStorageResult.pdfData}, ${pdfStorageResult.pdfName})
-      `;
+        ($1, $2, $3, $4::"InvoiceMethod"[], $5, $6, $7, $8)
+      `,[newInvoiceId, order.id, invoiceNumber, formattedSentVia, results.emailSent, results.smsSent, pdfStorageResult.pdfData, pdfStorageResult.pdfName];
       
       // Get the created invoice
       invoice = await prisma.invoice.findUnique({
@@ -143,15 +146,18 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
       // Update existing invoice using raw query
       const updatedSentVia = [...invoice.sentVia, ...sentVia.filter(method => !invoice!.sentVia.includes(method as any))];
       
+      // Properly format the array for PostgreSQL
+      const formattedSentVia = `{${updatedSentVia.map(method => `"${method}"`).join(',')}}`;
+      
       await prisma.$executeRaw`
         UPDATE "invoices" 
-        SET "sentVia" = ${JSON.stringify(updatedSentVia)}, 
-            "emailSent" = ${invoice.emailSent || results.emailSent}, 
-            "smsSent" = ${invoice.smsSent || results.smsSent},
-            "pdfData" = ${pdfStorageResult.pdfData},
-            "pdfName" = ${pdfStorageResult.pdfName}
-        WHERE "id" = ${invoice.id}
-      `;
+        SET "sentVia" = $1::"InvoiceMethod"[], 
+            "emailSent" = $2, 
+            "smsSent" = $3,
+            "pdfData" = $4,
+            "pdfName" = $5
+        WHERE "id" = $6
+      `,[formattedSentVia, invoice.emailSent || results.emailSent, invoice.smsSent || results.smsSent, pdfStorageResult.pdfData, pdfStorageResult.pdfName, invoice.id];
       
       // Get the updated invoice
       invoice = await prisma.invoice.findUnique({
@@ -365,13 +371,16 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
     const currentSentVia = invoice.sentVia || [];
     const updatedSentVia = [...new Set([...currentSentVia, ...deliveryMethods])];
     
+    // Properly format the array for PostgreSQL
+    const formattedSentVia = `{${updatedSentVia.map(method => `"${method}"`).join(',')}}`;
+    
     await prisma.$executeRaw`
       UPDATE "invoices" 
-      SET "sentVia" = ${JSON.stringify(updatedSentVia)}, 
-          "emailSent" = ${invoice.emailSent || results.emailSent}, 
-          "smsSent" = ${invoice.smsSent || results.smsSent}
-      WHERE "id" = ${invoiceId}
-    `;
+      SET "sentVia" = $1::"InvoiceMethod"[], 
+          "emailSent" = $2, 
+          "smsSent" = $3
+      WHERE "id" = $4
+    `,[formattedSentVia, invoice.emailSent || results.emailSent, invoice.smsSent || results.smsSent, invoiceId];
 
     logger.info('Invoice resent successfully', {
       invoiceId,

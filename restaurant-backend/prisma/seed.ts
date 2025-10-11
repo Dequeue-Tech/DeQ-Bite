@@ -1,5 +1,5 @@
 import { PrismaClient, SpiceLevel, UserRole } from '@prisma/client';
-import bcrypt from 'bcryptjs';
+import * as bcrypt from 'bcryptjs';
 
 const prisma = new PrismaClient();
 
@@ -241,5 +241,8 @@ main()
     process.exit(1);
   })
   .finally(async () => {
-    await prisma.$disconnect();
+    // Only disconnect in non-serverless environments
+    if (process.env.IS_SERVERLESS !== 'true') {
+      await prisma.$disconnect();
+    }
   });

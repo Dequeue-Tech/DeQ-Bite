@@ -21,6 +21,15 @@ import orderRoutes from '@/routes/orders'; // Added missing orders route import
 // Load environment variables
 dotenv.config();
 
+// Add early validation for critical environment variables
+if (process.env.NODE_ENV === 'production') {
+  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
+    logger.error('❌ JWT_SECRET is not properly configured for production');
+    logger.error('Please set a secure JWT_SECRET in your Render environment variables');
+    // Note: We won't exit here to avoid crashing the app, but this should be addressed
+  }
+}
+
 const app = express();
 const PORT = process.env.PORT || 5000;
 

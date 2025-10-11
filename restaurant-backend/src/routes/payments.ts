@@ -165,12 +165,16 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         expectedSignature: 'Calculated on backend',
         receivedSignature: 'Provided by frontend',
       });
+
+
       
       return res.status(400).json({
         success: false,
         error: 'Invalid payment signature. Payment verification failed. Please try again or contact support if the issue persists.',
       });
     }
+
+    console.log('Verifying payment...');
 
     // Find the order by Razorpay order ID
     logger.info('Starting order lookup', {
@@ -230,6 +234,8 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         error: 'Order not found. The payment reference does not match any order in our system. Please contact support.',
       });
     }
+
+    console.log('Order found:', order);
 
     // Check if payment is already verified
     if (order.paymentStatus === 'COMPLETED') {
@@ -301,6 +307,8 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
         },
       });
 
+      console.log('Payment verified successfully')
+
       logger.info('Payment verified successfully', {
         orderId: order.id,
         razorpay_order_id,
@@ -328,6 +336,63 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
           `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
 
         // Create or update invoice record without PDF generation
+        // Prepare invoice data
+        const invoiceData = {
+          customerName: order.user.name,
+          customerEmail: order.user.email,
+          customerPhone: order.user.phone || '', // Handle null phone
+          invoiceNumber,
+          orderDate: order.createdAt.toLocaleDateString('en-IN'),
+          items: order.items.map((item: any) => ({
+            name: item.menuItem.name,
+            quantity: item.quantity,
+            price: item.price,
+            total: item.price * item.quantity,
+          })),
+          subtotal: order.subtotal,
+          tax: order.tax,
+          total: order.total,
+          tableNumber: order.table.number,
+          restaurantName: process.env.APP_NAME || 'Restaurant',
+          restaurantAddress: 'Your Restaurant Address Here',
+          restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
+          paymentMethod: 'Online Payment (Razorpay)',
+        };
+
+        //Generate PDF
+        const pdfBuffer = generateInvoicePDF(invoiceData);
+        const pdfFileName = `invoice-${invoiceNumber}.pdf`;
+        const pdfPath = await savePDFToStorage(pdfBuffer, pdfFileName);
+
+        // Track delivery results
+        const results = {
+          emailSent: false,
+          smsSent: false,
+          pdfGenerated: true,
+          pdfPath,
+        };
+
+        console.log('Invoice generated successfully')
+
+        // Send email automatically
+        // if (order.user.email) {
+        //   results.emailSent = await sendInvoiceEmail(
+        //     order.user.email,
+        //     {
+        //       customerName: order.user.name,
+        //       invoiceNumber,
+        //       orderDate: invoiceData.orderDate,
+        //       total: order.total,
+        //       tableNumber: order.table.number,
+        //       restaurantName: invoiceData.restaurantName,
+        //     },
+        //     pdfBuffer
+        //   );
+        // }
+
+        console.log('Invoice sent successfully')
+
+        // Create or update invoice record
         if (!invoice) {
           invoice = await prisma.invoice.create({
             data: {

@@ -16,6 +16,7 @@ import pdfRoutes from '@/routes/pdf';
 import menuRoutes from '@/routes/menu';
 import categoryRoutes from '@/routes/categories';
 import tableRoutes from '@/routes/tables';
+import orderRoutes from '@/routes/orders'; // Added missing orders route import
 
 // Load environment variables
 dotenv.config();
@@ -110,6 +111,7 @@ app.use('/api/pdf', pdfRoutes);
 app.use('/api/menu', menuRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/tables', tableRoutes);
+app.use('/api/orders', orderRoutes); // Added missing orders route mounting
 
 // Static files for invoices
 app.use('/invoices', express.static('public/invoices'));

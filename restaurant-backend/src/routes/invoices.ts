@@ -448,32 +448,27 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
   }
 }));
 
-// POST /api/invoices/:invoiceId/refresh-pdf - Regenerate and store PDF for an invoice
-router.post('/:invoiceId/refresh-pdf', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { invoiceId } = req.params;
+// POST /api/invoices/:invoiceOrOrderId/refresh-pdf - Regenerate and store PDF (by invoice or order id)
+router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { invoiceOrOrderId } = req.params;
 
-  if (!invoiceId) {
-    throw new AppError('Invoice ID is required', 400);
+  if (!invoiceOrOrderId) {
+    throw new AppError('Invoice or Order ID is required', 400);
   }
 
-  // Ensure invoice exists and belongs to user (admins could be allowed later)
-  const invoice = await prisma.invoice.findFirst({
+  // Resolve invoice by id or by order id
+  let invoice = await prisma.invoice.findFirst({
     where: {
-      id: invoiceId,
-      order: {
-        userId: req.user!.id,
-      },
+      OR: [
+        { id: invoiceOrOrderId },
+        { orderId: invoiceOrOrderId },
+      ],
+      order: { userId: req.user!.id },
     },
     include: {
       order: {
         include: {
-          items: {
-            include: {
-              menuItem: {
-                select: { name: true, price: true },
-              },
-            },
-          },
+          items: { include: { menuItem: { select: { name: true, price: true } } } },
           table: true,
           user: true,
         },
@@ -481,8 +476,30 @@ router.post('/:invoiceId/refresh-pdf', authenticate, asyncHandler(async (req: Au
     },
   });
 
+  // If not found, try to create invoice record for the order (must be owned and paid)
   if (!invoice) {
-    throw new AppError('Invoice not found', 404);
+    const order = await prisma.order.findFirst({
+      where: {
+        id: invoiceOrOrderId,
+        userId: req.user!.id,
+        paymentStatus: 'COMPLETED',
+      },
+      include: {
+        items: { include: { menuItem: { select: { name: true, price: true } } } },
+        table: true,
+        user: true,
+      },
+    });
+
+    if (!order) {
+      throw new AppError('Invoice not found', 404);
+    }
+
+    const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+    invoice = await prisma.invoice.create({
+      data: { orderId: order.id, invoiceNumber },
+      include: { order: { include: { items: { include: { menuItem: { select: { name: true, price: true } } } }, table: true, user: true } } },
+    });
   }
 
   // Build invoice data from order
@@ -518,7 +535,7 @@ router.post('/:invoiceId/refresh-pdf', authenticate, asyncHandler(async (req: Au
 
   // Update invoice record
   const updated = await prisma.invoice.update({
-    where: { id: invoiceId },
+    where: { id: invoice.id },
     data: {
       pdfPath: pdfStorageResult.pdfPath,
       pdfData: pdfStorageResult.pdfData,

@@ -53,7 +53,7 @@ app.use(cors({
       process.env.FRONTEND_URL?.replace(/\/$/, ''), // Remove trailing slash
       'http://localhost:5174',
       'http://localhost:3000',
-      'https://deq-restaurants-frontend.onrender.com' // Add your frontend Render URL
+      'https://de-q-restaurants-frontend.vercel.app' // Add your frontend Render URL
     ].filter(Boolean);
     
     // Allow requests with no origin (like mobile apps or curl requests)

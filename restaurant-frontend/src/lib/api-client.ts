@@ -310,6 +310,33 @@ class ApiClient {
     throw new Error(response.data.error || 'Failed to resend invoice');
   }
 
+  // PDF download
+  async downloadInvoicePdf(invoiceId: string): Promise<{ blob: Blob; filename: string }> {
+    // Use a direct GET to the PDF endpoint with auth header; expect application/pdf
+    const url = `/pdf/invoice/${invoiceId}`;
+    const response = await this.api.get(url, { responseType: 'blob' });
+
+    // Try to extract filename from Content-Disposition
+    const contentDisposition = response.headers['content-disposition'] as string | undefined;
+    let filename = 'invoice.pdf';
+    if (contentDisposition) {
+      const match = /filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i.exec(contentDisposition);
+      const raw = decodeURIComponent(match?.[1] || match?.[2] || '');
+      if (raw) filename = raw;
+    }
+
+    return { blob: response.data as Blob, filename };
+  }
+
+  // Refresh/regenerate the stored PDF for an invoice
+  async refreshInvoicePdf(invoiceId: string): Promise<any> {
+    const response = await this.api.post<ApiResponse>(`/invoices/${invoiceId}/refresh-pdf`);
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to refresh invoice PDF');
+  }
+
   // Menu methods
   async getMenuItems(categoryId?: string): Promise<ApiResponse<MenuItem[]>> {
     const params = categoryId ? `?categoryId=${categoryId}` : '';

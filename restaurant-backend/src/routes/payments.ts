@@ -360,10 +360,11 @@ router.post('/verify', authenticate, asyncHandler(async (req: AuthenticatedReque
           paymentMethod: 'Online Payment (Razorpay)',
         };
 
-        //Generate PDF
-        const pdfBuffer = generateInvoicePDF(invoiceData);
-        const pdfFileName = `invoice-${invoiceNumber}.pdf`;
-        const pdfPath = await savePDFToStorage(pdfBuffer, pdfFileName);
+  // Generate PDF (async) and store
+  const pdfBuffer = await generateInvoicePDF(invoiceData);
+  const pdfFileName = `invoice-${invoiceNumber}.pdf`;
+  const pdfStorageResult = await savePDFToStorage(pdfBuffer, pdfFileName);
+  const pdfPath = pdfStorageResult.pdfPath ?? pdfStorageResult.pdfName ?? null;
 
         // Track delivery results
         const results = {

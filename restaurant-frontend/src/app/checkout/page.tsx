@@ -38,6 +38,7 @@ export default function CheckoutPage() {
     tax: number;
     subtotal: number;
   } | null>(null);
+  const [generatedInvoiceId, setGeneratedInvoiceId] = useState<string | null>(null);
 
   useEffect(() => {
     // Redirect if not authenticated
@@ -152,6 +153,53 @@ export default function CheckoutPage() {
     setStep(3);
   };
 
+  const handleDownloadInvoice = async () => {
+    try {
+      // Fetch invoice for the last created order
+      if (!createdOrder?.id) {
+        toast.error('No order available to fetch invoice');
+        return;
+      }
+
+      // Get invoice record by orderId
+      const data: any = await apiClient.getInvoice(createdOrder.id);
+      let invoice = data?.invoice;
+      if (!invoice?.id) {
+        toast.error('Invoice not found for this order');
+        return;
+      }
+
+      setGeneratedInvoiceId(invoice.id);
+
+      // Download PDF using secured endpoint; if unauthorized/public path missing, refresh and retry once
+      let blob: Blob;
+      let filename: string;
+      try {
+        const res = await apiClient.downloadInvoicePdf(invoice.id);
+        blob = res.blob; filename = res.filename;
+      } catch (err: any) {
+        // Attempt to regenerate stored PDF then retry
+        await apiClient.refreshInvoicePdf(invoice.id);
+        const res2 = await apiClient.downloadInvoicePdf(invoice.id);
+        blob = res2.blob; filename = res2.filename;
+      }
+
+      // Trigger browser download
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename || 'invoice.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+      toast.success('Invoice download started');
+    } catch (error: any) {
+      console.error('Invoice download failed:', error);
+      toast.error(error?.message || 'Failed to download invoice');
+    }
+  };
+
   const handlePaymentError = (errorMsg: string) => {
     toast.error(errorMsg || 'Payment failed');
   };
@@ -209,6 +257,12 @@ export default function CheckoutPage() {
                 className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition-colors"
               >
                 View My Orders
+              </button>
+              <button
+                onClick={handleDownloadInvoice}
+                className="w-full border border-gray-300 text-gray-700 py-3 rounded-lg hover:bg-gray-50 transition-colors"
+              >
+                Download Invoice (PDF)
               </button>
               <button
                 onClick={() => router.push('/menu')}

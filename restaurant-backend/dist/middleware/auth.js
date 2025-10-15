@@ -9,9 +9,28 @@ const database_1 = require("../config/database");
 const errorHandler_1 = require("./errorHandler");
 const authenticate = async (req, _res, next) => {
     try {
-        const token = req.header('Authorization')?.replace('Bearer ', '');
+        let token;
+        const authHeader = req.get('Authorization') || req.headers['authorization'];
+        if (authHeader && typeof authHeader === 'string') {
+            if (authHeader.startsWith('Bearer ')) {
+                token = authHeader.substring(7);
+            }
+        }
+        if (!token && req.body) {
+            token = req.body['token'];
+        }
+        if (!token && req.query) {
+            token = req.query['token'];
+        }
         if (!token) {
+            console.log('No token found in request');
+            console.log('Headers:', req.headers);
+            console.log('Body:', req.body);
             throw new errorHandler_1.AppError('Access denied. No token provided.', 401);
+        }
+        if (!process.env.JWT_SECRET) {
+            console.error('JWT_SECRET is not configured in environment variables');
+            throw new errorHandler_1.AppError('Server configuration error.', 500);
         }
         const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
         const user = await database_1.prisma.user.findUnique({
@@ -58,8 +77,18 @@ const authorize = (...roles) => {
 exports.authorize = authorize;
 const optionalAuth = async (req, _res, next) => {
     try {
-        const token = req.header('Authorization')?.replace('Bearer ', '');
+        let token;
+        const authHeader = req.get('Authorization') || req.headers['authorization'];
+        if (authHeader && typeof authHeader === 'string') {
+            if (authHeader.startsWith('Bearer ')) {
+                token = authHeader.substring(7);
+            }
+        }
         if (token) {
+            if (!process.env.JWT_SECRET) {
+                console.error('JWT_SECRET is not configured in environment variables');
+                throw new Error('Server configuration error.');
+            }
             const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
             const user = await database_1.prisma.user.findUnique({
                 where: { id: decoded.id },

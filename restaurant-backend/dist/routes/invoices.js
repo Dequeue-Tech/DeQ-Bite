@@ -16,44 +16,74 @@ const generateInvoiceSchema = zod_1.z.object({
 });
 router.post('/generate', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { orderId, methods } = generateInvoiceSchema.parse(req.body);
-    try {
-        const order = await database_1.prisma.order.findFirst({
-            where: {
-                id: orderId,
-                userId: req.user.id,
+    const order = await database_1.prisma.order.findFirst({
+        where: {
+            id: orderId,
+            userId: req.user.id,
+            paymentStatus: 'COMPLETED',
+        },
+        include: {
+            user: {
+                select: {
+                    name: true,
+                    email: true,
+                    phone: true,
+                },
             },
-            include: {
-                user: {
-                    select: {
-                        name: true,
-                        email: true,
-                        phone: true,
-                    },
+            table: {
+                select: {
+                    number: true,
+                    location: true,
                 },
-                table: {
-                    select: {
-                        number: true,
-                        location: true,
-                    },
-                },
-                items: {
-                    include: {
-                        menuItem: {
-                            select: {
-                                name: true,
-                                price: true,
-                            },
+            },
+            items: {
+                include: {
+                    menuItem: {
+                        select: {
+                            name: true,
+                            price: true,
                         },
                     },
                 },
             },
-        });
-        if (!order) {
-            throw new errorHandler_1.AppError('Order not found', 404);
-        }
+        },
+    });
+    if (!order) {
+        throw new errorHandler_1.AppError('Order not found or payment not completed', 404);
+    }
+    try {
         let invoice = await database_1.prisma.invoice.findUnique({
-            where: { orderId: order.id },
+            where: { orderId },
         });
+        if (invoice && invoice.sentVia.length > 0) {
+            logger_1.logger.info('Invoice already exists and was sent automatically', {
+                orderId,
+                invoiceId: invoice.id,
+                sentVia: invoice.sentVia,
+            });
+            const response = {
+                success: true,
+                message: 'Invoice already generated and sent',
+                data: {
+                    invoice: {
+                        id: invoice.id,
+                        invoiceNumber: invoice.invoiceNumber,
+                        pdfUrl: invoice.pdfPath,
+                        sentVia: invoice.sentVia,
+                        emailSent: invoice.emailSent,
+                        smsSent: invoice.smsSent,
+                        issuedAt: invoice.issuedAt,
+                    },
+                    deliveryResults: {
+                        emailSent: invoice.emailSent,
+                        smsSent: invoice.smsSent,
+                        pdfGenerated: true,
+                        pdfPath: invoice.pdfPath,
+                    },
+                },
+            };
+            return res.status(200).json(response);
+        }
         const invoiceNumber = invoice?.invoiceNumber ||
             `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
         const invoiceData = {
@@ -77,16 +107,17 @@ router.post('/generate', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(a
             restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
             paymentMethod: 'Online Payment (Razorpay)',
         };
-        const pdfBuffer = (0, pdf_1.generateInvoicePDF)(invoiceData);
-        const pdfStorageResult = await (0, pdf_1.savePDFToStorage)(pdfBuffer, `invoice-${invoiceNumber}.pdf`);
+        const pdfBuffer = await (0, pdf_1.generateInvoicePDF)(invoiceData);
+        const pdfFileName = `invoice-${invoiceNumber}.pdf`;
+        const pdfStorageResult = await (0, pdf_1.savePDFToStorage)(pdfBuffer, pdfFileName);
         const results = {
             emailSent: false,
             smsSent: false,
             pdfGenerated: true,
             pdfPath: pdfStorageResult.pdfPath,
         };
-        const sentVia = [];
-        if (methods.includes('EMAIL') && order.user.email) {
+        const deliveryMethods = methods || [];
+        if (deliveryMethods.includes('EMAIL') && order.user.email) {
             results.emailSent = await (0, email_1.sendInvoiceEmail)(order.user.email, {
                 customerName: order.user.name,
                 invoiceNumber,
@@ -95,38 +126,45 @@ router.post('/generate', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(a
                 tableNumber: order.table.number,
                 restaurantName: invoiceData.restaurantName,
             }, pdfBuffer);
-            if (results.emailSent) {
-                sentVia.push('EMAIL');
-            }
+        }
+        if (deliveryMethods.includes('SMS') && order.user.phone) {
+            results.smsSent = await (0, sms_1.sendInvoiceSMS)(order.user.phone, {
+                customerName: order.user.name,
+                invoiceNumber,
+                total: order.total,
+                restaurantName: invoiceData.restaurantName,
+            });
         }
         if (!invoice) {
-            await database_1.prisma.$executeRaw `
-        INSERT INTO "invoices" 
-        ("id", "orderId", "invoiceNumber", "sentVia", "emailSent", "smsSent", "pdfData", "pdfName")
-        VALUES 
-        (${require('crypto').randomBytes(16).toString('hex')}, ${order.id}, ${invoiceNumber}, ${JSON.stringify(sentVia)}, ${results.emailSent}, ${results.smsSent}, ${pdfStorageResult.pdfData}, ${pdfStorageResult.pdfName})
-      `;
-            invoice = await database_1.prisma.invoice.findUnique({
-                where: { orderId: order.id },
+            invoice = await database_1.prisma.invoice.create({
+                data: {
+                    orderId,
+                    invoiceNumber,
+                    sentVia: deliveryMethods,
+                    emailSent: results.emailSent,
+                    smsSent: results.smsSent,
+                    pdfPath: pdfStorageResult.pdfPath,
+                    pdfData: pdfStorageResult.pdfData,
+                    pdfName: pdfStorageResult.pdfName,
+                },
             });
         }
         else {
-            const updatedSentVia = [...invoice.sentVia, ...sentVia.filter(method => !invoice.sentVia.includes(method))];
-            await database_1.prisma.$executeRaw `
-        UPDATE "invoices" 
-        SET "sentVia" = ${JSON.stringify(updatedSentVia)}, 
-            "emailSent" = ${invoice.emailSent || results.emailSent}, 
-            "smsSent" = ${invoice.smsSent || results.smsSent},
-            "pdfData" = ${pdfStorageResult.pdfData},
-            "pdfName" = ${pdfStorageResult.pdfName}
-        WHERE "id" = ${invoice.id}
-      `;
-            invoice = await database_1.prisma.invoice.findUnique({
+            const updatedSentVia = [...new Set([...invoice.sentVia, ...deliveryMethods])];
+            invoice = await database_1.prisma.invoice.update({
                 where: { id: invoice.id },
+                data: {
+                    sentVia: updatedSentVia,
+                    emailSent: invoice.emailSent || results.emailSent,
+                    smsSent: invoice.smsSent || results.smsSent,
+                    pdfPath: pdfStorageResult.pdfPath,
+                    pdfData: pdfStorageResult.pdfData,
+                    pdfName: pdfStorageResult.pdfName,
+                },
             });
         }
-        logger_1.logger.info('Invoice generated and sent', {
-            orderId: order.id,
+        logger_1.logger.info('Invoice generated and delivered', {
+            orderId,
             invoiceNumber,
             userId: req.user.id,
             methods,
@@ -134,13 +172,22 @@ router.post('/generate', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(a
         });
         const response = {
             success: true,
-            message: 'Invoice generated and sent successfully',
+            message: 'Invoice generated and delivered successfully',
             data: {
-                invoice,
-                results,
+                invoice: {
+                    id: invoice.id,
+                    invoiceNumber: invoice.invoiceNumber,
+                    pdfUrl: results.pdfPath,
+                    sentVia: invoice.sentVia,
+                    emailSent: invoice.emailSent,
+                    smsSent: invoice.smsSent,
+                    issuedAt: invoice.issuedAt,
+                },
+                deliveryResults: results,
+                warnings: generateWarnings(deliveryMethods, order.user.email, order.user.phone, results),
             },
         };
-        res.json(response);
+        return res.status(201).json(response);
     }
     catch (error) {
         logger_1.logger.error('Invoice generation failed', {
@@ -148,7 +195,7 @@ router.post('/generate', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(a
             userId: req.user.id,
             error: error instanceof Error ? error.message : 'Unknown error',
         });
-        throw new errorHandler_1.AppError(error instanceof Error ? error.message : 'Failed to generate invoice', 500);
+        throw new errorHandler_1.AppError('Failed to generate invoice', 500);
     }
 }));
 router.get('/:orderId', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {
@@ -230,37 +277,34 @@ router.post('/:invoiceId/resend', auth_1.authenticate, (0, errorHandler_1.asyncH
     if (!invoiceId) {
         throw new errorHandler_1.AppError('Invoice ID is required', 400);
     }
-    const invoices = await database_1.prisma.$queryRaw `
-    SELECT i.*, o."userId"
-    FROM "invoices" i
-    JOIN "orders" o ON i."orderId" = o."id"
-    WHERE i."id" = ${invoiceId} AND o."userId" = ${req.user.id}
-  `;
-    if (!invoices || invoices.length === 0) {
-        throw new errorHandler_1.AppError('Invoice not found', 404);
-    }
-    const invoice = invoices[0];
-    const orderDetails = await database_1.prisma.order.findFirst({
+    const invoice = await database_1.prisma.invoice.findFirst({
         where: {
-            id: invoice.orderId,
+            id: invoiceId,
+            order: {
+                userId: req.user.id,
+            },
         },
         include: {
-            user: {
-                select: {
-                    name: true,
-                    email: true,
-                    phone: true,
-                },
-            },
-            table: {
-                select: {
-                    number: true,
+            order: {
+                include: {
+                    user: {
+                        select: {
+                            name: true,
+                            email: true,
+                            phone: true,
+                        },
+                    },
+                    table: {
+                        select: {
+                            number: true,
+                        },
+                    },
                 },
             },
         },
     });
-    if (!orderDetails) {
-        throw new errorHandler_1.AppError('Order details not found', 404);
+    if (!invoice) {
+        throw new errorHandler_1.AppError('Invoice not found', 404);
     }
     try {
         const results = {
@@ -268,30 +312,81 @@ router.post('/:invoiceId/resend', auth_1.authenticate, (0, errorHandler_1.asyncH
             smsSent: false,
         };
         const invoiceData = {
-            customerName: orderDetails.user.name,
+            customerName: invoice.order.user.name,
             invoiceNumber: invoice.invoiceNumber,
-            orderDate: orderDetails.createdAt.toLocaleDateString('en-IN'),
-            total: orderDetails.total,
-            tableNumber: orderDetails.table.number,
+            orderDate: invoice.order.createdAt.toLocaleDateString('en-IN'),
+            total: invoice.order.total,
+            tableNumber: invoice.order.table.number,
             restaurantName: process.env.APP_NAME || 'Restaurant',
         };
         const deliveryMethods = methods || [];
-        if (deliveryMethods.includes('EMAIL') && orderDetails.user.email && invoice.pdfData) {
-            const pdfBuffer = invoice.pdfData;
-            results.emailSent = await (0, email_1.sendInvoiceEmail)(orderDetails.user.email, invoiceData, pdfBuffer);
+        if (deliveryMethods.includes('EMAIL') && invoice.order.user.email) {
+            let pdfBuffer = null;
+            if (invoice.pdfData) {
+                pdfBuffer = invoice.pdfData;
+            }
+            else {
+                const fullOrder = await database_1.prisma.order.findUnique({
+                    where: { id: invoice.orderId },
+                    include: {
+                        items: {
+                            include: {
+                                menuItem: {
+                                    select: { name: true, price: true },
+                                },
+                            },
+                        },
+                    },
+                });
+                const regenInvoiceData = {
+                    customerName: invoice.order.user.name,
+                    customerEmail: invoice.order.user.email,
+                    customerPhone: invoice.order.user.phone || '',
+                    invoiceNumber: invoice.invoiceNumber,
+                    orderDate: invoice.order.createdAt.toLocaleDateString('en-IN'),
+                    items: (fullOrder?.items || []).map((item) => ({
+                        name: item.menuItem?.name || 'Item',
+                        quantity: item.quantity,
+                        price: item.price,
+                        total: item.price * item.quantity,
+                    })),
+                    subtotal: invoice.order.subtotal,
+                    tax: invoice.order.tax,
+                    total: invoice.order.total,
+                    tableNumber: invoice.order.table.number,
+                    restaurantName: process.env.APP_NAME || 'Restaurant',
+                    restaurantAddress: 'Your Restaurant Address Here',
+                    restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
+                    paymentMethod: 'Online Payment (Razorpay)',
+                };
+                pdfBuffer = await (0, pdf_1.generateInvoicePDF)(regenInvoiceData);
+                const pdfFileName = `invoice-${invoice.invoiceNumber}.pdf`;
+                const pdfStorageResult = await (0, pdf_1.savePDFToStorage)(pdfBuffer, pdfFileName);
+                await database_1.prisma.invoice.update({
+                    where: { id: invoiceId },
+                    data: {
+                        pdfPath: pdfStorageResult.pdfPath,
+                        pdfData: pdfStorageResult.pdfData,
+                        pdfName: pdfStorageResult.pdfName,
+                    },
+                });
+            }
+            if (pdfBuffer) {
+                results.emailSent = await (0, email_1.sendInvoiceEmail)(invoice.order.user.email, invoiceData, pdfBuffer);
+            }
         }
-        if (deliveryMethods.includes('SMS') && orderDetails.user.phone) {
-            results.smsSent = await (0, sms_1.sendInvoiceSMS)(orderDetails.user.phone, invoiceData);
+        if (deliveryMethods.includes('SMS') && invoice.order.user.phone) {
+            results.smsSent = await (0, sms_1.sendInvoiceSMS)(invoice.order.user.phone, invoiceData);
         }
-        const currentSentVia = invoice.sentVia || [];
-        const updatedSentVia = [...new Set([...currentSentVia, ...deliveryMethods])];
-        await database_1.prisma.$executeRaw `
-      UPDATE "invoices" 
-      SET "sentVia" = ${JSON.stringify(updatedSentVia)}, 
-          "emailSent" = ${invoice.emailSent || results.emailSent}, 
-          "smsSent" = ${invoice.smsSent || results.smsSent}
-      WHERE "id" = ${invoiceId}
-    `;
+        const updatedSentVia = [...new Set([...invoice.sentVia, ...deliveryMethods])];
+        await database_1.prisma.invoice.update({
+            where: { id: invoiceId },
+            data: {
+                sentVia: updatedSentVia,
+                emailSent: invoice.emailSent || results.emailSent,
+                smsSent: invoice.smsSent || results.smsSent,
+            },
+        });
         logger_1.logger.info('Invoice resent successfully', {
             invoiceId,
             invoiceNumber: invoice.invoiceNumber,
@@ -304,7 +399,7 @@ router.post('/:invoiceId/resend', auth_1.authenticate, (0, errorHandler_1.asyncH
             message: 'Invoice resent successfully',
             data: {
                 deliveryResults: results,
-                warnings: generateWarnings(deliveryMethods, orderDetails.user.email, orderDetails.user.phone, results, !!invoice.pdfData),
+                warnings: generateWarnings(deliveryMethods, invoice.order.user.email, invoice.order.user.phone, results),
             },
         };
         res.json(response);
@@ -318,14 +413,11 @@ router.post('/:invoiceId/resend', auth_1.authenticate, (0, errorHandler_1.asyncH
         throw new errorHandler_1.AppError('Failed to resend invoice', 500);
     }
 }));
-function generateWarnings(methods, email, phone, results, hasPdfData) {
+function generateWarnings(methods, email, phone, results) {
     const warnings = [];
     if (methods.includes('EMAIL')) {
         if (!email) {
             warnings.push('Email delivery skipped: No email address available');
-        }
-        else if (!hasPdfData) {
-            warnings.push('Email delivery skipped: No PDF data available');
         }
         else if (results && !results.emailSent) {
             warnings.push('Email delivery failed: Please check email configuration');

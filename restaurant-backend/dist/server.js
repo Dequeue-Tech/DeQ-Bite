@@ -21,6 +21,12 @@ const categories_1 = __importDefault(require("./routes/categories"));
 const tables_1 = __importDefault(require("./routes/tables"));
 const orders_1 = __importDefault(require("./routes/orders"));
 dotenv_1.default.config();
+if (process.env.NODE_ENV === 'production') {
+    if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
+        logger_1.logger.error('❌ JWT_SECRET is not properly configured for production');
+        logger_1.logger.error('Please set a secure JWT_SECRET in your Render environment variables');
+    }
+}
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 app.use((0, helmet_1.default)({

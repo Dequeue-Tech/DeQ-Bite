@@ -391,20 +391,6 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
         customerEmail: invoice.order.user.email,
         customerPhone: invoice.order.user.phone || '', // Handle null phone
       });
-      
-      // Save PDF to storage
-      const pdfFileName = `invoice-${invoice.invoiceNumber}.pdf`;
-      const pdfStorageResult = await savePDFToStorage(pdfBuffer, pdfFileName);
-      
-      // Update invoice with new PDF data
-      await prisma.invoice.update({
-        where: { id: invoiceId },
-        data: {
-          pdfPath: pdfStorageResult.pdfPath,
-          pdfData: pdfStorageResult.pdfData,
-          pdfName: pdfStorageResult.pdfName,
-        },
-      });
 
       results.emailSent = await sendInvoiceEmail(
         invoice.order.user.email,
@@ -421,7 +407,7 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
       );
     }
 
-    // Update invoice record with delivery methods
+    // Update invoice record
     const updatedSentVia = [...new Set([...invoice.sentVia, ...deliveryMethods])];
     
     await prisma.invoice.update({
@@ -460,6 +446,100 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
 
     throw new AppError('Failed to resend invoice', 500);
   }
+}));
+
+// POST /api/invoices/:invoiceId/refresh-pdf - Regenerate and store PDF for an invoice
+router.post('/:invoiceId/refresh-pdf', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const { invoiceId } = req.params;
+
+  if (!invoiceId) {
+    throw new AppError('Invoice ID is required', 400);
+  }
+
+  // Ensure invoice exists and belongs to user (admins could be allowed later)
+  const invoice = await prisma.invoice.findFirst({
+    where: {
+      id: invoiceId,
+      order: {
+        userId: req.user!.id,
+      },
+    },
+    include: {
+      order: {
+        include: {
+          items: {
+            include: {
+              menuItem: {
+                select: { name: true, price: true },
+              },
+            },
+          },
+          table: true,
+          user: true,
+        },
+      },
+    },
+  });
+
+  if (!invoice) {
+    throw new AppError('Invoice not found', 404);
+  }
+
+  // Build invoice data from order
+  const order = invoice.order;
+  if (!order) throw new AppError('Order not found for invoice', 404);
+
+  const invoiceData = {
+    customerName: order.user?.name || '',
+    customerEmail: order.user?.email || '',
+    customerPhone: order.user?.phone || '',
+    invoiceNumber: invoice.invoiceNumber,
+    orderDate: order.createdAt.toLocaleDateString('en-IN'),
+    items: (order.items || []).map((it: any) => ({
+      name: it.menuItem?.name || 'Item',
+      quantity: it.quantity,
+      price: it.price,
+      total: it.price * it.quantity,
+    })),
+    subtotal: order.subtotal,
+    tax: order.tax,
+    total: order.total,
+    tableNumber: order.table?.number || 0,
+    restaurantName: process.env.APP_NAME || 'Restaurant',
+    restaurantAddress: 'Your Restaurant Address Here',
+    restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
+    paymentMethod: 'Online Payment (Razorpay)',
+  };
+
+  // Generate and save PDF
+  const pdfBuffer = generateInvoicePDF(invoiceData);
+  const pdfFileName = `invoice-${invoice.invoiceNumber}.pdf`;
+  const pdfStorageResult = await savePDFToStorage(pdfBuffer, pdfFileName);
+
+  // Update invoice record
+  const updated = await prisma.invoice.update({
+    where: { id: invoiceId },
+    data: {
+      pdfPath: pdfStorageResult.pdfPath,
+      pdfData: pdfStorageResult.pdfData,
+      pdfName: pdfStorageResult.pdfName,
+    },
+  });
+
+  const response: ApiResponse = {
+    success: true,
+    message: 'Invoice PDF regenerated and stored',
+    data: {
+      invoice: {
+        id: updated.id,
+        invoiceNumber: updated.invoiceNumber,
+        pdfUrl: updated.pdfPath,
+        pdfName: updated.pdfName,
+      },
+    },
+  };
+
+  res.json(response);
 }));
 
 /**

@@ -126,51 +126,43 @@ export default function OrdersPage() {
       // Generate and download invoice - only for completed payments
       const order = orders.find(o => o.id === orderId);
       if (order && order.paymentStatus === 'COMPLETED') {
-        // First check if invoice already exists
-        try {
-          const invoiceResponse = await apiClient.getInvoice(orderId);
-          if (invoiceResponse && invoiceResponse.invoice && invoiceResponse.invoice.id) {
-            // Download PDF using the new PDF endpoint
-            const pdfUrl = `${apiClient.getBaseURL()}/api/pdf/invoice/${invoiceResponse.invoice.id}`;
-            window.open(pdfUrl, '_blank');
-            toast.success('Invoice downloaded successfully!');
-          } else {
-            // Generate new invoice with no delivery methods (just PDF)
-            const response = await apiClient.generateInvoice(orderId, []);
-          
-            if (response && response.invoice && response.invoice.id) {
-              // Download the newly generated PDF using the new PDF endpoint
-              const pdfUrl = `${apiClient.getBaseURL()}/api/pdf/invoice/${response.invoice.id}`;
-              window.open(pdfUrl, '_blank');
-              toast.success('Invoice generated and downloaded successfully!');
-            
-              // Refresh orders to show updated status
-              await fetchOrders();
-            } else {
-              toast.error('Failed to generate invoice. Please try again.');
-            }
-          }
-        } catch (error) {
-          // If getting invoice fails, generate a new one
-          try {
-            const response = await apiClient.generateInvoice(orderId, []);
-          
-            if (response && response.invoice && response.invoice.id) {
-              // Download the newly generated PDF using the new PDF endpoint
-              const pdfUrl = `${apiClient.getBaseURL()}/api/pdf/invoice/${response.invoice.id}`;
-              window.open(pdfUrl, '_blank');
-              toast.success('Invoice generated and downloaded successfully!');
-            
-              // Refresh orders to show updated status
-              await fetchOrders();
-            } else {
-              toast.error('Failed to generate invoice. Please try again.');
-            }
-          } catch (generateError) {
-            console.error('Error generating invoice:', generateError);
-            toast.error('Failed to generate invoice. Please try again.');
-          }
+        // Try to get existing invoice
+        const invoiceResponse = await apiClient.getInvoice(orderId);
+        let invoiceId = invoiceResponse?.invoice?.id as string | undefined;
+
+        // If not found, generate it
+        if (!invoiceId) {
+          const gen = await apiClient.generateInvoice(orderId, []);
+          invoiceId = gen?.invoice?.id;
         }
+
+        if (!invoiceId) {
+          toast.error('Failed to get or generate invoice.');
+          return;
+        }
+
+        // Download via authenticated blob request; if fails, refresh and retry
+        let blob: Blob; let filename: string;
+        try {
+          const res = await apiClient.downloadInvoicePdf(invoiceId);
+          blob = res.blob; filename = res.filename;
+        } catch (err) {
+          await apiClient.refreshInvoicePdf(invoiceId);
+          const res2 = await apiClient.downloadInvoicePdf(invoiceId);
+          blob = res2.blob; filename = res2.filename;
+        }
+
+        const blobUrl = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = blobUrl;
+        a.download = filename || 'invoice.pdf';
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        URL.revokeObjectURL(blobUrl);
+        toast.success('Invoice download started');
+
+        await fetchOrders();
       } else {
         toast.error('Invoice can only be generated for completed payments');
       }

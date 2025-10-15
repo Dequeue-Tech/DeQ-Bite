@@ -13,17 +13,19 @@ const createTransporter = () => {
         host: process.env.SMTP_HOST,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_PORT === '465',
-        auth: {
+        auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS,
-        },
+        } : undefined,
+        tls: { rejectUnauthorized: process.env.NODE_ENV === 'production' },
+        connectionTimeout: 10_000,
     });
 };
 async function sendEmail(options) {
     try {
         const transporter = createTransporter();
         const mailOptions = {
-            from: `${process.env.APP_NAME} <${process.env.SMTP_USER}>`,
+            from: `${process.env.APP_NAME || 'Restaurant'} <${process.env.SMTP_USER || 'no-reply@example.com'}>`,
             to: options.to,
             subject: options.subject,
             html: options.html,
@@ -33,13 +35,13 @@ async function sendEmail(options) {
         logger_1.logger.info('Email sent successfully', {
             to: options.to,
             subject: options.subject,
-            messageId: result.messageId,
+            messageId: result?.messageId,
         });
         return true;
     }
     catch (error) {
         logger_1.logger.error('Failed to send email', {
-            error: error instanceof Error ? error.message : 'Unknown error',
+            error: error instanceof Error ? error.message : JSON.stringify(error),
             to: options.to,
             subject: options.subject,
         });

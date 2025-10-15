@@ -292,9 +292,10 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                     restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
                     paymentMethod: 'Online Payment (Razorpay)',
                 };
-                const pdfBuffer = (0, pdf_1.generateInvoicePDF)(invoiceData);
+                const pdfBuffer = await (0, pdf_1.generateInvoicePDF)(invoiceData);
                 const pdfFileName = `invoice-${invoiceNumber}.pdf`;
-                const pdfPath = await (0, pdf_1.savePDFToStorage)(pdfBuffer, pdfFileName);
+                const pdfStorageResult = await (0, pdf_1.savePDFToStorage)(pdfBuffer, pdfFileName);
+                const pdfPath = pdfStorageResult.pdfPath ?? pdfStorageResult.pdfName ?? null;
                 const results = {
                     emailSent: false,
                     smsSent: false,

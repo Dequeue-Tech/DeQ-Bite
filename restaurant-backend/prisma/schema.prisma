@@ -21,13 +21,51 @@ model User {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   orders    Order[]
+  restaurantUsers RestaurantUser[]
   
   @@map("users")
 }
 
+model Restaurant {
+  id          String   @id @default(cuid())
+  name        String
+  slug        String   @unique
+  subdomain   String   @unique
+  email       String?
+  phone       String?
+  address     String?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  categories  Category[]
+  menuItems   MenuItem[]
+  tables      Table[]
+  orders      Order[]
+  coupons     Coupon[]
+  users       RestaurantUser[]
+
+  @@map("restaurants")
+}
+
+model RestaurantUser {
+  id            String   @id @default(cuid())
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId        String
+  role          RestaurantRole @default(ADMIN)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([restaurantId, userId])
+  @@map("restaurant_users")
+}
+
 model Category {
   id          String     @id @default(cuid())
-  name        String     @unique
+  name        String
   description String?
   image       String?
   active      Boolean    @default(true)
@@ -35,7 +73,10 @@ model Category {
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt
   menuItems   MenuItem[]
+  restaurant  Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
   
+  @@unique([restaurantId, name])
   @@map("categories")
 }
 
@@ -43,7 +84,7 @@ model MenuItem {
   id          String      @id @default(cuid())
   name        String
   description String?
-  price       Float
+  pricePaise  Int
   image       String?
   category    Category    @relation(fields: [categoryId], references: [id])
   categoryId  String
@@ -58,18 +99,23 @@ model MenuItem {
   createdAt   DateTime    @default(now())
   updatedAt   DateTime    @updatedAt
   orderItems  OrderItem[]
+  restaurant  Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
   
   @@map("menu_items")
 }
 
 model Table {
   id       String  @id @default(cuid())
-  number   Int     @unique
+  number   Int
   capacity Int
   location String? // e.g., "Window side", "Garden area"
   active   Boolean @default(true)
   orders   Order[]
+  restaurant  Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId String
   
+  @@unique([restaurantId, number])
   @@map("tables")
 }
 
@@ -81,16 +127,23 @@ model Order {
   tableId       String
   status        OrderStatus @default(PENDING)
   items         OrderItem[]
-  subtotal      Float
-  tax           Float
-  total         Float
-  paymentId     String?     // Razorpay payment ID
+  subtotalPaise Int
+  taxPaise      Int
+  discountPaise Int         @default(0)
+  totalPaise    Int
+  paymentId     String?     // Payment order/reference ID
+  paymentTransactionId String? // Payment transaction ID (gateway payment id)
+  paymentProvider PaymentProvider @default(RAZORPAY)
   paymentStatus PaymentStatus @default(PENDING)
   specialInstructions String?
   estimatedTime Int?        // in minutes
   createdAt     DateTime    @default(now())
   updatedAt     DateTime    @updatedAt
   invoice       Invoice?
+  coupon        Coupon?     @relation(fields: [couponId], references: [id])
+  couponId      String?
+  restaurant    Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId  String
   
   @@map("orders")
 }
@@ -102,7 +155,7 @@ model OrderItem {
   menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   menuItemId String
   quantity   Int
-  price      Float    // Price at time of order
+  pricePaise Int      // Price at time of order (in paise)
   notes      String?  // Special requests for this item
   
   @@map("order_items")
@@ -124,10 +177,51 @@ model Invoice {
   @@map("invoices")
 }
 
+model Coupon {
+  id            String      @id @default(cuid())
+  code          String
+  description   String?
+  type          CouponType
+  value         Int
+  maxDiscountPaise Int?
+  minOrderPaise Int?
+  usageLimit    Int?
+  usageCount    Int         @default(0)
+  startsAt      DateTime?
+  endsAt        DateTime?
+  active        Boolean     @default(true)
+  createdAt     DateTime    @default(now())
+  updatedAt     DateTime    @updatedAt
+  restaurant    Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  restaurantId  String
+  orders        Order[]
+
+  @@unique([restaurantId, code])
+  @@map("coupons")
+}
+
 enum UserRole {
   CUSTOMER
+  OWNER
   ADMIN
   STAFF
+}
+
+enum RestaurantRole {
+  OWNER
+  ADMIN
+  STAFF
+}
+
+enum CouponType {
+  PERCENT
+  FIXED
+}
+
+enum PaymentProvider {
+  RAZORPAY
+  PAYTM
+  PHONEPE
 }
 
 enum OrderStatus {

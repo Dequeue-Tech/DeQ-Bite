@@ -6,6 +6,7 @@ import { useAuthStore } from '@/store/auth';
 import { apiClient, MenuItem, Category } from '@/lib/api-client';
 import { ChefHat, ShoppingCart, Plus, Minus, Filter, Search } from 'lucide-react';
 import { useCartStore, CartItem } from '@/store/cart';
+import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
 
@@ -20,6 +21,7 @@ export default function MenuPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [selectedSubdomain, setSelectedSubdomain] = useState<string | null>(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -30,6 +32,7 @@ export default function MenuPage() {
   });
 
   useEffect(() => {
+    setSelectedSubdomain(apiClient.getSelectedRestaurantSubdomain());
     fetchMenuData();
   }, []);
 
@@ -107,7 +110,7 @@ export default function MenuPage() {
       addItem({
         id: item.id,
         name: item.name || '',
-        price: item.price,
+        pricePaise: item.pricePaise,
         image: item.image,
         quantity: 1,
       });
@@ -118,7 +121,7 @@ export default function MenuPage() {
           <span className="font-medium">{item.name || 'Item'}</span>
           <span className="mx-2">added to cart!</span>
           <span className="bg-orange-100 text-orange-800 text-xs font-medium px-2 py-1 rounded">
-            ₹{item.price.toFixed(2)}
+            {formatInr(item.pricePaise)}
           </span>
         </div>,
         {
@@ -201,6 +204,11 @@ export default function MenuPage() {
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="mb-8">
           <h2 className="text-2xl font-bold text-gray-800 mb-4">Our Menu</h2>
+          {selectedSubdomain ? (
+            <p className="text-sm text-gray-600 mb-2">Restaurant context: @{selectedSubdomain}</p>
+          ) : (
+            <p className="text-sm text-orange-700 mb-2">No restaurant selected. Go to Home and select a restaurant first.</p>
+          )}
           
           <div className="flex flex-col md:flex-row gap-4 mb-6">
             <div className="relative flex-grow">
@@ -260,7 +268,7 @@ export default function MenuPage() {
                   <div className="p-4">
                     <div className="flex justify-between items-start mb-2">
                       <h3 className="text-lg font-semibold text-gray-800">{item.name || 'Unknown Item'}</h3>
-                      <span className="text-lg font-bold text-orange-600">₹{item.price.toFixed(2)}</span>
+                      <span className="text-lg font-bold text-orange-600">{formatInr(item.pricePaise)}</span>
                     </div>
                     
                     <p className="text-gray-600 mb-4 text-sm">{item.description || ''}</p>

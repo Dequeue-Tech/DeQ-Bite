@@ -57,7 +57,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
       id: true,
     },
     _sum: {
-      total: true,
+      totalPaise: true,
     },
   });
 
@@ -104,7 +104,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
       paymentStatus: 'COMPLETED',
     },
     _sum: {
-      total: true,
+      totalPaise: true,
     },
     _count: {
       id: true,
@@ -117,7 +117,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
     if (!acc[month]) {
       acc[month] = { total: 0, count: 0 };
     }
-    acc[month].total += order._sum.total || 0;
+    acc[month].total += order._sum.totalPaise || 0;
     acc[month].count += order._count.id;
     return acc;
   }, {});
@@ -139,7 +139,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
       },
       statistics: {
         ordersByStatus: userStats,
-        totalSpent: userStats.reduce((sum, stat) => sum + (stat._sum.total || 0), 0),
+        totalSpent: userStats.reduce((sum, stat) => sum + (stat._sum.totalPaise || 0), 0),
         completedOrders: userStats.find(s => s.paymentStatus === 'COMPLETED')?._count.id || 0,
       },
       preferences: {
@@ -152,7 +152,7 @@ export const getUserWithCompleteData = asyncHandler(async (req: Request, res: Re
       analytics: {
         monthlySpending,
         averageOrderValue: userData.orders.length > 0 
-          ? userData.orders.reduce((sum, order) => sum + order.total, 0) / userData.orders.length 
+          ? userData.orders.reduce((sum, order) => sum + order.totalPaise, 0) / userData.orders.length 
           : 0,
       },
     },
@@ -199,7 +199,7 @@ export const getMenuWithCompleteData = asyncHandler(async (_req: Request, res: R
         id: item.id,
         name: item.name,
         description: item.description,
-        price: item.price,
+        pricePaise: item.pricePaise,
         image: item.image,
         available: item.available,
         preparationTime: item.preparationTime,

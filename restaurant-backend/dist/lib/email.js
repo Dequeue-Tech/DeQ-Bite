@@ -7,25 +7,23 @@ exports.sendEmail = sendEmail;
 exports.generateInvoiceEmailTemplate = generateInvoiceEmailTemplate;
 exports.sendInvoiceEmail = sendInvoiceEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 const createTransporter = () => {
     return nodemailer_1.default.createTransport({
         host: process.env.SMTP_HOST,
         port: parseInt(process.env.SMTP_PORT || '587'),
         secure: process.env.SMTP_PORT === '465',
-        auth: process.env.SMTP_USER && process.env.SMTP_PASS ? {
+        auth: {
             user: process.env.SMTP_USER,
             pass: process.env.SMTP_PASS,
-        } : undefined,
-        tls: { rejectUnauthorized: process.env.NODE_ENV === 'production' },
-        connectionTimeout: 10_000,
+        },
     });
 };
 async function sendEmail(options) {
     try {
         const transporter = createTransporter();
         const mailOptions = {
-            from: `${process.env.APP_NAME || 'Restaurant'} <${process.env.SMTP_USER || 'no-reply@example.com'}>`,
+            from: `${process.env.APP_NAME} <${process.env.SMTP_USER}>`,
             to: options.to,
             subject: options.subject,
             html: options.html,
@@ -35,13 +33,13 @@ async function sendEmail(options) {
         logger_1.logger.info('Email sent successfully', {
             to: options.to,
             subject: options.subject,
-            messageId: result?.messageId,
+            messageId: result.messageId,
         });
         return true;
     }
     catch (error) {
         logger_1.logger.error('Failed to send email', {
-            error: error instanceof Error ? error.message : JSON.stringify(error),
+            error: error instanceof Error ? error.message : 'Unknown error',
             to: options.to,
             subject: options.subject,
         });

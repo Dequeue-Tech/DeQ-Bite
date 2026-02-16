@@ -2,15 +2,25 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
-const errorHandler_1 = require("../middleware/errorHandler");
-const razorpay_1 = require("../lib/razorpay");
-const logger_1 = require("../utils/logger");
-const pdf_1 = require("../lib/pdf");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const payments_1 = require("@/lib/payments");
+const logger_1 = require("@/utils/logger");
+const pdf_1 = require("@/lib/pdf");
+const restaurant_1 = require("@/middleware/restaurant");
 const router = (0, express_1.Router)();
+router.get('/providers', (0, errorHandler_1.asyncHandler)(async (_req, res) => {
+    const providers = (0, payments_1.getEnabledProviders)();
+    const response = {
+        success: true,
+        data: { providers },
+    };
+    return res.json(response);
+}));
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
+    paymentProvider: zod_1.z.enum(['RAZORPAY', 'PAYTM', 'PHONEPE']).optional(),
 });
 const verifyPaymentSchema = zod_1.z.object({
     razorpay_order_id: zod_1.z.string().min(1, 'Razorpay order ID is required'),
@@ -22,12 +32,13 @@ const refundPaymentSchema = zod_1.z.object({
     amount: zod_1.z.number().positive().optional(),
     reason: zod_1.z.string().optional(),
 });
-router.post('/create', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { orderId } = createPaymentSchema.parse(req.body);
+router.post('/create', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const { orderId, paymentProvider } = createPaymentSchema.parse(req.body);
     const order = await database_1.prisma.order.findFirst({
         where: {
             id: orderId,
             userId: req.user.id,
+            restaurantId: req.restaurant.id,
             paymentStatus: 'PENDING',
         },
         include: {
@@ -50,8 +61,13 @@ router.post('/create', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
         throw new errorHandler_1.AppError('Order not found or already processed', 404);
     }
     try {
-        const razorpayOrder = await (0, razorpay_1.createRazorpayOrder)({
-            amount: order.total,
+        const providerToUse = (paymentProvider || order.paymentProvider || 'RAZORPAY');
+        const provider = (0, payments_1.getPaymentProvider)(providerToUse);
+        if (!provider.isEnabled()) {
+            throw new errorHandler_1.AppError(`${providerToUse} is not enabled`, 400);
+        }
+        const paymentOrder = await provider.createOrder({
+            amountPaise: order.totalPaise,
             receipt: `order_${order.id}`,
             notes: {
                 orderId: order.id,
@@ -64,24 +80,27 @@ router.post('/create', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
         await database_1.prisma.order.update({
             where: { id: orderId },
             data: {
-                paymentId: razorpayOrder.id,
+                paymentId: paymentOrder.paymentOrderId,
+                paymentProvider: providerToUse,
                 paymentStatus: 'PROCESSING',
             },
         });
         logger_1.logger.info('Payment order created', {
             orderId,
-            razorpayOrderId: razorpayOrder.id,
-            amount: order.total,
+            paymentOrderId: paymentOrder.paymentOrderId,
+            amountPaise: order.totalPaise,
             userId: req.user.id,
         });
         const response = {
             success: true,
             message: 'Payment order created successfully',
             data: {
-                razorpayOrderId: razorpayOrder.id,
-                amount: razorpayOrder.amount,
-                currency: razorpayOrder.currency,
-                keyId: process.env.RAZORPAY_KEY_ID,
+                paymentOrderId: paymentOrder.paymentOrderId,
+                amountPaise: paymentOrder.amountPaise,
+                currency: paymentOrder.currency,
+                provider: paymentOrder.provider,
+                publicKey: paymentOrder.publicKey,
+                redirectUrl: paymentOrder.redirectUrl,
                 orderId: order.id,
                 customerDetails: {
                     name: order.user.name,
@@ -101,7 +120,7 @@ router.post('/create', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
         throw new errorHandler_1.AppError('Failed to create payment order', 500);
     }
 }));
-router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { razorpay_order_id, razorpay_payment_id, razorpay_signature } = verifyPaymentSchema.parse(req.body);
     const startTime = Date.now();
     logger_1.logger.info('Payment verification started', {
@@ -111,32 +130,6 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
         startTime,
     });
     try {
-        logger_1.logger.info('Starting signature verification', {
-            razorpay_order_id,
-            userId: req.user.id,
-        });
-        const signatureVerificationStart = Date.now();
-        const isValidSignature = (0, razorpay_1.verifyRazorpaySignature)(razorpay_order_id, razorpay_payment_id, razorpay_signature);
-        const signatureVerificationTime = Date.now() - signatureVerificationStart;
-        logger_1.logger.info('Signature verification completed', {
-            razorpay_order_id,
-            userId: req.user.id,
-            duration: `${signatureVerificationTime}ms`,
-            isValid: isValidSignature,
-        });
-        if (!isValidSignature) {
-            logger_1.logger.warn('Invalid payment signature detected', {
-                razorpay_order_id,
-                razorpay_payment_id,
-                userId: req.user.id,
-                expectedSignature: 'Calculated on backend',
-                receivedSignature: 'Provided by frontend',
-            });
-            return res.status(400).json({
-                success: false,
-                error: 'Invalid payment signature. Payment verification failed. Please try again or contact support if the issue persists.',
-            });
-        }
         console.log('Verifying payment...');
         logger_1.logger.info('Starting order lookup', {
             razorpay_order_id,
@@ -147,6 +140,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
             where: {
                 paymentId: razorpay_order_id,
                 userId: req.user.id,
+                restaurantId: req.restaurant.id,
             },
             include: {
                 user: {
@@ -167,7 +161,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                         menuItem: {
                             select: {
                                 name: true,
-                                price: true,
+                                pricePaise: true,
                             },
                         },
                     },
@@ -201,36 +195,18 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
             return res.json(response);
         }
         try {
-            logger_1.logger.info('Starting payment details fetch from Razorpay', {
+            const provider = (0, payments_1.getPaymentProvider)(order.paymentProvider);
+            const verificationResult = await provider.verifyPayment({
+                razorpay_order_id,
                 razorpay_payment_id,
-                userId: req.user.id,
+                razorpay_signature,
             });
-            const paymentFetchStart = Date.now();
-            const paymentDetails = await (0, razorpay_1.fetchPaymentDetails)(razorpay_payment_id);
-            const paymentFetchTime = Date.now() - paymentFetchStart;
-            logger_1.logger.info('Payment details fetch completed', {
-                razorpay_payment_id,
-                userId: req.user.id,
-                duration: `${paymentFetchTime}ms`,
-                status: paymentDetails.status,
-            });
-            if (paymentDetails.status !== 'captured' && paymentDetails.status !== 'authorized') {
-                logger_1.logger.warn('Payment not successful', {
-                    razorpay_order_id,
-                    razorpay_payment_id,
-                    status: paymentDetails.status,
-                    userId: req.user.id,
-                });
-                return res.status(400).json({
-                    success: false,
-                    error: `Payment not successful. Current status: ${paymentDetails.status}. Please check your payment method and try again.`,
-                });
-            }
             const updatedOrder = await database_1.prisma.order.update({
                 where: { id: order.id },
                 data: {
                     paymentStatus: 'COMPLETED',
                     status: 'CONFIRMED',
+                    paymentTransactionId: razorpay_payment_id,
                     updatedAt: new Date(),
                 },
                 include: {
@@ -245,7 +221,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                             menuItem: {
                                 select: {
                                     name: true,
-                                    price: true,
+                                    pricePaise: true,
                                 },
                             },
                         },
@@ -258,7 +234,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                 razorpay_order_id,
                 razorpay_payment_id,
                 userId: req.user.id,
-                amount: order.total,
+                amountPaise: order.totalPaise,
             });
             logger_1.logger.info('Payment verification process completed', {
                 orderId: order.id,
@@ -280,17 +256,17 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                     items: order.items.map((item) => ({
                         name: item.menuItem.name,
                         quantity: item.quantity,
-                        price: item.price,
-                        total: item.price * item.quantity,
+                        price: item.pricePaise / 100,
+                        total: (item.pricePaise * item.quantity) / 100,
                     })),
-                    subtotal: order.subtotal,
-                    tax: order.tax,
-                    total: order.total,
+                    subtotal: order.subtotalPaise / 100,
+                    tax: order.taxPaise / 100,
+                    total: order.totalPaise / 100,
                     tableNumber: order.table.number,
                     restaurantName: process.env.APP_NAME || 'Restaurant',
                     restaurantAddress: 'Your Restaurant Address Here',
                     restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-                    paymentMethod: 'Online Payment (Razorpay)',
+                    paymentMethod: `Online Payment (${order.paymentProvider || 'RAZORPAY'})`,
                 };
                 const pdfBuffer = await (0, pdf_1.generateInvoicePDF)(invoiceData);
                 const pdfFileName = `invoice-${invoiceNumber}.pdf`;
@@ -375,7 +351,7 @@ router.post('/verify', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
         });
     }
 }));
-router.post('/refund', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { orderId, amount, reason } = refundPaymentSchema.parse(req.body);
     if (!orderId) {
         throw new errorHandler_1.AppError('Order ID is required', 400);
@@ -384,6 +360,7 @@ router.post('/refund', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
         where: {
             id: orderId,
             userId: req.user.id,
+            restaurantId: req.restaurant.id,
             paymentStatus: 'COMPLETED',
         },
     });
@@ -393,9 +370,12 @@ router.post('/refund', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
     if (!order.paymentId) {
         throw new errorHandler_1.AppError('No payment ID found for this order', 400);
     }
+    if (!order.paymentTransactionId) {
+        throw new errorHandler_1.AppError('No payment transaction ID found for this order', 400);
+    }
     try {
-        const paymentDetails = await (0, razorpay_1.fetchPaymentDetails)(order.paymentId);
-        const refund = await (0, razorpay_1.refundRazorpayPayment)(paymentDetails.id, amount || order.total, reason || 'Customer requested refund');
+        const provider = (0, payments_1.getPaymentProvider)(order.paymentProvider);
+        const refund = await provider.refund(order.paymentTransactionId, amount ? Math.round(amount * 100) : order.totalPaise, reason || 'Customer requested refund');
         await database_1.prisma.order.update({
             where: { id: orderId },
             data: {
@@ -430,7 +410,7 @@ router.post('/refund', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
         throw new errorHandler_1.AppError('Failed to process refund', 500);
     }
 }));
-router.get('/status/:orderId', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.get('/status/:orderId', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { orderId } = req.params;
     if (!orderId) {
         throw new errorHandler_1.AppError('Order ID is required', 400);
@@ -439,13 +419,14 @@ router.get('/status/:orderId', auth_1.authenticate, (0, errorHandler_1.asyncHand
         where: {
             id: orderId,
             userId: req.user.id,
+            restaurantId: req.restaurant.id,
         },
         select: {
             id: true,
             status: true,
             paymentStatus: true,
             paymentId: true,
-            total: true,
+            totalPaise: true,
             createdAt: true,
             updatedAt: true,
         },

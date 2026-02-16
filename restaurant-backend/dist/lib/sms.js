@@ -5,7 +5,7 @@ exports.generateInvoiceSMSMessage = generateInvoiceSMSMessage;
 exports.sendInvoiceSMS = sendInvoiceSMS;
 exports.sendOrderConfirmationSMS = sendOrderConfirmationSMS;
 const twilio_1 = require("twilio");
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 let twilioClient = null;
 const initializeTwilio = () => {
     if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {

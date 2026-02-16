@@ -21,7 +21,7 @@ export default function SignInPage() {
 
     try {
       await login({ email, password });
-      router.push('/menu');
+      router.push('/');
     } catch (err) {
       // Error is handled by the store
     } finally {

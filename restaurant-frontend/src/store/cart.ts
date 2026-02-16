@@ -4,7 +4,7 @@ import { persist } from 'zustand/middleware';
 export interface CartItem {
   id: string;
   name: string;
-  price: number;
+  pricePaise: number;
   image?: string;
   quantity: number;
 }
@@ -18,7 +18,7 @@ interface CartState {
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
   getTotalItems: () => number;
-  getTotalPrice: () => number;
+  getTotalPricePaise: () => number;
 }
 
 export const useCartStore = create<CartState>()(
@@ -72,8 +72,8 @@ export const useCartStore = create<CartState>()(
         return get().items.reduce((total, item) => total + item.quantity, 0);
       },
 
-      getTotalPrice: () => {
-        return get().items.reduce((total, item) => total + (item.price * item.quantity), 0);
+      getTotalPricePaise: () => {
+        return get().items.reduce((total, item) => total + (item.pricePaise * item.quantity), 0);
       },
     }),
     {

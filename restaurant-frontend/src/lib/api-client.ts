@@ -14,9 +14,40 @@ export interface User {
   name: string;
   email: string;
   phone?: string;
-  role: 'CUSTOMER' | 'ADMIN';
+  role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+  restaurantRole?: 'OWNER' | 'ADMIN' | 'STAFF' | null;
   verified: boolean;
   createdAt: string;
+}
+
+export interface RestaurantSummary {
+  id: string;
+  name: string;
+  slug: string;
+  subdomain: string;
+  address?: string | null;
+}
+
+export interface RestaurantMembership {
+  id: string;
+  name: string;
+  slug: string;
+  subdomain: string;
+  role: 'OWNER' | 'ADMIN' | 'STAFF';
+}
+
+export interface RestaurantUserEntry {
+  membershipId: string;
+  role: 'OWNER' | 'ADMIN' | 'STAFF';
+  active: boolean;
+  user: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+    role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+    createdAt: string;
+  };
 }
 
 export interface AuthResponse {
@@ -40,7 +71,7 @@ export interface MenuItem {
   id: string;
   name: string;
   description: string;
-  price: number;
+  pricePaise: number;
   image?: string;
   categoryId: string;
   available: boolean;
@@ -80,23 +111,30 @@ export interface Order {
   tableId: string;
   status: string;
   items: OrderItem[];
-  subtotal: number;
-  tax: number;
-  total: number;
+  subtotalPaise: number;
+  taxPaise: number;
+  discountPaise: number;
+  totalPaise: number;
   paymentId?: string;
+  paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE';
   paymentStatus: string;
   specialInstructions?: string;
   estimatedTime?: number;
   createdAt: string;
   updatedAt: string;
   table?: Table;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+  };
 }
 
 export interface OrderItem {
   id: string;
   menuItemId: string;
   quantity: number;
-  price: number;
+  pricePaise: number;
   notes?: string;
   menuItem: MenuItem;
 }
@@ -119,6 +157,10 @@ class ApiClient {
         const token = this.getAuthToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
+        }
+        const subdomain = this.getRestaurantSubdomain();
+        if (subdomain) {
+          config.headers['x-restaurant-subdomain'] = subdomain;
         }
         return config;
       },
@@ -167,6 +209,44 @@ class ApiClient {
     if (typeof window !== 'undefined') {
       localStorage.removeItem('auth_token');
     }
+  }
+
+  setSelectedRestaurantSubdomain(subdomain: string): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selected_restaurant_subdomain', subdomain.toLowerCase());
+    }
+  }
+
+  getSelectedRestaurantSubdomain(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('selected_restaurant_subdomain');
+    }
+    return null;
+  }
+
+  private getRestaurantSubdomain(): string | null {
+    if (typeof window === 'undefined') return null;
+
+    const selectedSubdomain = this.getSelectedRestaurantSubdomain();
+    if (selectedSubdomain) {
+      return selectedSubdomain.toLowerCase();
+    }
+
+    const host = window.location.hostname.toLowerCase();
+    const baseDomain = (process.env.NEXT_PUBLIC_BASE_DOMAIN || '').toLowerCase();
+
+    if (baseDomain && host.endsWith(`.${baseDomain}`)) {
+      return host.replace(`.${baseDomain}`, '');
+    }
+
+    if (host.includes('.') && !host.endsWith('localhost')) {
+      return host.split('.')[0];
+    }
+
+    const devSubdomain = process.env.NEXT_PUBLIC_DEV_SUBDOMAIN;
+    if (devSubdomain) return devSubdomain.toLowerCase();
+
+    return null;
   }
 
   // Authentication methods
@@ -219,12 +299,20 @@ class ApiClient {
   }
 
   // Payment methods
-  async createPayment(orderId: string): Promise<any> {
-    const response = await this.api.post<ApiResponse>('/payments/create', { orderId });
+  async createPayment(orderId: string, paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE'): Promise<any> {
+    const response = await this.api.post<ApiResponse>('/payments/create', { orderId, paymentProvider });
     if (response.data.success) {
       return response.data.data;
     }
     throw new Error(response.data.error || 'Failed to create payment');
+  }
+
+  async getPaymentProviders(): Promise<string[]> {
+    const response = await this.api.get<ApiResponse>('/payments/providers');
+    if (response.data.success) {
+      return response.data.data.providers || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch payment providers');
   }
 
   async verifyPayment(paymentData: {
@@ -349,6 +437,59 @@ class ApiClient {
     return response.data;
   }
 
+  async getAdminMenuItems(): Promise<ApiResponse<MenuItem[]>> {
+    const response = await this.api.get<ApiResponse<MenuItem[]>>('/menu/admin/all');
+    return response.data;
+  }
+
+  async createMenuItem(payload: {
+    name: string;
+    description?: string;
+    pricePaise: number;
+    image?: string;
+    categoryId: string;
+    available?: boolean;
+    preparationTime?: number;
+    ingredients?: string[];
+    allergens?: string[];
+    isVeg?: boolean;
+    isVegan?: boolean;
+    isGlutenFree?: boolean;
+    spiceLevel?: 'NONE' | 'MILD' | 'MEDIUM' | 'HOT' | 'EXTRA_HOT';
+  }): Promise<ApiResponse<MenuItem>> {
+    const response = await this.api.post<ApiResponse<MenuItem>>('/menu', payload);
+    return response.data;
+  }
+
+  async updateMenuItem(id: string, payload: Partial<{
+    name: string;
+    description: string;
+    pricePaise: number;
+    image: string;
+    categoryId: string;
+    available: boolean;
+    preparationTime: number;
+    ingredients: string[];
+    allergens: string[];
+    isVeg: boolean;
+    isVegan: boolean;
+    isGlutenFree: boolean;
+    spiceLevel: 'NONE' | 'MILD' | 'MEDIUM' | 'HOT' | 'EXTRA_HOT';
+  }>): Promise<ApiResponse<MenuItem>> {
+    const response = await this.api.put<ApiResponse<MenuItem>>(`/menu/${id}`, payload);
+    return response.data;
+  }
+
+  async updateMenuAvailability(id: string, available: boolean): Promise<ApiResponse<MenuItem>> {
+    const response = await this.api.patch<ApiResponse<MenuItem>>(`/menu/${id}/availability`, { available });
+    return response.data;
+  }
+
+  async deleteMenuItem(id: string): Promise<ApiResponse<any>> {
+    const response = await this.api.delete<ApiResponse<any>>(`/menu/${id}`);
+    return response.data;
+  }
+
   // Category methods
   async getCategories(): Promise<ApiResponse<Category[]>> {
     const response = await this.api.get<ApiResponse<Category[]>>('/categories');
@@ -376,6 +517,8 @@ class ApiClient {
     tableId: string;
     items: { menuItemId: string; quantity: number; notes?: string }[];
     specialInstructions?: string;
+    couponCode?: string;
+    paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE';
   }): Promise<ApiResponse<Order>> {
     console.log('Sending order data to backend:', orderData);
     console.log('API URL:', this.api.defaults.baseURL);
@@ -388,6 +531,11 @@ class ApiClient {
 
   async getOrders(): Promise<ApiResponse<Order[]>> {
     const response = await this.api.get<ApiResponse<Order[]>>('/orders');
+    return response.data;
+  }
+
+  async getRestaurantOrders(): Promise<ApiResponse<Order[]>> {
+    const response = await this.api.get<ApiResponse<Order[]>>('/orders/restaurant/all');
     return response.data;
   }
 
@@ -404,6 +552,87 @@ class ApiClient {
   async cancelOrder(id: string): Promise<ApiResponse<Order>> {
     const response = await this.api.put<ApiResponse<Order>>(`/orders/${id}/cancel`);
     return response.data;
+  }
+
+  // Coupon methods
+  async validateCoupon(code: string, subtotalPaise: number): Promise<any> {
+    const response = await this.api.post<ApiResponse>('/coupons/validate', { code, subtotalPaise });
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to validate coupon');
+  }
+
+  async getCoupons(): Promise<any> {
+    const response = await this.api.get<ApiResponse>('/coupons');
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch coupons');
+  }
+
+  async createCoupon(payload: any): Promise<any> {
+    const response = await this.api.post<ApiResponse>('/coupons', payload);
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to create coupon');
+  }
+
+  async updateCoupon(id: string, payload: any): Promise<any> {
+    const response = await this.api.put<ApiResponse>(`/coupons/${id}`, payload);
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to update coupon');
+  }
+
+  // Restaurant methods
+  async searchRestaurants(query?: string): Promise<RestaurantSummary[]> {
+    const params = query ? `?query=${encodeURIComponent(query)}` : '';
+    const response = await this.api.get<ApiResponse<{ restaurants: RestaurantSummary[] }>>(`/restaurants/public/search${params}`);
+    if (response.data.success) {
+      return response.data.data?.restaurants || [];
+    }
+    throw new Error(response.data.error || 'Failed to search restaurants');
+  }
+
+  async getMyRestaurants(): Promise<RestaurantMembership[]> {
+    const response = await this.api.get<ApiResponse<{ restaurants: RestaurantMembership[] }>>('/restaurants/mine');
+    if (response.data.success) {
+      return response.data.data?.restaurants || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch your restaurants');
+  }
+
+  async createRestaurant(payload: {
+    name: string;
+    slug: string;
+    subdomain: string;
+    email?: string;
+    phone?: string;
+    address?: string;
+  }): Promise<RestaurantSummary> {
+    const response = await this.api.post<ApiResponse<{ restaurant: RestaurantSummary }>>('/restaurants', payload);
+    if (response.data.success && response.data.data) {
+      return response.data.data.restaurant;
+    }
+    throw new Error(response.data.error || 'Failed to create restaurant');
+  }
+
+  async getRestaurantUsers(): Promise<RestaurantUserEntry[]> {
+    const response = await this.api.get<ApiResponse<{ users: RestaurantUserEntry[] }>>('/restaurants/users');
+    if (response.data.success) {
+      return response.data.data?.users || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch restaurant users');
+  }
+
+  async addRestaurantUser(payload: { email: string; role: 'OWNER' | 'ADMIN' | 'STAFF' }): Promise<void> {
+    const response = await this.api.post<ApiResponse>('/restaurants/users', payload);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to add restaurant user');
+    }
   }
 
   // Generic API methods

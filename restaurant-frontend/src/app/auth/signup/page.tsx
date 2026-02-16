@@ -38,7 +38,7 @@ export default function SignUpPage() {
         phone: formData.phone || undefined,
         password: formData.password,
       });
-      router.push('/menu');
+      router.push('/');
     } catch (err) {
       // Error is handled by the store
     } finally {

@@ -2,49 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChefHat, Clock, MapPin, CreditCard, FileText, ArrowLeft, RefreshCw, Download, Mail } from 'lucide-react';
+import { Clock, MapPin, CreditCard, FileText, RefreshCw, Download, Mail } from 'lucide-react';
 import { apiClient, Order } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
-
-// Sample orders data
-const sampleOrders = [
-  {
-    id: '1',
-    orderNumber: 'ORD-2024-001',
-    status: 'COMPLETED',
-    items: [
-      { name: 'Spring Rolls', quantity: 2, price: 8.99 },
-      { name: 'Grilled Chicken Breast', quantity: 1, price: 18.99 },
-    ],
-    subtotal: 36.97,
-    tax: 2.96,
-    total: 39.93,
-    tableNumber: 3,
-    tableLocation: 'Garden area',
-    paymentStatus: 'COMPLETED',
-    estimatedTime: 25,
-    createdAt: '2024-01-15T10:30:00Z',
-    completedAt: '2024-01-15T10:55:00Z',
-  },
-  {
-    id: '2',
-    orderNumber: 'ORD-2024-002',
-    status: 'PREPARING',
-    items: [
-      { name: 'Vegetarian Pasta', quantity: 1, price: 15.99 },
-      { name: 'Fresh Orange Juice', quantity: 2, price: 4.99 },
-    ],
-    subtotal: 25.97,
-    tax: 2.08,
-    total: 28.05,
-    tableNumber: 1,
-    tableLocation: 'Window side',
-    paymentStatus: 'COMPLETED',
-    estimatedTime: 20,
-    createdAt: '2024-01-15T11:15:00Z',
-  },
-];
+import { formatInr } from '@/lib/currency';
 
 const statusColors = {
   PENDING: 'bg-yellow-100 text-yellow-800',
@@ -293,7 +255,7 @@ export default function OrdersPage() {
                         {statusLabels[order.status as keyof typeof statusLabels]}
                       </span>
                       <span className="text-xl font-bold text-orange-600">
-                        ${order.total.toFixed(2)}
+                        {formatInr(order.totalPaise)}
                       </span>
                     </div>
                   </div>
@@ -342,7 +304,7 @@ export default function OrdersPage() {
                               <span className="text-gray-600 ml-2">x{item.quantity}</span>
                             </div>
                             <span className="font-semibold">
-                              ${(item.price * item.quantity).toFixed(2)}
+                              {formatInr(item.pricePaise * item.quantity)}
                             </span>
                           </div>
                         ))}
@@ -350,15 +312,19 @@ export default function OrdersPage() {
                         <div className="border-t border-gray-200 pt-2 space-y-1">
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Subtotal</span>
-                            <span>${order.subtotal.toFixed(2)}</span>
+                            <span>{formatInr(order.subtotalPaise)}</span>
+                          </div>
+                          <div className="flex justify-between text-sm">
+                            <span className="text-gray-600">Discount</span>
+                            <span className="text-green-600">- {formatInr(order.discountPaise || 0)}</span>
                           </div>
                           <div className="flex justify-between text-sm">
                             <span className="text-gray-600">Tax</span>
-                            <span>${order.tax.toFixed(2)}</span>
+                            <span>{formatInr(order.taxPaise)}</span>
                           </div>
                           <div className="flex justify-between font-semibold">
                             <span>Total</span>
-                            <span className="text-orange-600">${order.total.toFixed(2)}</span>
+                            <span className="text-orange-600">{formatInr(order.totalPaise)}</span>
                           </div>
                         </div>
                       </div>

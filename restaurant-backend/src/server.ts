@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { errorHandler } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { connectDatabase } from '@/config/database';
+import { attachRestaurant } from '@/middleware/restaurant';
 
 // Import route modules
 import authRoutes from '@/routes/auth';
@@ -17,6 +18,8 @@ import menuRoutes from '@/routes/menu';
 import categoryRoutes from '@/routes/categories';
 import tableRoutes from '@/routes/tables';
 import orderRoutes from '@/routes/orders'; // Added missing orders route import
+import couponRoutes from '@/routes/coupons';
+import restaurantRoutes from '@/routes/restaurants';
 
 // Load environment variables
 dotenv.config();
@@ -35,14 +38,7 @@ const PORT = process.env.PORT || 5000;
 
 // Security middleware
 app.use(helmet({
-  contentSecurityPolicy: {
-    directives: {
-      defaultSrc: ["'self'"],
-      styleSrc: ["'self'", "'unsafe-inline'"],
-      scriptSrc: ["'self'"],
-      imgSrc: ["'self'", "data:", "https:"],
-    },
-  },
+  contentSecurityPolicy: false, // Disable CSP for API server - let frontend handle CSP
   crossOriginEmbedderPolicy: false,
 }));
 
@@ -67,7 +63,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain'],
 }));
 
 // Rate limiting
@@ -86,6 +82,9 @@ app.use(limiter);
 // Body parsing middleware
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
+
+// Attach restaurant context from subdomain or header
+app.use(attachRestaurant);
 
 // Logging
 app.use(morgan('combined', {
@@ -121,6 +120,8 @@ app.use('/api/menu', menuRoutes);
 app.use('/api/categories', categoryRoutes);
 app.use('/api/tables', tableRoutes);
 app.use('/api/orders', orderRoutes); // Added missing orders route mounting
+app.use('/api/coupons', couponRoutes);
+app.use('/api/restaurants', restaurantRoutes);
 
 // Static files for invoices
 app.use('/invoices', express.static('public/invoices'));

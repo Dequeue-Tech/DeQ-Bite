@@ -1,14 +1,17 @@
 import { Router } from 'express';
 import { prisma } from '@/config/database';
+import { requireRestaurant } from '@/middleware/restaurant';
+import { AuthenticatedRequest } from '@/types/api';
 
 const router = Router();
 
 // Get all categories
-router.get('/', async (_req, res) => {
+router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
     const categories = await prisma.category.findMany({
       where: {
-        active: true
+        active: true,
+        restaurantId: req.restaurant!.id,
       },
       orderBy: {
         sortOrder: 'asc'
@@ -31,13 +34,14 @@ router.get('/', async (_req, res) => {
 });
 
 // Get a specific category by ID
-router.get('/:id', async (_req, res) => {
+router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = _req.params;
+    const { id } = req.params;
     
-    const category = await prisma.category.findUnique({
+    const category = await prisma.category.findFirst({
       where: {
-        id
+        id,
+        restaurantId: req.restaurant!.id,
       }
     });
 

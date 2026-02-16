@@ -15,7 +15,6 @@ const registerSchema = z.object({
   email: z.string().email('Invalid email address'),
   phone: z.string().min(10, 'Phone number must be at least 10 digits').optional(),
   password: z.string().min(6, 'Password must be at least 6 characters'),
-  role: z.enum(['CUSTOMER', 'ADMIN']).optional().default('CUSTOMER'),
 });
 
 const loginSchema = z.object({
@@ -47,7 +46,7 @@ const generateToken = (userId: string): string => {
 
 // POST /api/auth/register
 router.post('/register', asyncHandler(async (req: Request, res: Response) => {
-  const { name, email, phone, password, role } = registerSchema.parse(req.body);
+  const { name, email, phone, password } = registerSchema.parse(req.body);
 
   // Check if user already exists
   const existingUser = await prisma.user.findFirst({
@@ -74,7 +73,7 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
       email,
       phone: phone || null,
       password: hashedPassword,
-      role: role as 'CUSTOMER' | 'ADMIN',
+      role: 'CUSTOMER',
     },
     select: {
       id: true,
@@ -116,7 +115,7 @@ router.post('/login', asyncHandler(async (req: Request, res: Response) => {
         select: {
           id: true,
           status: true,
-          total: true,
+          totalPaise: true,
           createdAt: true,
         },
       },
@@ -178,7 +177,7 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, r
         select: {
           id: true,
           status: true,
-          total: true,
+          totalPaise: true,
           createdAt: true,
           table: {
             select: {
@@ -201,6 +200,22 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, r
     throw new AppError('User not found', 404);
   }
 
+  let restaurantRole: string | null = null;
+  if (req.restaurant) {
+    const membership = await prisma.restaurantUser.findUnique({
+      where: {
+        restaurantId_userId: {
+          restaurantId: req.restaurant.id,
+          userId: req.user!.id,
+        },
+      },
+      select: { role: true, active: true },
+    });
+    if (membership?.active) {
+      restaurantRole = membership.role;
+    }
+  }
+
   const response: ApiResponse = {
     success: true,
     data: { 
@@ -208,6 +223,7 @@ router.get('/me', authenticate, asyncHandler(async (req: AuthenticatedRequest, r
         ...user,
         totalOrders: user._count.orders,
         recentOrders: user.orders,
+        restaurantRole,
       },
     },
   };
@@ -236,7 +252,7 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
           id: true,
           status: true,
           paymentStatus: true,
-          total: true,
+          totalPaise: true,
           createdAt: true,
           table: {
             select: {
@@ -247,7 +263,7 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
           items: {
             select: {
               quantity: true,
-              price: true,
+              pricePaise: true,
               menuItem: {
                 select: {
                   name: true,
@@ -275,6 +291,22 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
     throw new AppError('User profile not found', 404);
   }
 
+  let restaurantRole: string | null = null;
+  if (req.restaurant) {
+    const membership = await prisma.restaurantUser.findUnique({
+      where: {
+        restaurantId_userId: {
+          restaurantId: req.restaurant.id,
+          userId: req.user!.id,
+        },
+      },
+      select: { role: true, active: true },
+    });
+    if (membership?.active) {
+      restaurantRole = membership.role;
+    }
+  }
+
   // Calculate total spent from Prisma
   const totalSpent = await prisma.order.aggregate({
     where: {
@@ -282,7 +314,7 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
       paymentStatus: 'COMPLETED',
     },
     _sum: {
-      total: true,
+      totalPaise: true,
     },
   });
 
@@ -292,8 +324,9 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
       user: {
         ...userProfile,
         totalOrders: userProfile._count.orders,
-        totalSpent: totalSpent._sum.total || 0,
+        totalSpent: totalSpent._sum.totalPaise || 0,
         recentOrders: userProfile.orders,
+        restaurantRole,
       },
     },
   };

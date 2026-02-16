@@ -2,13 +2,12 @@
 
 import { useRouter } from 'next/navigation';
 import { ChefHat, ShoppingCart, Plus, Minus, Trash2, ArrowLeft } from 'lucide-react';
-import { useCartStore, CartItem } from '@/store/cart';
-import { useAuthStore } from '@/store/auth';
-import { useEffect } from 'react';
+import { useCartStore } from '@/store/cart';
+import { formatInr } from '@/lib/currency';
 
 export default function CartPage() {
   const router = useRouter();
-  const { items: cartItems, updateQuantity, removeItem, getTotalItems, getTotalPrice } = useCartStore();
+  const { items: cartItems, updateQuantity, removeItem, getTotalPricePaise } = useCartStore();
 
   const proceedToCheckout = () => {
     router.push('/checkout');
@@ -47,10 +46,10 @@ export default function CartPage() {
     );
   }
 
-  // Calculate subtotal (getTotalPrice from store includes all items)
-  const subtotal = getTotalPrice();
-  const tax = subtotal * 0.08;
-  const total = subtotal + tax;
+  // Calculate subtotal in paise (getTotalPricePaise from store includes all items)
+  const subtotalPaise = getTotalPricePaise();
+  const taxPaise = Math.round(subtotalPaise * 0.08);
+  const totalPaise = subtotalPaise + taxPaise;
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -79,7 +78,7 @@ export default function CartPage() {
                       
                       <div className="flex-1">
                         <h3 className="text-lg font-semibold text-gray-800">{item.name}</h3>
-                        <p className="text-gray-600">₹{item.price.toFixed(2)} each</p>
+                        <p className="text-gray-600">{formatInr(item.pricePaise)} each</p>
                       </div>
                       
                       <div className="flex items-center space-x-3">
@@ -100,7 +99,7 @@ export default function CartPage() {
                       
                       <div className="text-right">
                         <p className="text-lg font-semibold text-gray-800">
-                          ₹{(item.price * item.quantity).toFixed(2)}
+                          {formatInr(item.pricePaise * item.quantity)}
                         </p>
                         <button
                           onClick={() => removeItem(item.id)}
@@ -124,17 +123,17 @@ export default function CartPage() {
               <div className="space-y-4 mb-6">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-semibold">₹{subtotal.toFixed(2)}</span>
+                  <span className="font-semibold">{formatInr(subtotalPaise)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tax (8%)</span>
-                  <span className="font-semibold">₹{tax.toFixed(2)}</span>
+                  <span className="font-semibold">{formatInr(taxPaise)}</span>
                 </div>
                 <div className="border-t border-gray-200 pt-4">
                   <div className="flex justify-between">
                     <span className="text-lg font-semibold">Total</span>
                     <span className="text-lg font-bold text-orange-600">
-                      ₹{total.toFixed(2)}
+                      {formatInr(totalPaise)}
                     </span>
                   </div>
                 </div>

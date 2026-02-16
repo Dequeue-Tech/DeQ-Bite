@@ -6,30 +6,44 @@ import { useAuthStore } from '@/store/auth';
 import Link from 'next/link';
 import { ChefHat, ShoppingCart, Menu, X } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
+import { apiClient } from '@/lib/api-client';
 
 const Navbar = () => {
   const router = useRouter();
   const pathname = usePathname();
-  const { isAuthenticated, user, logout } = useAuthStore();
+  const { isAuthenticated, user, logout, getProfile } = useAuthStore();
   const { getTotalItems } = useCartStore();
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const cartItemsCount = getTotalItems();
+  const canAccessAdmin = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
+  const canAccessKitchen = canAccessAdmin || user?.restaurantRole === 'STAFF';
 
   // Close mobile menu when route changes
   useEffect(() => {
     setIsMenuOpen(false);
   }, [pathname]);
 
+  useEffect(() => {
+    if (isAuthenticated && user && typeof user.restaurantRole === 'undefined') {
+      getProfile();
+    }
+  }, [isAuthenticated, user, getProfile]);
+
   const handleLogout = () => {
     logout();
     router.push('/');
   };
+
+  const selectedRestaurantSubdomain = apiClient.getSelectedRestaurantSubdomain();
 
   const navLinks = [
     { name: 'Home', href: '/' },
     { name: 'Menu', href: '/menu' },
     ...(isAuthenticated ? [
       { name: 'Orders', href: '/orders' },
+      { name: 'Onboard', href: '/onboarding/restaurant' },
+      ...(canAccessAdmin ? [{ name: 'Admin', href: '/admin' }] : []),
+      ...(canAccessKitchen ? [{ name: 'Kitchen', href: '/kitchen' }] : []),
     ] : []),
   ];
 
@@ -42,6 +56,11 @@ const Navbar = () => {
             <Link href="/" className="flex items-center">
               <ChefHat className="h-8 w-8 text-orange-600 mr-2" />
               <span className="text-xl font-bold text-gray-800">Restaurant</span>
+              {selectedRestaurantSubdomain && (
+                <span className="ml-2 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">
+                  @{selectedRestaurantSubdomain}
+                </span>
+              )}
             </Link>
           </div>
 

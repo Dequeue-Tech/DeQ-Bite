@@ -19,10 +19,11 @@ export interface InvoiceData {
     restaurantPhone?: string;
     paymentMethod?: string;
 }
-export declare function generateInvoicePDF(invoiceData: InvoiceData): Promise<Buffer>;
+export declare function generateInvoicePDF(invoiceData: InvoiceData): Buffer;
 export declare function savePDFToStorage(pdfBuffer: Buffer, filename: string): Promise<{
     pdfPath: string | null;
     pdfData: Buffer | null;
     pdfName: string | null;
 }>;
+export declare function cleanupOldInvoices(daysOld?: number): Promise<void>;
 //# sourceMappingURL=pdf.d.ts.map

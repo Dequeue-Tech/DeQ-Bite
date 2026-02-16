@@ -1,12 +1,16 @@
 import { Router } from 'express';
 import { prisma } from '@/config/database';
+import { requireRestaurant } from '@/middleware/restaurant';
+import { AuthenticatedRequest } from '@/types/api';
 
 const router = Router();
 
 // Get all tables
-router.get('/', async (_req, res) => {
+router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
-    const tables = await prisma.table.findMany();
+    const tables = await prisma.table.findMany({
+      where: { restaurantId: req.restaurant!.id },
+    });
     return res.json({
       success: true,
       data: tables,
@@ -22,11 +26,12 @@ router.get('/', async (_req, res) => {
 });
 
 // Get available tables
-router.get('/available', async (_req, res) => {
+router.get('/available', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
     const availableTables = await prisma.table.findMany({
       where: {
-        active: true
+        active: true,
+        restaurantId: req.restaurant!.id,
       }
     });
     return res.json({
@@ -44,12 +49,13 @@ router.get('/available', async (_req, res) => {
 });
 
 // Get table by ID
-router.get('/:id', async (_req, res) => {
+router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
-    const { id } = _req.params;
-    const table = await prisma.table.findUnique({
+    const { id } = req.params;
+    const table = await prisma.table.findFirst({
       where: {
-        id: id
+        id,
+        restaurantId: req.restaurant!.id,
       }
     });
     

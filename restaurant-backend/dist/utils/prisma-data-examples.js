@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getMenuWithCompleteData = exports.getUserWithCompleteData = void 0;
-const database_1 = require("../config/database");
-const errorHandler_1 = require("../middleware/errorHandler");
+const database_1 = require("@/config/database");
+const errorHandler_1 = require("@/middleware/errorHandler");
 exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { userId } = req.params;
     if (!userId) {
@@ -44,7 +44,7 @@ exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, r
             id: true,
         },
         _sum: {
-            total: true,
+            totalPaise: true,
         },
     });
     const favoriteItems = await database_1.prisma.orderItem.groupBy({
@@ -85,7 +85,7 @@ exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, r
             paymentStatus: 'COMPLETED',
         },
         _sum: {
-            total: true,
+            totalPaise: true,
         },
         _count: {
             id: true,
@@ -96,7 +96,7 @@ exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, r
         if (!acc[month]) {
             acc[month] = { total: 0, count: 0 };
         }
-        acc[month].total += order._sum.total || 0;
+        acc[month].total += order._sum.totalPaise || 0;
         acc[month].count += order._count.id;
         return acc;
     }, {});
@@ -117,7 +117,7 @@ exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, r
             },
             statistics: {
                 ordersByStatus: userStats,
-                totalSpent: userStats.reduce((sum, stat) => sum + (stat._sum.total || 0), 0),
+                totalSpent: userStats.reduce((sum, stat) => sum + (stat._sum.totalPaise || 0), 0),
                 completedOrders: userStats.find(s => s.paymentStatus === 'COMPLETED')?._count.id || 0,
             },
             preferences: {
@@ -130,7 +130,7 @@ exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, r
             analytics: {
                 monthlySpending,
                 averageOrderValue: userData.orders.length > 0
-                    ? userData.orders.reduce((sum, order) => sum + order.total, 0) / userData.orders.length
+                    ? userData.orders.reduce((sum, order) => sum + order.totalPaise, 0) / userData.orders.length
                     : 0,
             },
         },
@@ -168,7 +168,7 @@ exports.getMenuWithCompleteData = (0, errorHandler_1.asyncHandler)(async (_req, 
                 id: item.id,
                 name: item.name,
                 description: item.description,
-                price: item.price,
+                pricePaise: item.pricePaise,
                 image: item.image,
                 available: item.available,
                 preparationTime: item.preparationTime,

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import { CreditCard, Shield, Clock, CheckCircle, AlertCircle } from 'lucide-react';
+import { formatInr } from '@/lib/currency';
 
 declare global {
   interface Window {
@@ -44,16 +45,18 @@ interface RazorpayResponse {
 
 interface Order {
   id: string;
-  total: number;
-  subtotal: number;
-  tax: number;
+  totalPaise: number;
+  subtotalPaise: number;
+  taxPaise: number;
+  discountPaise: number;
+  paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE';
   table: {
     number: number;
     location: string;
   };
   items: {
     quantity: number;
-    price: number;
+    pricePaise: number;
     menuItem: {
       name: string;
     };
@@ -85,7 +88,15 @@ export default function SecurePaymentProcessor({
 
     try {
       // Create secure payment order via our backend API
-      const paymentData = await apiClient.createPayment(order.id);
+      const paymentData = await apiClient.createPayment(order.id, order.paymentProvider || 'RAZORPAY');
+
+      if (paymentData.provider && paymentData.provider !== 'RAZORPAY') {
+        if (paymentData.redirectUrl) {
+          window.location.href = paymentData.redirectUrl;
+          return;
+        }
+        throw new Error(`${paymentData.provider} is not configured for web checkout`);
+      }
 
       // Load Razorpay script if not already loaded
       if (!window.Razorpay) {
@@ -101,12 +112,12 @@ export default function SecurePaymentProcessor({
 
       // Configure Razorpay with secure options
       const razorpayOptions: RazorpayOptions = {
-        key: paymentData.keyId,
-        amount: paymentData.amount,
+        key: paymentData.publicKey,
+        amount: paymentData.amountPaise,
         currency: paymentData.currency,
         name: process.env.NEXT_PUBLIC_APP_NAME || 'Restaurant Online Ordering',
         description: `Order #${order.id.substring(0, 8).toUpperCase()}`,
-        order_id: paymentData.razorpayOrderId,
+        order_id: paymentData.paymentOrderId,
         handler: async (paymentResponse: RazorpayResponse) => {
           await handlePaymentSuccess(paymentResponse);
         },
@@ -229,7 +240,7 @@ export default function SecurePaymentProcessor({
         <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
           <p className="text-green-800 font-medium">Order Details:</p>
           <p className="text-green-700">Order ID: #{order.id.substring(0, 8).toUpperCase()}</p>
-          <p className="text-green-700">Amount: ₹{order.total.toFixed(2)}</p>
+          <p className="text-green-700">Amount: {formatInr(order.totalPaise)}</p>
           <p className="text-green-700">Table: {order.table.number}</p>
         </div>
         <div className="flex justify-center space-x-3">
@@ -281,15 +292,19 @@ export default function SecurePaymentProcessor({
       <div className="border-t pt-4 mb-6">
         <div className="flex justify-between items-center mb-2">
           <span className="text-gray-600">Subtotal:</span>
-          <span>₹{order.subtotal.toFixed(2)}</span>
+          <span>{formatInr(order.subtotalPaise)}</span>
+        </div>
+        <div className="flex justify-between items-center mb-2">
+          <span className="text-gray-600">Discount:</span>
+          <span className="text-green-600">- {formatInr(order.discountPaise)}</span>
         </div>
         <div className="flex justify-between items-center mb-2">
           <span className="text-gray-600">Tax:</span>
-          <span>₹{order.tax.toFixed(2)}</span>
+          <span>{formatInr(order.taxPaise)}</span>
         </div>
         <div className="flex justify-between items-center text-lg font-bold border-t pt-2">
           <span>Total:</span>
-          <span>₹{order.total.toFixed(2)}</span>
+          <span>{formatInr(order.totalPaise)}</span>
         </div>
       </div>
 
@@ -311,7 +326,7 @@ export default function SecurePaymentProcessor({
         ) : (
           <div className="flex items-center justify-center">
             <CreditCard className="h-5 w-5 mr-2" />
-            Pay Securely ₹{order.total.toFixed(2)}
+            Pay Securely {formatInr(order.totalPaise)}
           </div>
         )}
       </button>
@@ -319,7 +334,7 @@ export default function SecurePaymentProcessor({
       {/* Security Notice */}
       <div className="mt-4 text-center text-sm text-gray-500">
         <p>🔒 Your payment information is encrypted and secure</p>
-        <p>Powered by Razorpay • PCI DSS Compliant</p>
+        <p>Powered by Razorpay - PCI DSS Compliant</p>
       </div>
     </div>
   );

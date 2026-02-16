@@ -122,7 +122,7 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
       include: {
         order: {
           include: {
-            items: { include: { menuItem: { select: { name: true, price: true } } } },
+            items: { include: { menuItem: { select: { name: true, pricePaise: true } } } },
             table: true,
             user: true,
           },
@@ -146,17 +146,17 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
       items: (order.items || []).map((it: any) => ({
         name: it.menuItem?.name || 'Item',
         quantity: it.quantity,
-        price: it.price,
-        total: it.price * it.quantity,
+        price: it.pricePaise / 100,
+        total: (it.pricePaise * it.quantity) / 100,
       })),
-      subtotal: order.subtotal,
-      tax: order.tax,
-      total: order.total,
+      subtotal: order.subtotalPaise / 100,
+      tax: order.taxPaise / 100,
+      total: order.totalPaise / 100,
       tableNumber: order.table?.number || 0,
       restaurantName: process.env.APP_NAME || 'Restaurant',
       restaurantAddress: 'Your Restaurant Address Here',
       restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-      paymentMethod: 'Online Payment (Razorpay)',
+      paymentMethod: `Online Payment (${order.paymentProvider || 'RAZORPAY'})`,
     });
 
     const pdfFileName = `invoice-${invoiceNumber}.pdf`;

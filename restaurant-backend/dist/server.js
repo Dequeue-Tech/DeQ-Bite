@@ -9,17 +9,20 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const dotenv_1 = __importDefault(require("dotenv"));
-const errorHandler_1 = require("./middleware/errorHandler");
-const logger_1 = require("./utils/logger");
-const database_1 = require("./config/database");
-const auth_1 = __importDefault(require("./routes/auth"));
-const payments_1 = __importDefault(require("./routes/payments"));
-const invoices_1 = __importDefault(require("./routes/invoices"));
-const pdf_1 = __importDefault(require("./routes/pdf"));
-const menu_1 = __importDefault(require("./routes/menu"));
-const categories_1 = __importDefault(require("./routes/categories"));
-const tables_1 = __importDefault(require("./routes/tables"));
-const orders_1 = __importDefault(require("./routes/orders"));
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
+const database_1 = require("@/config/database");
+const restaurant_1 = require("@/middleware/restaurant");
+const auth_1 = __importDefault(require("@/routes/auth"));
+const payments_1 = __importDefault(require("@/routes/payments"));
+const invoices_1 = __importDefault(require("@/routes/invoices"));
+const pdf_1 = __importDefault(require("@/routes/pdf"));
+const menu_1 = __importDefault(require("@/routes/menu"));
+const categories_1 = __importDefault(require("@/routes/categories"));
+const tables_1 = __importDefault(require("@/routes/tables"));
+const orders_1 = __importDefault(require("@/routes/orders"));
+const coupons_1 = __importDefault(require("@/routes/coupons"));
+const restaurants_1 = __importDefault(require("@/routes/restaurants"));
 dotenv_1.default.config();
 if (process.env.NODE_ENV === 'production') {
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
@@ -30,14 +33,7 @@ if (process.env.NODE_ENV === 'production') {
 const app = (0, express_1.default)();
 const PORT = process.env.PORT || 5000;
 app.use((0, helmet_1.default)({
-    contentSecurityPolicy: {
-        directives: {
-            defaultSrc: ["'self'"],
-            styleSrc: ["'self'", "'unsafe-inline'"],
-            scriptSrc: ["'self'"],
-            imgSrc: ["'self'", "data:", "https:"],
-        },
-    },
+    contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
 }));
 app.use((0, cors_1.default)({
@@ -46,7 +42,7 @@ app.use((0, cors_1.default)({
             process.env.FRONTEND_URL?.replace(/\/$/, ''),
             'http://localhost:5174',
             'http://localhost:3000',
-            'https://deq-restaurants-frontend.onrender.com'
+            'https://de-q-restaurants-frontend.vercel.app'
         ].filter(Boolean);
         if (!origin)
             return callback(null, true);
@@ -59,7 +55,7 @@ app.use((0, cors_1.default)({
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain'],
 }));
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
@@ -73,6 +69,7 @@ const limiter = (0, express_rate_limit_1.default)({
 app.use(limiter);
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
+app.use(restaurant_1.attachRestaurant);
 app.use((0, morgan_1.default)('combined', {
     stream: {
         write: (message) => {
@@ -101,6 +98,8 @@ app.use('/api/menu', menu_1.default);
 app.use('/api/categories', categories_1.default);
 app.use('/api/tables', tables_1.default);
 app.use('/api/orders', orders_1.default);
+app.use('/api/coupons', coupons_1.default);
+app.use('/api/restaurants', restaurants_1.default);
 app.use('/invoices', express_1.default.static('public/invoices'));
 app.use((req, res) => {
     res.status(404).json({

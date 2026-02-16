@@ -1,11 +1,14 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("../config/database");
+const database_1 = require("@/config/database");
+const restaurant_1 = require("@/middleware/restaurant");
 const router = (0, express_1.Router)();
-router.get('/', async (_req, res) => {
+router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
     try {
-        const tables = await database_1.prisma.table.findMany();
+        const tables = await database_1.prisma.table.findMany({
+            where: { restaurantId: req.restaurant.id },
+        });
         return res.json({
             success: true,
             data: tables,
@@ -20,11 +23,12 @@ router.get('/', async (_req, res) => {
         });
     }
 });
-router.get('/available', async (_req, res) => {
+router.get('/available', restaurant_1.requireRestaurant, async (req, res) => {
     try {
         const availableTables = await database_1.prisma.table.findMany({
             where: {
-                active: true
+                active: true,
+                restaurantId: req.restaurant.id,
             }
         });
         return res.json({
@@ -41,12 +45,13 @@ router.get('/available', async (_req, res) => {
         });
     }
 });
-router.get('/:id', async (_req, res) => {
+router.get('/:id', restaurant_1.requireRestaurant, async (req, res) => {
     try {
-        const { id } = _req.params;
-        const table = await database_1.prisma.table.findUnique({
+        const { id } = req.params;
+        const table = await database_1.prisma.table.findFirst({
             where: {
-                id: id
+                id,
+                restaurantId: req.restaurant.id,
             }
         });
         if (!table) {

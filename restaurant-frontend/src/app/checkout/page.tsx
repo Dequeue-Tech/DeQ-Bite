@@ -2,10 +2,11 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { ChefHat, CreditCard, MapPin, Clock, ArrowLeft, Check } from 'lucide-react';
+import { ChefHat, CreditCard, MapPin, Clock, Check } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { useAuthStore } from '@/store/auth';
 import { apiClient, Table } from '@/lib/api-client';
+import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
 import SecurePaymentProcessor from '@/components/SecurePaymentProcessor';
 
@@ -18,7 +19,7 @@ const sampleTables: Table[] = [
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const { items: cartItems, clearCart: clearZustandCart } = useCartStore();
+  const { items: cartItems, clearCart: clearZustandCart, getTotalPricePaise } = useCartStore();
   const { isAuthenticated, user } = useAuthStore();
   const [selectedTable, setSelectedTable] = useState('');
   const [specialInstructions, setSpecialInstructions] = useState('');
@@ -28,17 +29,21 @@ export default function CheckoutPage() {
     phone: '',
   });
   const [tables, setTables] = useState<Table[]>([]);
-  const [paymentMethod, setPaymentMethod] = useState('razorpay');
+  const [paymentProvider, setPaymentProvider] = useState<'RAZORPAY' | 'PAYTM' | 'PHONEPE'>('RAZORPAY');
+  const [paymentProviders, setPaymentProviders] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [step, setStep] = useState(1); // 1: Info & Table, 2: Payment, 3: Confirmation
   const [createdOrder, setCreatedOrder] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [orderSummary, setOrderSummary] = useState<{
-    total: number;
-    tax: number;
-    subtotal: number;
+    totalPaise: number;
+    taxPaise: number;
+    subtotalPaise: number;
+    discountPaise: number;
   } | null>(null);
   const [generatedInvoiceId, setGeneratedInvoiceId] = useState<string | null>(null);
+  const [couponCode, setCouponCode] = useState('');
+  const [discountPaise, setDiscountPaise] = useState(0);
 
   useEffect(() => {
     // Redirect if not authenticated
@@ -65,6 +70,7 @@ export default function CheckoutPage() {
 
     // Fetch available tables
     fetchTables();
+    fetchPaymentProviders();
   }, [isAuthenticated, cartItems, user, router, step]);
 
   const fetchTables = async () => {
@@ -89,16 +95,31 @@ export default function CheckoutPage() {
     }
   };
 
-  const getTotalPrice = () => {
-    return cartItems.reduce((total, item) => total + (item.price * item.quantity), 0);
+  const fetchPaymentProviders = async () => {
+    try {
+      const providers = await apiClient.getPaymentProviders();
+      setPaymentProviders(providers);
+      if (providers.includes('RAZORPAY')) {
+        setPaymentProvider('RAZORPAY');
+      } else if (providers.length > 0) {
+        setPaymentProvider(providers[0] as any);
+      }
+    } catch (error) {
+      setPaymentProviders(['RAZORPAY']);
+      setPaymentProvider('RAZORPAY');
+    }
   };
 
-  const getTax = () => {
-    return getTotalPrice() * 0.08; // 8% tax
+  const getSubtotalPaise = () => getTotalPricePaise();
+
+  const getTaxPaise = (subtotalPaise: number, discountPaiseValue: number) => {
+    const taxable = Math.max(subtotalPaise - discountPaiseValue, 0);
+    return Math.round(taxable * 0.08);
   };
 
-  const getFinalTotal = () => {
-    return getTotalPrice() + getTax();
+  const getTotalPaise = (subtotalPaise: number, discountPaiseValue: number) => {
+    const taxPaise = getTaxPaise(subtotalPaise, discountPaiseValue);
+    return Math.max(subtotalPaise - discountPaiseValue, 0) + taxPaise;
   };
 
   const handlePlaceOrder = async () => {
@@ -118,7 +139,9 @@ export default function CheckoutPage() {
           quantity: item.quantity,
           notes: '' // Could add item-level notes in the future
         })),
-        specialInstructions: specialInstructions || ''
+        specialInstructions: specialInstructions || '',
+        couponCode: couponCode || undefined,
+        paymentProvider,
       };
 
       console.log('Sending order data:', orderData);
@@ -142,10 +165,12 @@ export default function CheckoutPage() {
 
   const handlePaymentSuccess = () => {
     // Store order summary before clearing cart
+    const subtotalPaise = getSubtotalPaise();
     setOrderSummary({
-      total: getFinalTotal(),
-      tax: getTax(),
-      subtotal: getTotalPrice()
+      totalPaise: getTotalPaise(subtotalPaise, discountPaise),
+      taxPaise: getTaxPaise(subtotalPaise, discountPaise),
+      subtotalPaise: subtotalPaise,
+      discountPaise,
     });
     
     // Clear cart and move to confirmation step
@@ -242,7 +267,7 @@ export default function CheckoutPage() {
               <div className="flex justify-between items-center mb-2">
                 <span className="font-semibold">Order Total:</span>
                 <span className="text-xl font-bold text-orange-600">
-                  ₹{orderSummary ? orderSummary.total.toFixed(2) : '0.00'}
+                  {formatInr(orderSummary ? orderSummary.totalPaise : 0)}
                 </span>
               </div>
               <div className="flex justify-between items-center text-sm text-gray-600">
@@ -285,11 +310,13 @@ export default function CheckoutPage() {
           <SecurePaymentProcessor
             order={{
               id: createdOrder.id,
-              total: createdOrder.total,
-              subtotal: createdOrder.subtotal,
-              tax: createdOrder.tax,
+              totalPaise: createdOrder.totalPaise,
+              subtotalPaise: createdOrder.subtotalPaise,
+              taxPaise: createdOrder.taxPaise,
+              discountPaise: createdOrder.discountPaise || 0,
               table: createdOrder.table,
               items: createdOrder.items,
+              paymentProvider,
             }}
             onPaymentSuccess={handlePaymentSuccess}
             onPaymentError={handlePaymentError}
@@ -401,31 +428,22 @@ export default function CheckoutPage() {
                 Payment Method
               </h2>
               <div className="space-y-3">
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="razorpay"
-                    checked={paymentMethod === 'razorpay'}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="mr-3 text-orange-600"
-                  />
-                  <div className="flex items-center">
-                    <CreditCard className="h-5 w-5 mr-2 text-gray-600" />
-                    <span>Razorpay (Cards, UPI, Wallets)</span>
-                  </div>
-                </label>
-                <label className="flex items-center">
-                  <input
-                    type="radio"
-                    name="payment"
-                    value="cash"
-                    checked={paymentMethod === 'cash'}
-                    onChange={(e) => setPaymentMethod(e.target.value)}
-                    className="mr-3 text-orange-600"
-                  />
-                  <span>Cash on Delivery</span>
-                </label>
+                {(paymentProviders.length ? paymentProviders : ['RAZORPAY']).map((provider) => (
+                  <label key={provider} className="flex items-center">
+                    <input
+                      type="radio"
+                      name="payment"
+                      value={provider}
+                      checked={paymentProvider === provider}
+                      onChange={(e) => setPaymentProvider(e.target.value as any)}
+                      className="mr-3 text-orange-600"
+                    />
+                    <div className="flex items-center">
+                      <CreditCard className="h-5 w-5 mr-2 text-gray-600" />
+                      <span>{provider}</span>
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
           </div>
@@ -444,7 +462,7 @@ export default function CheckoutPage() {
                       <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
                     </div>
                     <span className="font-semibold">
-                      ₹{(item.price * item.quantity).toFixed(2)}
+                      {formatInr(item.pricePaise * item.quantity)}
                     </span>
                   </div>
                 ))}
@@ -453,19 +471,55 @@ export default function CheckoutPage() {
               <div className="border-t border-gray-200 pt-4 space-y-2">
                 <div className="flex justify-between">
                   <span className="text-gray-600">Subtotal</span>
-                  <span className="font-semibold">₹{getTotalPrice().toFixed(2)}</span>
+                  <span className="font-semibold">{formatInr(getSubtotalPaise())}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-gray-600">Discount</span>
+                  <span className="font-semibold text-green-600">- {formatInr(discountPaise)}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-gray-600">Tax (8%)</span>
-                  <span className="font-semibold">₹{getTax().toFixed(2)}</span>
+                  <span className="font-semibold">{formatInr(getTaxPaise(getSubtotalPaise(), discountPaise))}</span>
                 </div>
                 <div className="border-t border-gray-200 pt-2">
                   <div className="flex justify-between">
                     <span className="text-lg font-semibold">Total</span>
                     <span className="text-lg font-bold text-orange-600">
-                      ₹{getFinalTotal().toFixed(2)}
+                      {formatInr(getTotalPaise(getSubtotalPaise(), discountPaise))}
                     </span>
                   </div>
+                </div>
+              </div>
+
+              <div className="mt-4">
+                <label className="block text-sm font-medium text-gray-700 mb-1">Coupon Code</label>
+                <div className="flex space-x-2">
+                  <input
+                    type="text"
+                    value={couponCode}
+                    onChange={(e) => setCouponCode(e.target.value)}
+                    className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-orange-500 focus:border-orange-500"
+                    placeholder="Enter coupon code"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!couponCode.trim()) {
+                        toast.error('Please enter a coupon code');
+                        return;
+                      }
+                      try {
+                        const data = await apiClient.validateCoupon(couponCode.trim(), getSubtotalPaise());
+                        setDiscountPaise(data.discountPaise || 0);
+                        toast.success('Coupon applied');
+                      } catch (err: any) {
+                        setDiscountPaise(0);
+                        toast.error(err?.message || 'Invalid coupon');
+                      }
+                    }}
+                    className="px-4 py-2 bg-gray-900 text-white rounded-lg hover:bg-gray-800 transition-colors"
+                  >
+                    Apply
+                  </button>
                 </div>
               </div>
               
@@ -475,7 +529,7 @@ export default function CheckoutPage() {
                     Selected Table: {selectedTableInfo.number}
                   </p>
                   <p className="text-sm text-orange-600">
-                    {selectedTableInfo.location || 'No location specified'} • {selectedTableInfo.capacity} seats
+                    {selectedTableInfo.location || 'No location specified'} - {selectedTableInfo.capacity} seats
                   </p>
                 </div>
               )}

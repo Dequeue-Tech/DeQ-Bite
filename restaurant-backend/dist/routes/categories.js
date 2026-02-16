@@ -1,13 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("../config/database");
+const database_1 = require("@/config/database");
+const restaurant_1 = require("@/middleware/restaurant");
 const router = (0, express_1.Router)();
-router.get('/', async (_req, res) => {
+router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
     try {
         const categories = await database_1.prisma.category.findMany({
             where: {
-                active: true
+                active: true,
+                restaurantId: req.restaurant.id,
             },
             orderBy: {
                 sortOrder: 'asc'
@@ -28,12 +30,13 @@ router.get('/', async (_req, res) => {
         });
     }
 });
-router.get('/:id', async (_req, res) => {
+router.get('/:id', restaurant_1.requireRestaurant, async (req, res) => {
     try {
-        const { id } = _req.params;
-        const category = await database_1.prisma.category.findUnique({
+        const { id } = req.params;
+        const category = await database_1.prisma.category.findFirst({
             where: {
-                id
+                id,
+                restaurantId: req.restaurant.id,
             }
         });
         if (!category) {

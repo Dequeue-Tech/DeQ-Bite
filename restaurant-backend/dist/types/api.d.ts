@@ -3,7 +3,13 @@ export interface AuthenticatedRequest extends Request {
     user?: {
         id: string;
         email: string;
-        role: 'CUSTOMER' | 'ADMIN' | 'STAFF';
+        role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+        name: string;
+    };
+    restaurant?: {
+        id: string;
+        slug: string;
+        subdomain: string;
         name: string;
     };
 }
@@ -12,14 +18,14 @@ export interface User {
     email: string;
     name: string;
     phone?: string;
-    role: 'CUSTOMER' | 'ADMIN' | 'STAFF';
+    role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
     createdAt: Date;
     updatedAt: Date;
 }
 export interface MenuItem {
     id: string;
     name: string;
-    price: number;
+    pricePaise: number;
     description?: string;
     image?: string;
     categoryId: string;
@@ -42,9 +48,10 @@ export interface Order {
     tableId: string;
     status: 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SERVED' | 'COMPLETED' | 'CANCELLED';
     paymentStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REFUNDED';
-    subtotal: number;
-    tax: number;
-    total: number;
+    subtotalPaise: number;
+    taxPaise: number;
+    discountPaise: number;
+    totalPaise: number;
     specialInstructions?: string;
     paymentId?: string;
     createdAt: Date;
@@ -55,7 +62,7 @@ export interface OrderItem {
     orderId: string;
     menuItemId: string;
     quantity: number;
-    price: number;
+    pricePaise: number;
     notes?: string;
     createdAt: Date;
     updatedAt: Date;

@@ -1,173 +1,178 @@
 'use client';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import { useAuthStore } from '@/store/auth';
+import { useState } from 'react';
 import Link from 'next/link';
-import { ChefHat, ShoppingCart, Users, CreditCard, Clock, Shield } from 'lucide-react';
+import { ChefHat, Search, Store, Utensils, PlusSquare } from 'lucide-react';
+import { apiClient, MenuItem, RestaurantSummary } from '@/lib/api-client';
+import { formatInr } from '@/lib/currency';
+import { useAuthStore } from '@/store/auth';
+import toast from 'react-hot-toast';
 
 export default function HomePage() {
-  const router = useRouter();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated } = useAuthStore();
+  const [query, setQuery] = useState('');
+  const [restaurants, setRestaurants] = useState<RestaurantSummary[]>([]);
+  const [selectedRestaurant, setSelectedRestaurant] = useState<RestaurantSummary | null>(null);
+  const [previewMenu, setPreviewMenu] = useState<MenuItem[]>([]);
+  const [loadingRestaurants, setLoadingRestaurants] = useState(false);
+  const [loadingMenu, setLoadingMenu] = useState(false);
+
+  const searchRestaurants = async () => {
+    try {
+      setLoadingRestaurants(true);
+      const data = await apiClient.searchRestaurants(query);
+      setRestaurants(data);
+      if (data.length === 0) {
+        toast.error('No restaurants found');
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to search restaurants');
+    } finally {
+      setLoadingRestaurants(false);
+    }
+  };
+
+  const selectRestaurant = (restaurant: RestaurantSummary) => {
+    apiClient.setSelectedRestaurantSubdomain(restaurant.subdomain);
+    setSelectedRestaurant(restaurant);
+    setPreviewMenu([]);
+    toast.success(`${restaurant.name} selected`);
+  };
+
+  const fetchSelectedMenu = async () => {
+    if (!selectedRestaurant) {
+      toast.error('Select a restaurant first');
+      return;
+    }
+
+    try {
+      setLoadingMenu(true);
+      const response = await apiClient.getMenuItems();
+      if (response.success) {
+        setPreviewMenu((response.data || []).slice(0, 8));
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to fetch menu');
+    } finally {
+      setLoadingMenu(false);
+    }
+  };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-orange-50 to-orange-100">
-      {/* Hero Section */}
-      <section className="py-20">
-        <div className="restaurant-container mx-auto px-6 text-center">
-          <h2 className="text-5xl font-bold text-gray-800 mb-6">
-            Delicious Food, <span className="text-orange-600">Delivered Fresh</span>
-          </h2>
-          <p className="text-xl text-gray-600 mb-8 max-w-2xl mx-auto">
-            Experience authentic flavors with our secure online ordering system. 
-            Order from our curated menu and enjoy table delivery with safe payment processing.
-          </p>
-          
-          <div className="flex justify-center space-x-4">
-            <Link
-              href="/menu"
-              className="bg-orange-600 text-white px-8 py-3 rounded-lg text-lg font-semibold hover:bg-orange-700 transition-colors flex items-center"
+    <div className="min-h-screen bg-gray-50">
+      <section className="py-12 bg-gradient-to-br from-orange-50 to-orange-100 border-b border-orange-200">
+        <div className="max-w-6xl mx-auto px-4">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div>
+              <h1 className="text-3xl md:text-4xl font-bold text-gray-800">Central Restaurant Portal</h1>
+              <p className="text-gray-600 mt-2">Search restaurants, select one, then fetch only that restaurant's menu.</p>
+            </div>
+            {isAuthenticated && (
+              <Link
+                href="/onboarding/restaurant"
+                className="inline-flex items-center bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
+              >
+                <PlusSquare className="h-4 w-4 mr-2" />
+                Onboard Restaurant
+              </Link>
+            )}
+          </div>
+
+          <div className="mt-8 flex flex-col md:flex-row gap-3">
+            <div className="relative flex-1">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+              <input
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search by restaurant name or slug"
+                className="w-full bg-white border border-gray-300 rounded-lg pl-10 pr-4 py-3 focus:outline-none focus:ring-2 focus:ring-orange-500"
+              />
+            </div>
+            <button
+              onClick={searchRestaurants}
+              disabled={loadingRestaurants}
+              className="bg-gray-900 text-white px-6 py-3 rounded-lg hover:bg-black disabled:opacity-60"
             >
-              <ShoppingCart className="h-5 w-5 mr-2" />
-              Order Now
-            </Link>
-            <Link
-              href="/menu"
-              className="border-2 border-orange-600 text-orange-600 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-orange-600 hover:text-white transition-colors"
-            >
-              View Menu
-            </Link>
+              {loadingRestaurants ? 'Searching...' : 'Search'}
+            </button>
           </div>
+
+          {selectedRestaurant && (
+            <div className="mt-4 flex flex-wrap items-center gap-3 bg-white rounded-lg border border-gray-200 p-3">
+              <span className="text-sm text-gray-500">Selected:</span>
+              <span className="font-semibold text-gray-900">{selectedRestaurant.name}</span>
+              <span className="text-xs bg-orange-100 text-orange-700 px-2 py-1 rounded">@{selectedRestaurant.subdomain}</span>
+              <button
+                onClick={fetchSelectedMenu}
+                disabled={loadingMenu}
+                className="ml-auto bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60"
+              >
+                {loadingMenu ? 'Fetching Menu...' : 'Fetch Selected Menu'}
+              </button>
+              <Link
+                href="/menu"
+                className="border border-orange-600 text-orange-700 px-4 py-2 rounded-lg hover:bg-orange-50"
+              >
+                Open Full Menu
+              </Link>
+            </div>
+          )}
         </div>
       </section>
 
-      {/* Features Section */}
-      <section className="py-16 bg-white">
-        <div className="restaurant-container mx-auto px-6">
-          <h3 className="text-3xl font-bold text-center text-gray-800 mb-12">
-            Why Choose Our Restaurant?
-          </h3>
-          
-          <div className="grid md:grid-cols-3 gap-8">
-            <div className="text-center">
-              <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <ChefHat className="h-8 w-8 text-orange-600" />
-              </div>
-              <h4 className="text-xl font-semibold text-gray-800 mb-2">Fresh Ingredients</h4>
-              <p className="text-gray-600">
-                We use only the freshest, locally-sourced ingredients to create our delicious dishes.
-              </p>
+      <section className="py-8">
+        <div className="max-w-6xl mx-auto px-4 grid lg:grid-cols-2 gap-6">
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="p-4 border-b border-gray-200 flex items-center">
+              <Store className="h-5 w-5 text-orange-600 mr-2" />
+              <h2 className="font-semibold text-gray-900">Restaurants</h2>
             </div>
-            
-            <div className="text-center">
-              <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Clock className="h-8 w-8 text-orange-600" />
-              </div>
-              <h4 className="text-xl font-semibold text-gray-800 mb-2">Fast Service</h4>
-              <p className="text-gray-600">
-                Quick preparation and efficient table delivery to ensure your food arrives hot and fresh.
-              </p>
-            </div>
-            
-            <div className="text-center">
-              <div className="bg-orange-100 w-16 h-16 rounded-full flex items-center justify-center mx-auto mb-4">
-                <Shield className="h-8 w-8 text-orange-600" />
-              </div>
-              <h4 className="text-xl font-semibold text-gray-800 mb-2">Secure Payments</h4>
-              <p className="text-gray-600">
-                Bank-grade security with Razorpay integration for safe and reliable payment processing.
-              </p>
+            <div className="p-4 space-y-3 max-h-[420px] overflow-auto">
+              {restaurants.length === 0 ? (
+                <p className="text-gray-500 text-sm">Use Search to find restaurants.</p>
+              ) : (
+                restaurants.map((restaurant) => (
+                  <div key={restaurant.id} className="border border-gray-200 rounded-lg p-3 flex items-start justify-between">
+                    <div>
+                      <p className="font-semibold text-gray-900">{restaurant.name}</p>
+                      <p className="text-sm text-gray-600">@{restaurant.subdomain}</p>
+                      <p className="text-xs text-gray-500">{restaurant.address || 'Address not provided'}</p>
+                    </div>
+                    <button
+                      onClick={() => selectRestaurant(restaurant)}
+                      className="text-sm px-3 py-1.5 rounded-md bg-orange-600 text-white hover:bg-orange-700"
+                    >
+                      Select
+                    </button>
+                  </div>
+                ))
+              )}
             </div>
           </div>
-        </div>
-      </section>
 
-      {/* How It Works Section */}
-      <section className="py-16 bg-gray-50">
-        <div className="restaurant-container mx-auto px-6">
-          <h3 className="text-3xl font-bold text-center text-gray-800 mb-12">
-            How It Works
-          </h3>
-          
-          <div className="grid md:grid-cols-4 gap-6">
-            <div className="text-center">
-              <div className="bg-orange-600 text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-                1
-              </div>
-              <h4 className="font-semibold text-gray-800 mb-2">Browse Menu</h4>
-              <p className="text-gray-600 text-sm">
-                Explore our diverse menu with detailed descriptions and pricing.
-              </p>
+          <div className="bg-white rounded-xl border border-gray-200">
+            <div className="p-4 border-b border-gray-200 flex items-center">
+              <Utensils className="h-5 w-5 text-orange-600 mr-2" />
+              <h2 className="font-semibold text-gray-900">Selected Restaurant Menu Preview</h2>
             </div>
-            
-            <div className="text-center">
-              <div className="bg-orange-600 text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-                2
-              </div>
-              <h4 className="font-semibold text-gray-800 mb-2">Select Table</h4>
-              <p className="text-gray-600 text-sm">
-                Choose your preferred table location for delivery.
-              </p>
-            </div>
-            
-            <div className="text-center">
-              <div className="bg-orange-600 text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-                3
-              </div>
-              <h4 className="font-semibold text-gray-800 mb-2">Secure Payment</h4>
-              <p className="text-gray-600 text-sm">
-                Pay safely using our secure Razorpay payment gateway.
-              </p>
-            </div>
-            
-            <div className="text-center">
-              <div className="bg-orange-600 text-white w-12 h-12 rounded-full flex items-center justify-center mx-auto mb-4 text-xl font-bold">
-                4
-              </div>
-              <h4 className="font-semibold text-gray-800 mb-2">Enjoy Food</h4>
-              <p className="text-gray-600 text-sm">
-                Receive your fresh, hot meal delivered to your table.
-              </p>
+            <div className="p-4 space-y-3 max-h-[420px] overflow-auto">
+              {previewMenu.length === 0 ? (
+                <p className="text-gray-500 text-sm">Select a restaurant, then click "Fetch Selected Menu".</p>
+              ) : (
+                previewMenu.map((item) => (
+                  <div key={item.id} className="flex items-center justify-between border border-gray-200 rounded-lg p-3">
+                    <div>
+                      <p className="font-medium text-gray-900">{item.name}</p>
+                      <p className="text-sm text-gray-600">{item.category?.name}</p>
+                    </div>
+                    <span className="font-semibold text-orange-700">{formatInr(item.pricePaise)}</span>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>
       </section>
-
-      {/* CTA Section */}
-      <section className="py-16 bg-orange-600">
-        <div className="restaurant-container mx-auto px-6 text-center">
-          <h3 className="text-3xl font-bold text-white mb-4">
-            Ready to Order?
-          </h3>
-          <p className="text-orange-100 mb-8 text-lg">
-            Join thousands of satisfied customers who trust our secure ordering system.
-          </p>
-          
-          <Link
-            href={isAuthenticated ? "/menu" : "/auth/signup"}
-            className="bg-white text-orange-600 px-8 py-3 rounded-lg text-lg font-semibold hover:bg-gray-100 transition-colors inline-flex items-center"
-          >
-            <Users className="h-5 w-5 mr-2" />
-            {isAuthenticated ? "Order Now" : "Get Started"}
-          </Link>
-        </div>
-      </section>
-
-      {/* Footer */}
-      <footer className="bg-gray-800 text-white py-8">
-        <div className="restaurant-container mx-auto px-6">
-          <div className="flex flex-col md:flex-row justify-between items-center">
-            <div className="flex items-center mb-4 md:mb-0">
-              <ChefHat className="h-6 w-6 text-orange-600 mr-2" />
-              <span className="text-xl font-bold">Restaurant Online Ordering</span>
-            </div>
-            
-            <div className="text-gray-400">
-              <p>&copy; 2024 Restaurant. All rights reserved.</p>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }

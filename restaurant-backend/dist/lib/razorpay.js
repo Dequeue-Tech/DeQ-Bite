@@ -12,7 +12,7 @@ exports.fetchPaymentDetails = fetchPaymentDetails;
 exports.validateWebhookSignature = validateWebhookSignature;
 const razorpay_1 = __importDefault(require("razorpay"));
 const crypto_1 = __importDefault(require("crypto"));
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 let razorpayInstance = null;
 function getRazorpayInstance() {
     if (!razorpayInstance) {
@@ -31,7 +31,7 @@ async function createRazorpayOrder(options) {
     try {
         const createStartTime = Date.now();
         const order = await getRazorpayInstance().orders.create({
-            amount: Math.round(options.amount * 100),
+            amount: Math.round(options.amountPaise),
             currency: options.currency || 'INR',
             receipt: options.receipt,
             notes: options.notes || {},
@@ -49,7 +49,7 @@ async function createRazorpayOrder(options) {
         logger_1.logger.error('Razorpay order creation failed', {
             error: error instanceof Error ? error.message : 'Unknown error',
             receipt: options.receipt,
-            amount: options.amount,
+            amount: options.amountPaise,
         });
         throw error;
     }
@@ -90,7 +90,7 @@ function verifyRazorpaySignature(orderId, paymentId, signature) {
 }
 async function captureRazorpayPayment(paymentId, amount) {
     try {
-        const payment = await getRazorpayInstance().payments.capture(paymentId, Math.round(amount * 100), 'INR');
+        const payment = await getRazorpayInstance().payments.capture(paymentId, Math.round(amount), 'INR');
         logger_1.logger.info('Payment captured successfully', {
             paymentId,
             amount: payment.amount,
@@ -107,11 +107,11 @@ async function captureRazorpayPayment(paymentId, amount) {
         throw error;
     }
 }
-async function refundRazorpayPayment(paymentId, amount, reason) {
+async function refundRazorpayPayment(paymentId, amountPaise, reason) {
     try {
         const refundData = {};
-        if (amount) {
-            refundData.amount = Math.round(amount * 100);
+        if (amountPaise) {
+            refundData.amount = Math.round(amountPaise);
         }
         if (reason) {
             refundData.notes = { reason };
@@ -129,7 +129,7 @@ async function refundRazorpayPayment(paymentId, amount, reason) {
         logger_1.logger.error('Payment refund failed', {
             error: error instanceof Error ? error.message : 'Unknown error',
             paymentId,
-            amount,
+            amount: amountPaise,
             reason,
         });
         throw error;

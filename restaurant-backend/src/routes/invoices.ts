@@ -2,6 +2,7 @@ import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '@/config/database';
 import { authenticate } from '@/middleware/auth';
+import { requireRestaurant } from '@/middleware/restaurant';
 import { AppError, asyncHandler } from '@/middleware/errorHandler';
 import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { sendInvoiceEmail } from '@/lib/email';
@@ -18,7 +19,7 @@ const generateInvoiceSchema = z.object({
 });
 
 // POST /api/invoices/generate - Generate and send invoice
-router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { orderId, methods } = generateInvoiceSchema.parse(req.body);
 
   // Get the order with all related data - only completed payments
@@ -26,6 +27,7 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
     where: {
       id: orderId,
       userId: req.user!.id,
+      restaurantId: req.restaurant!.id,
       paymentStatus: 'COMPLETED', // Only allow invoice generation for completed payments
     },
     include: {
@@ -47,7 +49,7 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
           menuItem: {
             select: {
               name: true,
-              price: true,
+              pricePaise: true,
             },
           },
         },
@@ -112,17 +114,17 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
       items: order.items.map((item: any) => ({
         name: item.menuItem.name,
         quantity: item.quantity,
-        price: item.price,
-        total: item.price * item.quantity,
+        price: item.pricePaise / 100,
+        total: (item.pricePaise * item.quantity) / 100,
       })),
-      subtotal: order.subtotal,
-      tax: order.tax,
-      total: order.total,
+      subtotal: order.subtotalPaise / 100,
+      tax: order.taxPaise / 100,
+      total: order.totalPaise / 100,
       tableNumber: order.table.number,
       restaurantName: process.env.APP_NAME || 'Restaurant',
       restaurantAddress: 'Your Restaurant Address Here',
       restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-      paymentMethod: 'Online Payment (Razorpay)',
+      paymentMethod: `Online Payment (${order.paymentProvider || 'RAZORPAY'})`,
     };
 
     // Generate PDF
@@ -148,7 +150,7 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
           customerName: order.user.name,
           invoiceNumber,
           orderDate: invoiceData.orderDate,
-          total: order.total,
+          total: order.totalPaise / 100,
           tableNumber: order.table.number,
           restaurantName: invoiceData.restaurantName,
         },
@@ -163,7 +165,7 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
         {
           customerName: order.user.name,
           invoiceNumber,
-          total: order.total,
+          total: order.totalPaise / 100,
           restaurantName: invoiceData.restaurantName,
         }
       );
@@ -239,7 +241,7 @@ router.post('/generate', authenticate, asyncHandler(async (req: AuthenticatedReq
 }));
 
 // GET /api/invoices/:orderId - Get invoice for an order
-router.get('/:orderId', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/:orderId', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { orderId } = req.params;
 
   if (!orderId) {
@@ -251,13 +253,14 @@ router.get('/:orderId', authenticate, asyncHandler(async (req: AuthenticatedRequ
       orderId,
       order: {
         userId: req.user!.id,
+        restaurantId: req.restaurant!.id,
       },
     },
     include: {
       order: {
         select: {
           id: true,
-          total: true,
+          totalPaise: true,
           paymentStatus: true,
           status: true,
           createdAt: true,
@@ -284,18 +287,19 @@ router.get('/:orderId', authenticate, asyncHandler(async (req: AuthenticatedRequ
 }));
 
 // GET /api/invoices/user/list - Get all invoices for authenticated user
-router.get('/user/list', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/user/list', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const invoices = await prisma.invoice.findMany({
     where: {
       order: {
         userId: req.user!.id,
+        restaurantId: req.restaurant!.id,
       },
     },
     include: {
       order: {
         select: {
           id: true,
-          total: true,
+          totalPaise: true,
           paymentStatus: true,
           status: true,
           createdAt: true,
@@ -321,7 +325,7 @@ router.get('/user/list', authenticate, asyncHandler(async (req: AuthenticatedReq
 }));
 
 // POST /api/invoices/:invoiceId/resend - Resend invoice
-router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { invoiceId } = req.params;
   const { methods } = z.object({
     methods: z.array(z.enum(['EMAIL', 'SMS'])).default([]), // Default to empty array
@@ -336,6 +340,7 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
       id: invoiceId,
       order: {
         userId: req.user!.id,
+        restaurantId: req.restaurant!.id,
       },
     },
     include: {
@@ -373,7 +378,7 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
       customerName: invoice.order.user.name,
       invoiceNumber: invoice.invoiceNumber,
       orderDate: invoice.order.createdAt.toLocaleDateString('en-IN'),
-      total: invoice.order.total,
+      total: invoice.order.totalPaise / 100,
       tableNumber: invoice.order.table.number,
       restaurantName: process.env.APP_NAME || 'Restaurant',
     };
@@ -386,8 +391,8 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
       const pdfBuffer = generateInvoicePDF({
         ...invoiceData,
         items: [], // Would need to fetch items again or store in invoice
-        subtotal: invoice.order.subtotal,
-        tax: invoice.order.tax,
+        subtotal: invoice.order.subtotalPaise / 100,
+        tax: invoice.order.taxPaise / 100,
         customerEmail: invoice.order.user.email,
         customerPhone: invoice.order.user.phone || '', // Handle null phone
       });
@@ -449,7 +454,7 @@ router.post('/:invoiceId/resend', authenticate, asyncHandler(async (req: Authent
 }));
 
 // POST /api/invoices/:invoiceOrOrderId/refresh-pdf - Regenerate and store PDF (by invoice or order id)
-router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { invoiceOrOrderId } = req.params;
 
   if (!invoiceOrOrderId) {
@@ -463,12 +468,12 @@ router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, asyncHandler(async (
         { id: invoiceOrOrderId },
         { orderId: invoiceOrOrderId },
       ],
-      order: { userId: req.user!.id },
+      order: { userId: req.user!.id, restaurantId: req.restaurant!.id },
     },
     include: {
       order: {
         include: {
-          items: { include: { menuItem: { select: { name: true, price: true } } } },
+          items: { include: { menuItem: { select: { name: true, pricePaise: true } } } },
           table: true,
           user: true,
         },
@@ -482,10 +487,11 @@ router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, asyncHandler(async (
       where: {
         id: invoiceOrOrderId,
         userId: req.user!.id,
+        restaurantId: req.restaurant!.id,
         paymentStatus: 'COMPLETED',
       },
       include: {
-        items: { include: { menuItem: { select: { name: true, price: true } } } },
+        items: { include: { menuItem: { select: { name: true, pricePaise: true } } } },
         table: true,
         user: true,
       },
@@ -498,7 +504,7 @@ router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, asyncHandler(async (
     const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
     invoice = await prisma.invoice.create({
       data: { orderId: order.id, invoiceNumber },
-      include: { order: { include: { items: { include: { menuItem: { select: { name: true, price: true } } } }, table: true, user: true } } },
+      include: { order: { include: { items: { include: { menuItem: { select: { name: true, pricePaise: true } } } }, table: true, user: true } } },
     });
   }
 
@@ -515,17 +521,17 @@ router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, asyncHandler(async (
     items: (order.items || []).map((it: any) => ({
       name: it.menuItem?.name || 'Item',
       quantity: it.quantity,
-      price: it.price,
-      total: it.price * it.quantity,
+      price: it.pricePaise / 100,
+      total: (it.pricePaise * it.quantity) / 100,
     })),
-    subtotal: order.subtotal,
-    tax: order.tax,
-    total: order.total,
+    subtotal: order.subtotalPaise / 100,
+    tax: order.taxPaise / 100,
+    total: order.totalPaise / 100,
     tableNumber: order.table?.number || 0,
     restaurantName: process.env.APP_NAME || 'Restaurant',
     restaurantAddress: 'Your Restaurant Address Here',
     restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-    paymentMethod: 'Online Payment (Razorpay)',
+    paymentMethod: `Online Payment (${order.paymentProvider || 'RAZORPAY'})`,
   };
 
   // Generate and save PDF

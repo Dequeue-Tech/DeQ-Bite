@@ -1,20 +1,70 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
 const router = (0, express_1.Router)();
+const TAX_RATE = 0.08;
 router.use(auth_1.authenticate);
-router.post('/', async (_req, res) => {
+const normalizeCouponCode = (code) => code.trim().toUpperCase();
+const applyCoupon = async (restaurantId, code, subtotalPaise) => {
+    const normalizedCode = normalizeCouponCode(code);
+    const coupon = await database_1.prisma.coupon.findFirst({
+        where: {
+            restaurantId,
+            code: normalizedCode,
+            active: true,
+        },
+    });
+    if (!coupon) {
+        throw new Error('Invalid or inactive coupon code');
+    }
+    const now = new Date();
+    if (coupon.startsAt && coupon.startsAt > now) {
+        throw new Error('Coupon is not active yet');
+    }
+    if (coupon.endsAt && coupon.endsAt < now) {
+        throw new Error('Coupon has expired');
+    }
+    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit) {
+        throw new Error('Coupon usage limit reached');
+    }
+    if (coupon.minOrderPaise && subtotalPaise < coupon.minOrderPaise) {
+        throw new Error('Order total does not meet coupon minimum');
+    }
+    let discountPaise = 0;
+    if (coupon.type === 'PERCENT') {
+        discountPaise = Math.floor((subtotalPaise * coupon.value) / 100);
+    }
+    else {
+        discountPaise = coupon.value;
+    }
+    if (coupon.maxDiscountPaise && discountPaise > coupon.maxDiscountPaise) {
+        discountPaise = coupon.maxDiscountPaise;
+    }
+    if (discountPaise > subtotalPaise) {
+        discountPaise = subtotalPaise;
+    }
+    return { couponId: coupon.id, discountPaise, normalizedCode };
+};
+router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
     try {
-        const { tableId, items, specialInstructions } = _req.body;
-        const userId = _req.user?.id;
-        console.log('Order request received:', JSON.stringify(_req.body, null, 2));
+        const { tableId, items, specialInstructions, couponCode, paymentProvider } = req.body;
+        const userId = req.user?.id;
+        const allowedProviders = ['RAZORPAY', 'PAYTM', 'PHONEPE'];
+        if (paymentProvider && !allowedProviders.includes(paymentProvider)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Invalid payment provider',
+            });
+        }
+        console.log('Order request received:', JSON.stringify(req.body, null, 2));
         console.log('TableId:', tableId);
         console.log('Items:', items);
         console.log('Special instructions:', specialInstructions);
         console.log('UserId:', userId);
-        console.log('Request headers:', _req.headers);
+        console.log('Request headers:', req.headers);
         if (!tableId) {
             console.log('Validation failed: Missing tableId');
             return res.status(400).json({
@@ -44,8 +94,8 @@ router.post('/', async (_req, res) => {
             });
         }
         console.log('Looking up table with ID:', tableId);
-        const table = await database_1.prisma.table.findUnique({
-            where: { id: tableId }
+        const table = await database_1.prisma.table.findFirst({
+            where: { id: tableId, restaurantId: req.restaurant.id }
         });
         console.log('Table lookup result:', table);
         if (!table) {
@@ -62,7 +112,7 @@ router.post('/', async (_req, res) => {
                 error: 'Selected table is not active'
             });
         }
-        let subtotal = 0;
+        let subtotalPaise = 0;
         const orderItemsData = [];
         for (const [index, item] of items.entries()) {
             if (!item) {
@@ -87,8 +137,8 @@ router.post('/', async (_req, res) => {
                 });
             }
             console.log(`Looking up menu item with ID: ${item.menuItemId}`);
-            const menuItem = await database_1.prisma.menuItem.findUnique({
-                where: { id: item.menuItemId }
+            const menuItem = await database_1.prisma.menuItem.findFirst({
+                where: { id: item.menuItemId, restaurantId: req.restaurant.id }
             });
             console.log(`Menu item lookup result for ${item.menuItemId}:`, menuItem);
             if (!menuItem) {
@@ -105,37 +155,65 @@ router.post('/', async (_req, res) => {
                     error: `Menu item "${menuItem.name}" is not available`
                 });
             }
-            const itemTotal = menuItem.price * item.quantity;
-            subtotal += itemTotal;
+            const itemTotal = menuItem.pricePaise * item.quantity;
+            subtotalPaise += itemTotal;
             orderItemsData.push({
                 menuItemId: item.menuItemId,
                 quantity: item.quantity,
-                price: menuItem.price,
+                pricePaise: menuItem.pricePaise,
                 notes: item.notes || ''
             });
         }
-        const tax = subtotal * 0.08;
-        const total = subtotal + tax;
-        const order = await database_1.prisma.order.create({
-            data: {
-                userId,
-                tableId,
-                subtotal,
-                tax,
-                total,
-                specialInstructions: specialInstructions || '',
-                items: {
-                    create: orderItemsData
-                }
-            },
-            include: {
-                items: {
-                    include: {
-                        menuItem: true
+        let discountPaise = 0;
+        let appliedCouponId;
+        if (couponCode) {
+            try {
+                const couponResult = await applyCoupon(req.restaurant.id, couponCode, subtotalPaise);
+                discountPaise = couponResult.discountPaise;
+                appliedCouponId = couponResult.couponId;
+            }
+            catch (couponError) {
+                return res.status(400).json({
+                    success: false,
+                    error: couponError?.message || 'Invalid coupon code',
+                });
+            }
+        }
+        const taxablePaise = Math.max(subtotalPaise - discountPaise, 0);
+        const taxPaise = Math.round(taxablePaise * TAX_RATE);
+        const totalPaise = taxablePaise + taxPaise;
+        const order = await database_1.prisma.$transaction(async (tx) => {
+            if (appliedCouponId) {
+                await tx.coupon.update({
+                    where: { id: appliedCouponId },
+                    data: { usageCount: { increment: 1 } },
+                });
+            }
+            return tx.order.create({
+                data: {
+                    userId: userId,
+                    tableId,
+                    restaurantId: req.restaurant.id,
+                    subtotalPaise,
+                    taxPaise,
+                    discountPaise,
+                    totalPaise,
+                    paymentProvider: paymentProvider || 'RAZORPAY',
+                    specialInstructions: specialInstructions || '',
+                    couponId: appliedCouponId,
+                    items: {
+                        create: orderItemsData
                     }
                 },
-                table: true
-            }
+                include: {
+                    items: {
+                        include: {
+                            menuItem: true
+                        }
+                    },
+                    table: true
+                }
+            });
         });
         return res.status(201).json({
             success: true,
@@ -151,12 +229,13 @@ router.post('/', async (_req, res) => {
         });
     }
 });
-router.get('/', async (_req, res) => {
+router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
     try {
-        const userId = _req.user?.id;
+        const userId = req.user?.id;
         const orders = await database_1.prisma.order.findMany({
             where: {
-                userId
+                userId,
+                restaurantId: req.restaurant.id,
             },
             include: {
                 items: {
@@ -183,14 +262,54 @@ router.get('/', async (_req, res) => {
         });
     }
 });
-router.get('/:id', async (_req, res) => {
+router.get('/restaurant/all', restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
     try {
-        const { id } = _req.params;
-        const userId = _req.user?.id;
-        const order = await database_1.prisma.order.findUnique({
+        const orders = await database_1.prisma.order.findMany({
+            where: {
+                restaurantId: req.restaurant.id,
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                items: {
+                    include: {
+                        menuItem: true,
+                    },
+                },
+                table: true,
+            },
+            orderBy: {
+                createdAt: 'desc',
+            },
+        });
+        return res.json({
+            success: true,
+            data: orders,
+            message: 'Restaurant orders retrieved successfully',
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: 'Internal server error while fetching restaurant orders',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+router.get('/:id', restaurant_1.requireRestaurant, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.id;
+        const order = await database_1.prisma.order.findFirst({
             where: {
                 id,
-                userId
+                userId,
+                restaurantId: req.restaurant.id,
             },
             include: {
                 items: {
@@ -217,6 +336,91 @@ router.get('/:id', async (_req, res) => {
         return res.status(500).json({
             success: false,
             error: 'Internal server error while fetching order'
+        });
+    }
+});
+router.put('/:id/status', restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { status } = req.body;
+        if (!status) {
+            return res.status(400).json({
+                success: false,
+                error: 'Status is required',
+            });
+        }
+        const existing = await database_1.prisma.order.findFirst({
+            where: { id, restaurantId: req.restaurant.id },
+        });
+        if (!existing) {
+            return res.status(404).json({
+                success: false,
+                error: 'Order not found',
+            });
+        }
+        const order = await database_1.prisma.order.update({
+            where: { id },
+            data: { status },
+            include: {
+                items: {
+                    include: {
+                        menuItem: true,
+                    },
+                },
+                table: true,
+            },
+        });
+        return res.json({
+            success: true,
+            data: order,
+            message: 'Order status updated',
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: 'Failed to update order status',
+            message: error instanceof Error ? error.message : 'Unknown error',
+        });
+    }
+});
+router.put('/:id/cancel', restaurant_1.requireRestaurant, async (req, res) => {
+    try {
+        const { id } = req.params;
+        const userId = req.user?.id;
+        const order = await database_1.prisma.order.findFirst({
+            where: { id, userId, restaurantId: req.restaurant.id },
+            select: { status: true },
+        });
+        if (!order) {
+            return res.status(404).json({
+                success: false,
+                error: 'Order not found',
+            });
+        }
+        if (!['PENDING', 'CONFIRMED'].includes(order.status)) {
+            return res.status(400).json({
+                success: false,
+                error: 'Order cannot be cancelled at this stage',
+            });
+        }
+        const cancelled = await database_1.prisma.order.update({
+            where: { id },
+            data: {
+                status: 'CANCELLED',
+                paymentStatus: 'FAILED',
+            },
+        });
+        return res.json({
+            success: true,
+            data: cancelled,
+            message: 'Order cancelled',
+        });
+    }
+    catch (error) {
+        return res.status(500).json({
+            success: false,
+            error: error instanceof Error ? error.message : 'Failed to cancel order',
         });
     }
 });

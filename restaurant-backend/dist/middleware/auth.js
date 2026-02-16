@@ -5,8 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.optionalAuth = exports.authorize = exports.authenticate = void 0;
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const database_1 = require("../config/database");
-const errorHandler_1 = require("./errorHandler");
+const database_1 = require("@/config/database");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const authenticate = async (req, _res, next) => {
     try {
         let token;

@@ -7,16 +7,15 @@ const express_1 = require("express");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
-const errorHandler_1 = require("../middleware/errorHandler");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const errorHandler_1 = require("@/middleware/errorHandler");
 const router = (0, express_1.Router)();
 const registerSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, 'Name must be at least 2 characters').max(50),
     email: zod_1.z.string().email('Invalid email address'),
     phone: zod_1.z.string().min(10, 'Phone number must be at least 10 digits').optional(),
     password: zod_1.z.string().min(6, 'Password must be at least 6 characters'),
-    role: zod_1.z.enum(['CUSTOMER', 'ADMIN']).optional().default('CUSTOMER'),
 });
 const loginSchema = zod_1.z.object({
     email: zod_1.z.string().email('Invalid email address'),
@@ -38,7 +37,7 @@ const generateToken = (userId) => {
     });
 };
 router.post('/register', (0, errorHandler_1.asyncHandler)(async (req, res) => {
-    const { name, email, phone, password, role } = registerSchema.parse(req.body);
+    const { name, email, phone, password } = registerSchema.parse(req.body);
     const existingUser = await database_1.prisma.user.findFirst({
         where: {
             OR: [
@@ -58,7 +57,7 @@ router.post('/register', (0, errorHandler_1.asyncHandler)(async (req, res) => {
             email,
             phone: phone || null,
             password: hashedPassword,
-            role: role,
+            role: 'CUSTOMER',
         },
         select: {
             id: true,
@@ -92,7 +91,7 @@ router.post('/login', (0, errorHandler_1.asyncHandler)(async (req, res) => {
                 select: {
                     id: true,
                     status: true,
-                    total: true,
+                    totalPaise: true,
                     createdAt: true,
                 },
             },
@@ -143,7 +142,7 @@ router.get('/me', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (r
                 select: {
                     id: true,
                     status: true,
-                    total: true,
+                    totalPaise: true,
                     createdAt: true,
                     table: {
                         select: {
@@ -163,6 +162,21 @@ router.get('/me', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (r
     if (!user) {
         throw new errorHandler_1.AppError('User not found', 404);
     }
+    let restaurantRole = null;
+    if (req.restaurant) {
+        const membership = await database_1.prisma.restaurantUser.findUnique({
+            where: {
+                restaurantId_userId: {
+                    restaurantId: req.restaurant.id,
+                    userId: req.user.id,
+                },
+            },
+            select: { role: true, active: true },
+        });
+        if (membership?.active) {
+            restaurantRole = membership.role;
+        }
+    }
     const response = {
         success: true,
         data: {
@@ -170,6 +184,7 @@ router.get('/me', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(async (r
                 ...user,
                 totalOrders: user._count.orders,
                 recentOrders: user.orders,
+                restaurantRole,
             },
         },
     };
@@ -194,7 +209,7 @@ router.get('/profile', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                     id: true,
                     status: true,
                     paymentStatus: true,
-                    total: true,
+                    totalPaise: true,
                     createdAt: true,
                     table: {
                         select: {
@@ -205,7 +220,7 @@ router.get('/profile', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
                     items: {
                         select: {
                             quantity: true,
-                            price: true,
+                            pricePaise: true,
                             menuItem: {
                                 select: {
                                     name: true,
@@ -230,13 +245,28 @@ router.get('/profile', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
     if (!userProfile) {
         throw new errorHandler_1.AppError('User profile not found', 404);
     }
+    let restaurantRole = null;
+    if (req.restaurant) {
+        const membership = await database_1.prisma.restaurantUser.findUnique({
+            where: {
+                restaurantId_userId: {
+                    restaurantId: req.restaurant.id,
+                    userId: req.user.id,
+                },
+            },
+            select: { role: true, active: true },
+        });
+        if (membership?.active) {
+            restaurantRole = membership.role;
+        }
+    }
     const totalSpent = await database_1.prisma.order.aggregate({
         where: {
             userId: req.user.id,
             paymentStatus: 'COMPLETED',
         },
         _sum: {
-            total: true,
+            totalPaise: true,
         },
     });
     const response = {
@@ -245,8 +275,9 @@ router.get('/profile', auth_1.authenticate, (0, errorHandler_1.asyncHandler)(asy
             user: {
                 ...userProfile,
                 totalOrders: userProfile._count.orders,
-                totalSpent: totalSpent._sum.total || 0,
+                totalSpent: totalSpent._sum.totalPaise || 0,
                 recentOrders: userProfile.orders,
+                restaurantRole,
             },
         },
     };

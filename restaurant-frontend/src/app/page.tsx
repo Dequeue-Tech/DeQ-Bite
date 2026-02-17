@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import Link from 'next/link';
 import { ChefHat, Search, Store, Utensils, PlusSquare } from 'lucide-react';
 import { apiClient, MenuItem, RestaurantSummary } from '@/lib/api-client';
@@ -31,6 +31,11 @@ export default function HomePage() {
       setLoadingRestaurants(false);
     }
   };
+
+  useEffect(() => {
+    searchRestaurants();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const selectRestaurant = (restaurant: RestaurantSummary) => {
     apiClient.setSelectedRestaurantSubdomain(restaurant.subdomain);
@@ -144,7 +149,7 @@ export default function HomePage() {
                         Select
                       </button>
                       <Link
-                        href={`/restaurants/${restaurant.id}`}
+                        href={`/restaurants/${restaurant.subdomain || restaurant.id}`}
                         className="text-center text-sm px-3 py-1.5 rounded-md border border-gray-300 text-gray-700 hover:bg-gray-50"
                       >
                         View Page

@@ -7,7 +7,7 @@ exports.sendEmail = sendEmail;
 exports.generateInvoiceEmailTemplate = generateInvoiceEmailTemplate;
 exports.sendInvoiceEmail = sendInvoiceEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 const createTransporter = () => {
     return nodemailer_1.default.createTransport({
         host: process.env.SMTP_HOST,

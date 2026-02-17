@@ -2,16 +2,19 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const payments_1 = require("@/lib/payments");
-const logger_1 = require("@/utils/logger");
-const pdf_1 = require("@/lib/pdf");
-const restaurant_1 = require("@/middleware/restaurant");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const errorHandler_1 = require("../middleware/errorHandler");
+const payments_1 = require("../lib/payments");
+const logger_1 = require("../utils/logger");
+const pdf_1 = require("../lib/pdf");
+const restaurant_1 = require("../middleware/restaurant");
 const router = (0, express_1.Router)();
-router.get('/providers', (0, errorHandler_1.asyncHandler)(async (_req, res) => {
-    const providers = (0, payments_1.getEnabledProviders)();
+router.get('/providers', restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const providers = [
+        ...(0, payments_1.getEnabledProviders)(),
+        ...(req.restaurant?.cashPaymentEnabled ? ['CASH'] : []),
+    ];
     const response = {
         success: true,
         data: { providers },
@@ -39,7 +42,9 @@ router.post('/create', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
             id: orderId,
             userId: req.user.id,
             restaurantId: req.restaurant.id,
-            paymentStatus: 'PENDING',
+            paymentStatus: {
+                in: ['PENDING', 'FAILED', 'PROCESSING'],
+            },
         },
         include: {
             user: {
@@ -59,6 +64,9 @@ router.post('/create', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
     });
     if (!order) {
         throw new errorHandler_1.AppError('Order not found or already processed', 404);
+    }
+    if (order.paymentProvider === 'CASH') {
+        throw new errorHandler_1.AppError('This order uses cash payment. Ask manager/admin to confirm payment.', 400);
     }
     try {
         const providerToUse = (paymentProvider || order.paymentProvider || 'RAZORPAY');
@@ -196,7 +204,7 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
         }
         try {
             const provider = (0, payments_1.getPaymentProvider)(order.paymentProvider);
-            const verificationResult = await provider.verifyPayment({
+            await provider.verifyPayment({
                 razorpay_order_id,
                 razorpay_payment_id,
                 razorpay_signature,
@@ -439,6 +447,80 @@ router.get('/status/:orderId', auth_1.authenticate, restaurant_1.requireRestaura
         data: { order },
     };
     res.json(response);
+}));
+router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const payload = zod_1.z.object({
+        orderId: zod_1.z.string().min(1, 'Order ID is required'),
+    }).parse(req.body);
+    const order = await database_1.prisma.order.findFirst({
+        where: {
+            id: payload.orderId,
+            restaurantId: req.restaurant.id,
+            paymentProvider: 'CASH',
+            paymentStatus: {
+                in: ['PENDING', 'PROCESSING', 'FAILED'],
+            },
+        },
+        include: {
+            user: {
+                select: {
+                    name: true,
+                    email: true,
+                    phone: true,
+                },
+            },
+            table: {
+                select: {
+                    number: true,
+                    location: true,
+                },
+            },
+            items: {
+                include: {
+                    menuItem: {
+                        select: {
+                            name: true,
+                            pricePaise: true,
+                        },
+                    },
+                },
+            },
+        },
+    });
+    if (!order) {
+        throw new errorHandler_1.AppError('Cash order not found or already confirmed', 404);
+    }
+    const updatedOrder = await database_1.prisma.order.update({
+        where: { id: order.id },
+        data: {
+            paymentStatus: 'COMPLETED',
+            status: order.status === 'PENDING' ? 'CONFIRMED' : order.status,
+            paymentTransactionId: `cash-${Date.now()}`,
+            updatedAt: new Date(),
+        },
+    });
+    const existingInvoice = await database_1.prisma.invoice.findUnique({
+        where: { orderId: order.id },
+    });
+    if (!existingInvoice) {
+        const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+        await database_1.prisma.invoice.create({
+            data: {
+                orderId: order.id,
+                invoiceNumber,
+                sentVia: [],
+                emailSent: false,
+                smsSent: false,
+            },
+        });
+    }
+    return res.json({
+        success: true,
+        message: 'Cash payment confirmed',
+        data: {
+            order: updatedOrder,
+        },
+    });
 }));
 exports.default = router;
 //# sourceMappingURL=payments.js.map

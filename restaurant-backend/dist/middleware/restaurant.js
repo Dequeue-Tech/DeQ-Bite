@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorizeRestaurantRole = exports.requireRestaurant = exports.attachRestaurant = void 0;
-const database_1 = require("@/config/database");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const database_1 = require("../config/database");
+const errorHandler_1 = require("./errorHandler");
 const isLocalHost = (host) => {
     if (!host)
         return false;
@@ -11,14 +11,17 @@ const isLocalHost = (host) => {
 const extractSubdomain = (host) => {
     if (!host)
         return null;
-    const cleanHost = host.split(':')[0].toLowerCase();
+    const cleanHost = (host.split(':')[0] ?? '').toLowerCase();
+    if (!cleanHost)
+        return null;
     const baseDomain = (process.env['BASE_DOMAIN'] || '').toLowerCase();
     if (baseDomain && cleanHost.endsWith(`.${baseDomain}`)) {
         return cleanHost.replace(`.${baseDomain}`, '');
     }
     const parts = cleanHost.split('.');
     if (parts.length >= 3) {
-        return parts[0] ?? null;
+        const candidate = parts[0];
+        return candidate ? candidate : null;
     }
     return null;
 };
@@ -44,6 +47,8 @@ const attachRestaurant = async (req, _res, next) => {
                 subdomain: true,
                 name: true,
                 active: true,
+                paymentCollectionTiming: true,
+                cashPaymentEnabled: true,
             },
         });
         if (!restaurant || !restaurant.active) {
@@ -54,6 +59,8 @@ const attachRestaurant = async (req, _res, next) => {
             slug: restaurant.slug,
             subdomain: restaurant.subdomain,
             name: restaurant.name,
+            paymentCollectionTiming: restaurant.paymentCollectionTiming,
+            cashPaymentEnabled: restaurant.cashPaymentEnabled,
         };
         return next();
     }

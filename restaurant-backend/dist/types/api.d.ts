@@ -11,6 +11,8 @@ export interface AuthenticatedRequest extends Request {
         slug: string;
         subdomain: string;
         name: string;
+        paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
+        cashPaymentEnabled: boolean;
     };
 }
 export interface User {

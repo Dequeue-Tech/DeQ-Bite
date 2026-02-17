@@ -47,12 +47,12 @@ const razorpayProvider: PaymentProvider = {
     const order = await createRazorpayOrder({
       amountPaise: input.amountPaise,
       receipt: input.receipt,
-      notes: input.notes,
+      ...(input.notes ? { notes: input.notes } : {}),
     });
     return {
       provider: 'RAZORPAY',
       paymentOrderId: order.id,
-      amountPaise: order.amount,
+      amountPaise: Number(order.amount),
       currency: 'INR',
       publicKey: process.env.RAZORPAY_KEY_ID,
     };
@@ -82,7 +82,7 @@ const razorpayProvider: PaymentProvider = {
 
 const paytmProvider: PaymentProvider = {
   provider: 'PAYTM',
-  isEnabled: () => Boolean(process.env.PAYTM_MERCHANT_ID && process.env.PAYTM_MERCHANT_KEY),
+  isEnabled: () => Boolean(process.env['PAYTM_MERCHANT_ID'] && process.env['PAYTM_MERCHANT_KEY']),
   createOrder: async () => {
     throw new AppError('Paytm integration is not configured in this build', 501);
   },
@@ -96,7 +96,7 @@ const paytmProvider: PaymentProvider = {
 
 const phonepeProvider: PaymentProvider = {
   provider: 'PHONEPE',
-  isEnabled: () => Boolean(process.env.PHONEPE_MERCHANT_ID && process.env.PHONEPE_SALT_KEY),
+  isEnabled: () => Boolean(process.env['PHONEPE_MERCHANT_ID'] && process.env['PHONEPE_SALT_KEY']),
   createOrder: async () => {
     throw new AppError('PhonePe integration is not configured in this build', 501);
   },

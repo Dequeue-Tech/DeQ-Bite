@@ -1,5 +1,5 @@
 import { Response, NextFunction } from 'express';
-import { AuthenticatedRequest } from '@/types/api';
+import { AuthenticatedRequest } from '../types/api';
 export declare const authenticate: (req: AuthenticatedRequest, _res: Response, next: NextFunction) => Promise<void>;
 export declare const authorize: (...roles: string[]) => (req: AuthenticatedRequest, _res: Response, next: NextFunction) => void;
 export declare const optionalAuth: (req: AuthenticatedRequest, _res: Response, next: NextFunction) => Promise<void>;

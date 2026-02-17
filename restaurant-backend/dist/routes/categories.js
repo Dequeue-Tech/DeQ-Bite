@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("@/config/database");
-const restaurant_1 = require("@/middleware/restaurant");
+const database_1 = require("../config/database");
+const restaurant_1 = require("../middleware/restaurant");
 const router = (0, express_1.Router)();
 router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
     try {
@@ -33,6 +33,13 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
 router.get('/:id', restaurant_1.requireRestaurant, async (req, res) => {
     try {
         const { id } = req.params;
+        if (!id) {
+            return res.status(400).json({
+                success: false,
+                error: 'Category ID is required',
+                message: 'Please provide a valid category ID'
+            });
+        }
         const category = await database_1.prisma.category.findFirst({
             where: {
                 id,

@@ -52,6 +52,13 @@ router.get('/available', requireRestaurant, async (req: AuthenticatedRequest, re
 router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Table ID is required',
+        message: 'Please provide a valid table ID'
+      });
+    }
     const table = await prisma.table.findFirst({
       where: {
         id,

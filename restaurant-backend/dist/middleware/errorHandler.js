@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.asyncHandler = exports.errorHandler = exports.AppError = void 0;
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 class AppError extends Error {
     statusCode;
     isOperational;

@@ -4,10 +4,10 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("@/config/database");
+const database_1 = require("../config/database");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const errorHandler_1 = require("@/middleware/errorHandler");
-const pdf_1 = require("@/lib/pdf");
+const errorHandler_1 = require("../middleware/errorHandler");
+const pdf_1 = require("../lib/pdf");
 const path_1 = __importDefault(require("path"));
 const promises_1 = __importDefault(require("fs/promises"));
 const router = (0, express_1.Router)();

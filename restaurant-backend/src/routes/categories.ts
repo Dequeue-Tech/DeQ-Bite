@@ -37,6 +37,13 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
+    if (!id) {
+      return res.status(400).json({
+        success: false,
+        error: 'Category ID is required',
+        message: 'Please provide a valid category ID'
+      });
+    }
     
     const category = await prisma.category.findFirst({
       where: {

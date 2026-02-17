@@ -2,14 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const pdf_1 = require("@/lib/pdf");
-const email_1 = require("@/lib/email");
-const sms_1 = require("@/lib/sms");
-const logger_1 = require("@/utils/logger");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const errorHandler_1 = require("../middleware/errorHandler");
+const pdf_1 = require("../lib/pdf");
+const email_1 = require("../lib/email");
+const sms_1 = require("../lib/sms");
+const logger_1 = require("../utils/logger");
 const router = (0, express_1.Router)();
 const generateInvoiceSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),

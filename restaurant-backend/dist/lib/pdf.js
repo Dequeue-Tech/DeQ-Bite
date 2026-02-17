@@ -9,7 +9,7 @@ exports.cleanupOldInvoices = cleanupOldInvoices;
 const jspdf_1 = __importDefault(require("jspdf"));
 const path_1 = __importDefault(require("path"));
 const promises_1 = __importDefault(require("fs/promises"));
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 function generateInvoicePDF(invoiceData) {
     try {
         const doc = new jspdf_1.default();

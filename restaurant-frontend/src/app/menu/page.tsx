@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { apiClient, MenuItem, Category } from '@/lib/api-client';
@@ -10,7 +10,7 @@ import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
 import Image from 'next/image';
 
-export default function MenuPage() {
+function MenuPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuthStore();
@@ -321,5 +321,22 @@ export default function MenuPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function MenuPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+          <div className="text-center">
+            <ChefHat className="h-12 w-12 text-orange-600 mx-auto mb-4 animate-spin" />
+            <p className="text-gray-600">Loading menu...</p>
+          </div>
+        </div>
+      }
+    >
+      <MenuPageContent />
+    </Suspense>
   );
 }

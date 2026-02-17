@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getMenuWithCompleteData = exports.getUserWithCompleteData = void 0;
-const database_1 = require("@/config/database");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const database_1 = require("../config/database");
+const errorHandler_1 = require("../middleware/errorHandler");
 exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { userId } = req.params;
     if (!userId) {

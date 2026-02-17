@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getEnabledProviders = exports.getPaymentProvider = void 0;
-const errorHandler_1 = require("@/middleware/errorHandler");
-const razorpay_1 = require("@/lib/razorpay");
+const errorHandler_1 = require("../../middleware/errorHandler");
+const razorpay_1 = require("../razorpay");
 const razorpayProvider = {
     provider: 'RAZORPAY',
     isEnabled: () => Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),
@@ -13,12 +13,12 @@ const razorpayProvider = {
         const order = await (0, razorpay_1.createRazorpayOrder)({
             amountPaise: input.amountPaise,
             receipt: input.receipt,
-            notes: input.notes,
+            ...(input.notes ? { notes: input.notes } : {}),
         });
         return {
             provider: 'RAZORPAY',
             paymentOrderId: order.id,
-            amountPaise: order.amount,
+            amountPaise: Number(order.amount),
             currency: 'INR',
             publicKey: process.env.RAZORPAY_KEY_ID,
         };
@@ -43,7 +43,7 @@ const razorpayProvider = {
 };
 const paytmProvider = {
     provider: 'PAYTM',
-    isEnabled: () => Boolean(process.env.PAYTM_MERCHANT_ID && process.env.PAYTM_MERCHANT_KEY),
+    isEnabled: () => Boolean(process.env['PAYTM_MERCHANT_ID'] && process.env['PAYTM_MERCHANT_KEY']),
     createOrder: async () => {
         throw new errorHandler_1.AppError('Paytm integration is not configured in this build', 501);
     },
@@ -56,7 +56,7 @@ const paytmProvider = {
 };
 const phonepeProvider = {
     provider: 'PHONEPE',
-    isEnabled: () => Boolean(process.env.PHONEPE_MERCHANT_ID && process.env.PHONEPE_SALT_KEY),
+    isEnabled: () => Boolean(process.env['PHONEPE_MERCHANT_ID'] && process.env['PHONEPE_SALT_KEY']),
     createOrder: async () => {
         throw new errorHandler_1.AppError('PhonePe integration is not configured in this build', 501);
     },

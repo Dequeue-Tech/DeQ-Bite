@@ -239,7 +239,7 @@ router.post('/verify', authenticate, requireRestaurant, asyncHandler(async (req:
 
     try {
       const provider = getPaymentProvider(order.paymentProvider as PaymentProviderType);
-      const verificationResult = await provider.verifyPayment({
+      await provider.verifyPayment({
         razorpay_order_id,
         razorpay_payment_id,
         razorpay_signature,

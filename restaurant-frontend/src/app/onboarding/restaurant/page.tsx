@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Building2, Mail, MapPin, Phone, Globe } from 'lucide-react';
+import { Building2, Mail, MapPin, Phone } from 'lucide-react';
 import { apiClient } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
@@ -13,8 +13,6 @@ export default function RestaurantOnboardingPage() {
   const [loading, setLoading] = useState(false);
   const [form, setForm] = useState({
     name: '',
-    slug: '',
-    subdomain: '',
     email: '',
     phone: '',
     address: '',
@@ -23,14 +21,6 @@ export default function RestaurantOnboardingPage() {
   const handleChange = (field: keyof typeof form, value: string) => {
     setForm((prev) => ({ ...prev, [field]: value }));
   };
-
-  const normalize = (value: string) =>
-    value
-      .trim()
-      .toLowerCase()
-      .replace(/[^a-z0-9-]/g, '-')
-      .replace(/-+/g, '-')
-      .replace(/^-|-$/g, '');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -43,13 +33,7 @@ export default function RestaurantOnboardingPage() {
 
     try {
       setLoading(true);
-      const payload = {
-        ...form,
-        slug: normalize(form.slug || form.name),
-        subdomain: normalize(form.subdomain || form.slug || form.name),
-      };
-
-      const restaurant = await apiClient.createRestaurant(payload);
+      const restaurant = await apiClient.createRestaurant(form);
       apiClient.setSelectedRestaurantSubdomain(restaurant.subdomain);
       toast.success('Restaurant onboarded successfully');
       router.push('/admin');
@@ -81,35 +65,6 @@ export default function RestaurantOnboardingPage() {
                   className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5"
                   placeholder="Spice Garden"
                 />
-              </div>
-            </div>
-
-            <div className="grid md:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Slug</label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    required
-                    value={form.slug}
-                    onChange={(e) => handleChange('slug', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5"
-                    placeholder="spice-garden"
-                  />
-                </div>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Subdomain</label>
-                <div className="relative">
-                  <Globe className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input
-                    required
-                    value={form.subdomain}
-                    onChange={(e) => handleChange('subdomain', e.target.value)}
-                    className="w-full border border-gray-300 rounded-lg pl-10 pr-3 py-2.5"
-                    placeholder="spice-garden"
-                  />
-                </div>
               </div>
             </div>
 

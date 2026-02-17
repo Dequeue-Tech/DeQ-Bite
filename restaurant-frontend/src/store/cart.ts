@@ -11,12 +11,14 @@ export interface CartItem {
 
 interface CartState {
   items: CartItem[];
+  activeOrderId: string | null;
   
   // Actions
   addItem: (item: Omit<CartItem, 'quantity'> & { quantity?: number }) => void;
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   clearCart: () => void;
+  setActiveOrderId: (orderId: string | null) => void;
   getTotalItems: () => number;
   getTotalPricePaise: () => number;
 }
@@ -25,6 +27,7 @@ export const useCartStore = create<CartState>()(
   persist(
     (set, get) => ({
       items: [],
+      activeOrderId: null,
 
       addItem: (item) => {
         const { items } = get();
@@ -65,7 +68,11 @@ export const useCartStore = create<CartState>()(
       },
 
       clearCart: () => {
-        set({ items: [] });
+        set({ items: [], activeOrderId: null });
+      },
+
+      setActiveOrderId: (orderId) => {
+        set({ activeOrderId: orderId });
       },
 
       getTotalItems: () => {
@@ -78,7 +85,7 @@ export const useCartStore = create<CartState>()(
     }),
     {
       name: 'cart-storage',
-      partialize: (state) => ({ items: state.items }),
+      partialize: (state) => ({ items: state.items, activeOrderId: state.activeOrderId }),
     }
   )
 );

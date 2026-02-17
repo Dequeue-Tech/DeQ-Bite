@@ -7,13 +7,16 @@ import { getEnabledProviders, getPaymentProvider, PaymentProviderType } from '@/
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
-import { requireRestaurant } from '@/middleware/restaurant';
+import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 
 const router = Router();
 
 // GET /api/payments/providers - List enabled payment providers
-router.get('/providers', asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
-  const providers = getEnabledProviders();
+router.get('/providers', requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const providers = [
+    ...getEnabledProviders(),
+    ...(req.restaurant?.cashPaymentEnabled ? ['CASH'] : []),
+  ];
   const response: ApiResponse = {
     success: true,
     data: { providers },
@@ -49,7 +52,9 @@ router.post('/create', authenticate, requireRestaurant, asyncHandler(async (req:
       id: orderId,
       userId: req.user!.id,
       restaurantId: req.restaurant!.id,
-      paymentStatus: 'PENDING',
+      paymentStatus: {
+        in: ['PENDING', 'FAILED', 'PROCESSING'],
+      },
     },
     include: {
       user: {
@@ -70,6 +75,10 @@ router.post('/create', authenticate, requireRestaurant, asyncHandler(async (req:
 
   if (!order) {
     throw new AppError('Order not found or already processed', 404);
+  }
+
+  if (order.paymentProvider === 'CASH') {
+    throw new AppError('This order uses cash payment. Ask manager/admin to confirm payment.', 400);
   }
 
   try {
@@ -540,6 +549,89 @@ router.get('/status/:orderId', authenticate, requireRestaurant, asyncHandler(asy
   };
 
   res.json(response);
+}));
+
+// POST /api/payments/cash/confirm - confirm cash payment by admin/manager
+router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const payload = z.object({
+    orderId: z.string().min(1, 'Order ID is required'),
+  }).parse(req.body);
+
+  const order = await prisma.order.findFirst({
+    where: {
+      id: payload.orderId,
+      restaurantId: req.restaurant!.id,
+      paymentProvider: 'CASH',
+      paymentStatus: {
+        in: ['PENDING', 'PROCESSING', 'FAILED'],
+      },
+    },
+    include: {
+      user: {
+        select: {
+          name: true,
+          email: true,
+          phone: true,
+        },
+      },
+      table: {
+        select: {
+          number: true,
+          location: true,
+        },
+      },
+      items: {
+        include: {
+          menuItem: {
+            select: {
+              name: true,
+              pricePaise: true,
+            },
+          },
+        },
+      },
+    },
+  });
+
+  if (!order) {
+    throw new AppError('Cash order not found or already confirmed', 404);
+  }
+
+  const updatedOrder = await prisma.order.update({
+    where: { id: order.id },
+    data: {
+      paymentStatus: 'COMPLETED',
+      status: order.status === 'PENDING' ? 'CONFIRMED' : order.status,
+      paymentTransactionId: `cash-${Date.now()}`,
+      updatedAt: new Date(),
+    },
+  });
+
+  // Ensure invoice record exists only after paid
+  const existingInvoice = await prisma.invoice.findUnique({
+    where: { orderId: order.id },
+  });
+
+  if (!existingInvoice) {
+    const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+    await prisma.invoice.create({
+      data: {
+        orderId: order.id,
+        invoiceNumber,
+        sentVia: [],
+        emailSent: false,
+        smsSent: false,
+      },
+    });
+  }
+
+  return res.json({
+    success: true,
+    message: 'Cash payment confirmed',
+    data: {
+      order: updatedOrder,
+    },
+  });
 }));
 
 export default router;

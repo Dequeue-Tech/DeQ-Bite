@@ -35,6 +35,8 @@ model Restaurant {
   phone       String?
   address     String?
   active      Boolean  @default(true)
+  paymentCollectionTiming PaymentCollectionTiming @default(AFTER_MEAL)
+  cashPaymentEnabled Boolean @default(true)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -135,6 +137,7 @@ model Order {
   paymentTransactionId String? // Payment transaction ID (gateway payment id)
   paymentProvider PaymentProvider @default(RAZORPAY)
   paymentStatus PaymentStatus @default(PENDING)
+  paymentCollectionTiming PaymentCollectionTiming @default(AFTER_MEAL)
   specialInstructions String?
   estimatedTime Int?        // in minutes
   createdAt     DateTime    @default(now())
@@ -222,6 +225,12 @@ enum PaymentProvider {
   RAZORPAY
   PAYTM
   PHONEPE
+  CASH
+}
+
+enum PaymentCollectionTiming {
+  BEFORE_MEAL
+  AFTER_MEAL
 }
 
 enum OrderStatus {

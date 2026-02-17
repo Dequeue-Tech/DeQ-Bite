@@ -49,7 +49,7 @@ interface Order {
   subtotalPaise: number;
   taxPaise: number;
   discountPaise: number;
-  paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE';
+  paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH';
   table: {
     number: number;
     location: string;
@@ -87,8 +87,11 @@ export default function SecurePaymentProcessor({
     setVerificationStatus('idle');
 
     try {
+      if (order.paymentProvider === 'CASH') {
+        throw new Error('Cash payments are confirmed by restaurant admin/manager');
+      }
       // Create secure payment order via our backend API
-      const paymentData = await apiClient.createPayment(order.id, order.paymentProvider || 'RAZORPAY');
+      const paymentData = await apiClient.createPayment(order.id, (order.paymentProvider || 'RAZORPAY') as 'RAZORPAY' | 'PAYTM' | 'PHONEPE');
 
       if (paymentData.provider && paymentData.provider !== 'RAZORPAY') {
         if (paymentData.redirectUrl) {

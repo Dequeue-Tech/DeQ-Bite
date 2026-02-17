@@ -10,7 +10,8 @@ const isLocalHost = (host?: string | null) => {
 
 const extractSubdomain = (host?: string | null): string | null => {
   if (!host) return null;
-  const cleanHost = host.split(':')[0].toLowerCase();
+  const cleanHost = (host.split(':')[0] ?? '').toLowerCase();
+  if (!cleanHost) return null;
   const baseDomain = (process.env['BASE_DOMAIN'] || '').toLowerCase();
 
   if (baseDomain && cleanHost.endsWith(`.${baseDomain}`)) {
@@ -19,7 +20,8 @@ const extractSubdomain = (host?: string | null): string | null => {
 
   const parts = cleanHost.split('.');
   if (parts.length >= 3) {
-    return parts[0] ?? null;
+    const candidate = parts[0];
+    return candidate ? candidate : null;
   }
 
   return null;
@@ -53,6 +55,8 @@ export const attachRestaurant = async (
         subdomain: true,
         name: true,
         active: true,
+        paymentCollectionTiming: true,
+        cashPaymentEnabled: true,
       },
     });
 
@@ -65,6 +69,8 @@ export const attachRestaurant = async (
       slug: restaurant.slug,
       subdomain: restaurant.subdomain,
       name: restaurant.name,
+      paymentCollectionTiming: restaurant.paymentCollectionTiming,
+      cashPaymentEnabled: restaurant.cashPaymentEnabled,
     };
 
     return next();

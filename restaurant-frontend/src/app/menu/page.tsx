@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { apiClient, MenuItem, Category } from '@/lib/api-client';
 import { ChefHat, ShoppingCart, Plus, Minus, Filter, Search } from 'lucide-react';
@@ -12,8 +12,9 @@ import Image from 'next/image';
 
 export default function MenuPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { isAuthenticated } = useAuthStore();
-  const { items, addItem, removeItem, updateQuantity, getTotalItems } = useCartStore();
+  const { items, addItem, removeItem, updateQuantity, setActiveOrderId } = useCartStore();
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -33,8 +34,9 @@ export default function MenuPage() {
 
   useEffect(() => {
     setSelectedSubdomain(apiClient.getSelectedRestaurantSubdomain());
+    setActiveOrderId(searchParams.get('orderId'));
     fetchMenuData();
-  }, []);
+  }, [searchParams, setActiveOrderId]);
 
   const fetchMenuData = async () => {
     try {
@@ -208,6 +210,11 @@ export default function MenuPage() {
             <p className="text-sm text-gray-600 mb-2">Restaurant context: @{selectedSubdomain}</p>
           ) : (
             <p className="text-sm text-orange-700 mb-2">No restaurant selected. Go to Home and select a restaurant first.</p>
+          )}
+          {searchParams.get('orderId') && (
+            <p className="text-sm text-green-700 mb-2">
+              You are adding dishes to an ongoing meal.
+            </p>
           )}
           
           <div className="flex flex-col md:flex-row gap-4 mb-6">

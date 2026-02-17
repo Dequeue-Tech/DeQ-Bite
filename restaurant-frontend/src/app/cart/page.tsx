@@ -7,10 +7,10 @@ import { formatInr } from '@/lib/currency';
 
 export default function CartPage() {
   const router = useRouter();
-  const { items: cartItems, updateQuantity, removeItem, getTotalPricePaise } = useCartStore();
+  const { items: cartItems, updateQuantity, removeItem, getTotalPricePaise, activeOrderId } = useCartStore();
 
   const proceedToCheckout = () => {
-    router.push('/checkout');
+    router.push(activeOrderId ? `/checkout?orderId=${activeOrderId}` : '/checkout');
   };
 
   if (cartItems.length === 0) {

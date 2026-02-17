@@ -23,17 +23,19 @@ export interface User {
 export interface RestaurantSummary {
   id: string;
   name: string;
-  slug: string;
   subdomain: string;
   address?: string | null;
+  paymentCollectionTiming?: 'BEFORE_MEAL' | 'AFTER_MEAL';
+  cashPaymentEnabled?: boolean;
 }
 
 export interface RestaurantMembership {
   id: string;
   name: string;
-  slug: string;
   subdomain: string;
   role: 'OWNER' | 'ADMIN' | 'STAFF';
+  paymentCollectionTiming?: 'BEFORE_MEAL' | 'AFTER_MEAL';
+  cashPaymentEnabled?: boolean;
 }
 
 export interface RestaurantUserEntry {
@@ -116,8 +118,9 @@ export interface Order {
   discountPaise: number;
   totalPaise: number;
   paymentId?: string;
-  paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE';
+  paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH';
   paymentStatus: string;
+  paymentCollectionTiming?: 'BEFORE_MEAL' | 'AFTER_MEAL';
   specialInstructions?: string;
   estimatedTime?: number;
   createdAt: string;
@@ -518,7 +521,7 @@ class ApiClient {
     items: { menuItemId: string; quantity: number; notes?: string }[];
     specialInstructions?: string;
     couponCode?: string;
-    paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE';
+    paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH';
   }): Promise<ApiResponse<Order>> {
     console.log('Sending order data to backend:', orderData);
     console.log('API URL:', this.api.defaults.baseURL);
@@ -551,6 +554,19 @@ class ApiClient {
 
   async cancelOrder(id: string): Promise<ApiResponse<Order>> {
     const response = await this.api.put<ApiResponse<Order>>(`/orders/${id}/cancel`);
+    return response.data;
+  }
+
+  async addOrderItems(orderId: string, payload: {
+    items: { menuItemId: string; quantity: number; notes?: string }[];
+    specialInstructions?: string;
+  }): Promise<ApiResponse<Order>> {
+    const response = await this.api.post<ApiResponse<Order>>(`/orders/${orderId}/items`, payload);
+    return response.data;
+  }
+
+  async applyCouponToOrder(orderId: string, couponCode: string): Promise<ApiResponse<Order>> {
+    const response = await this.api.post<ApiResponse<Order>>(`/orders/${orderId}/apply-coupon`, { couponCode });
     return response.data;
   }
 
@@ -607,8 +623,6 @@ class ApiClient {
 
   async createRestaurant(payload: {
     name: string;
-    slug: string;
-    subdomain: string;
     email?: string;
     phone?: string;
     address?: string;
@@ -633,6 +647,49 @@ class ApiClient {
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to add restaurant user');
     }
+  }
+
+  async getCurrentRestaurant(): Promise<any> {
+    const response = await this.api.get<ApiResponse<{ restaurant: any }>>('/restaurants/current');
+    if (response.data.success) {
+      return response.data.data?.restaurant;
+    }
+    throw new Error(response.data.error || 'Failed to fetch current restaurant');
+  }
+
+  async getRestaurantPublicDetails(id: string): Promise<any> {
+    const response = await this.api.get<ApiResponse<{ restaurant: any }>>(`/restaurants/public/${id}`);
+    if (response.data.success) {
+      return response.data.data?.restaurant;
+    }
+    throw new Error(response.data.error || 'Failed to fetch restaurant details');
+  }
+
+  async getRestaurantPaymentPolicy(): Promise<any> {
+    const response = await this.api.get<ApiResponse<{ paymentPolicy: any }>>('/restaurants/settings/payment-policy');
+    if (response.data.success) {
+      return response.data.data?.paymentPolicy;
+    }
+    throw new Error(response.data.error || 'Failed to fetch payment policy');
+  }
+
+  async updateRestaurantPaymentPolicy(payload: {
+    paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
+    cashPaymentEnabled: boolean;
+  }): Promise<any> {
+    const response = await this.api.put<ApiResponse<{ paymentPolicy: any }>>('/restaurants/settings/payment-policy', payload);
+    if (response.data.success) {
+      return response.data.data?.paymentPolicy;
+    }
+    throw new Error(response.data.error || 'Failed to update payment policy');
+  }
+
+  async confirmCashPayment(orderId: string): Promise<any> {
+    const response = await this.api.post<ApiResponse<{ order: Order }>>('/payments/cash/confirm', { orderId });
+    if (response.data.success) {
+      return response.data.data?.order;
+    }
+    throw new Error(response.data.error || 'Failed to confirm cash payment');
   }
 
   // Generic API methods

@@ -2,13 +2,13 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, MapPin, CreditCard, FileText, RefreshCw, Download, Mail } from 'lucide-react';
+import { Clock, MapPin, CreditCard, FileText, RefreshCw, Download, Mail, PlusCircle } from 'lucide-react';
 import { apiClient, Order } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
 
-const statusColors = {
+const statusColors: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
   CONFIRMED: 'bg-blue-100 text-blue-800',
   PREPARING: 'bg-orange-100 text-orange-800',
@@ -18,28 +18,23 @@ const statusColors = {
   CANCELLED: 'bg-red-100 text-red-800',
 };
 
-const statusLabels = {
-  PENDING: 'Pending',
-  CONFIRMED: 'Confirmed',
-  PREPARING: 'Preparing',
-  READY: 'Ready',
-  SERVED: 'Served',
-  COMPLETED: 'Completed',
-  CANCELLED: 'Cancelled',
-};
-
 export default function OrdersPage() {
   const router = useRouter();
   const { user, isAuthenticated } = useAuthStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
+  const [payNowOrderId, setPayNowOrderId] = useState<string | null>(null);
+  const [couponByOrder, setCouponByOrder] = useState<Record<string, string>>({});
+  const [applyingCouponOrderId, setApplyingCouponOrderId] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
-  const [sendingInvoice, setsendingInvoice] = useState<string | null>(null);
+  const [sendingInvoice, setSendingInvoice] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated && user) {
       fetchOrders();
+      const timer = setInterval(fetchOrders, 15000);
+      return () => clearInterval(timer);
     }
   }, [isAuthenticated, user]);
 
@@ -50,87 +45,42 @@ export default function OrdersPage() {
       if (response.success) {
         setOrders(response.data || []);
       }
-    } catch (error) {
-      console.error('Error fetching orders:', error);
+    } catch {
       toast.error('Failed to fetch orders');
     } finally {
       setLoading(false);
     }
   };
 
-  const refreshOrders = async () => {
-    await fetchOrders();
-  };
-
-  const formatDate = (dateString: string) => {
-    return new Date(dateString).toLocaleString();
-  };
-
-  const getTimeElapsed = (createdAt: string) => {
-    const now = new Date();
-    const created = new Date(createdAt);
-    const diffInMinutes = Math.floor((now.getTime() - created.getTime()) / (1000 * 60));
-    
-    if (diffInMinutes < 60) {
-      return `${diffInMinutes} minutes ago`;
-    } else if (diffInMinutes < 1440) {
-      const hours = Math.floor(diffInMinutes / 60);
-      return `${hours} hour${hours > 1 ? 's' : ''} ago`;
-    } else {
-      const days = Math.floor(diffInMinutes / 1440);
-      return `${days} day${days > 1 ? 's' : ''} ago`;
-    }
-  };
-
   const handleDownloadInvoice = async (orderId: string) => {
     try {
       setDownloadingInvoice(orderId);
-      // Generate and download invoice - only for completed payments
-      const order = orders.find(o => o.id === orderId);
-      if (order && order.paymentStatus === 'COMPLETED') {
-        // Try to get existing invoice
-        const invoiceResponse = await apiClient.getInvoice(orderId);
-        let invoiceId = invoiceResponse?.invoice?.id as string | undefined;
-
-        // If not found, generate it
-        if (!invoiceId) {
-          const gen = await apiClient.generateInvoice(orderId, []);
-          invoiceId = gen?.invoice?.id;
-        }
-
-        if (!invoiceId) {
-          toast.error('Failed to get or generate invoice.');
-          return;
-        }
-
-        // Download via authenticated blob request; if fails, refresh and retry
-        let blob: Blob; let filename: string;
-        try {
-          const res = await apiClient.downloadInvoicePdf(invoiceId);
-          blob = res.blob; filename = res.filename;
-        } catch (err) {
-          await apiClient.refreshInvoicePdf(invoiceId);
-          const res2 = await apiClient.downloadInvoicePdf(invoiceId);
-          blob = res2.blob; filename = res2.filename;
-        }
-
-        const blobUrl = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = blobUrl;
-        a.download = filename || 'invoice.pdf';
-        document.body.appendChild(a);
-        a.click();
-        a.remove();
-        URL.revokeObjectURL(blobUrl);
-        toast.success('Invoice download started');
-
-        await fetchOrders();
-      } else {
-        toast.error('Invoice can only be generated for completed payments');
+      const order = orders.find((o) => o.id === orderId);
+      if (!order || order.paymentStatus !== 'COMPLETED') {
+        toast.error('Invoice is available only after payment is completed');
+        return;
       }
+
+      const invoiceResponse = await apiClient.getInvoice(orderId);
+      let invoiceId = invoiceResponse?.invoice?.id as string | undefined;
+      if (!invoiceId) {
+        const gen = await apiClient.generateInvoice(orderId, []);
+        invoiceId = gen?.invoice?.id;
+      }
+      if (!invoiceId) throw new Error('Failed to get invoice');
+
+      const res = await apiClient.downloadInvoicePdf(invoiceId);
+      const blobUrl = URL.createObjectURL(res.blob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = res.filename || 'invoice.pdf';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(blobUrl);
+      toast.success('Invoice download started');
     } catch (error: any) {
-      console.error('Error generating invoice:', error);
-      toast.error(error.message || 'Failed to generate invoice');
+      toast.error(error?.message || 'Failed to download invoice');
     } finally {
       setDownloadingInvoice(null);
     }
@@ -138,83 +88,68 @@ export default function OrdersPage() {
 
   const handleSendInvoice = async (orderId: string) => {
     try {
-      setsendingInvoice(orderId);
-      // Check if invoice already exists for this order
-      const order = orders.find(o => o.id === orderId);
-      if (order && order.paymentStatus === 'COMPLETED') {
-        // First try to get existing invoice
-        try {
-          const invoiceResponse = await apiClient.getInvoice(orderId);
-          if (invoiceResponse && invoiceResponse.invoice) {
-            // Resend existing invoice
-            const response = await apiClient.resendInvoice(invoiceResponse.invoice.id, ['EMAIL']);
-            if (response) {
-              // Check if there were any warnings
-              if (response.warnings && response.warnings.length > 0) {
-                toast.success(`Invoice sent with warnings: ${response.warnings.join(', ')}`);
-              } else {
-                toast.success('Invoice sent to your email!');
-              }
-            } else {
-              toast.error('Failed to send invoice. Please try again.');
-            }
-          } else {
-            // Generate new invoice if none exists
-            const response = await apiClient.generateInvoice(orderId, ['EMAIL']);
-            if (response && response.invoice) {
-              // Check if there were any warnings
-              if (response.warnings && response.warnings.length > 0) {
-                toast.success(`Invoice generated and sent with warnings: ${response.warnings.join(', ')}`);
-              } else {
-                toast.success('Invoice generated and sent to your email!');
-              }
-            } else {
-              toast.error('Failed to generate invoice. Please try again.');
-            }
-          }
-        } catch (error) {
-          // If getting invoice fails, generate a new one
-          try {
-            const response = await apiClient.generateInvoice(orderId, ['EMAIL']);
-            if (response && response.invoice) {
-              // Check if there were any warnings
-              if (response.warnings && response.warnings.length > 0) {
-                toast.success(`Invoice generated and sent with warnings: ${response.warnings.join(', ')}`);
-              } else {
-                toast.success('Invoice generated and sent to your email!');
-              }
-            } else {
-              toast.error('Failed to generate invoice. Please try again.');
-            }
-          } catch (generateError) {
-            console.error('Error generating invoice:', generateError);
-            toast.error('Failed to generate invoice. Please try again.');
-          }
+      setSendingInvoice(orderId);
+      const order = orders.find((o) => o.id === orderId);
+      if (!order || order.paymentStatus !== 'COMPLETED') {
+        toast.error('Invoice can be sent only after payment is completed');
+        return;
+      }
+
+      try {
+        const invoiceResponse = await apiClient.getInvoice(orderId);
+        if (invoiceResponse?.invoice) {
+          await apiClient.resendInvoice(invoiceResponse.invoice.id, ['EMAIL']);
+        } else {
+          await apiClient.generateInvoice(orderId, ['EMAIL']);
         }
+      } catch {
+        await apiClient.generateInvoice(orderId, ['EMAIL']);
+      }
+      toast.success('Invoice sent to your email');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to send invoice');
+    } finally {
+      setSendingInvoice(null);
+    }
+  };
+
+  const formatDate = (dateString: string) => new Date(dateString).toLocaleString();
+
+  const handleApplyCouponToOrder = async (orderId: string) => {
+    const couponCode = (couponByOrder[orderId] || '').trim();
+    if (!couponCode) {
+      toast.error('Enter a coupon code');
+      return;
+    }
+
+    try {
+      setApplyingCouponOrderId(orderId);
+      const response = await apiClient.applyCouponToOrder(orderId, couponCode);
+      if (response.success) {
+        toast.success('Coupon applied');
+        await fetchOrders();
       } else {
-        toast.error('Invoice can only be sent for completed payments');
+        throw new Error(response.error || 'Failed to apply coupon');
       }
     } catch (error: any) {
-      console.error('Error sending invoice:', error);
-      toast.error(error.message || 'Failed to send invoice');
+      toast.error(error?.message || 'Failed to apply coupon');
     } finally {
-      setsendingInvoice(null);
+      setApplyingCouponOrderId(null);
     }
   };
 
   return (
     <div className="min-h-screen bg-gray-50">
       <div className="max-w-7xl mx-auto px-4 py-8">
-        {/* Enhanced Refresh Button */}
         <div className="flex justify-between items-center mb-6">
           <h1 className="text-3xl font-bold text-gray-900">Your Orders</h1>
           <button
-            onClick={refreshOrders}
+            onClick={fetchOrders}
             disabled={loading}
-            className="flex items-center px-4 py-2 bg-gradient-to-r from-orange-500 to-orange-600 text-white rounded-xl shadow-md hover:from-orange-600 hover:to-orange-700 transition-all duration-300 transform hover:scale-105 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+            className="flex items-center px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50"
           >
             <RefreshCw className={`h-5 w-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            <span className="font-medium">Refresh Orders</span>
+            Refresh Orders
           </button>
         </div>
 
@@ -226,186 +161,172 @@ export default function OrdersPage() {
           <div className="text-center py-16">
             <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
             <h2 className="text-2xl font-bold text-gray-800 mb-4">No Orders Yet</h2>
-            <p className="text-gray-600 mb-8">Start by placing your first order!</p>
-            <button
-              onClick={() => router.push('/menu')}
-              className="bg-orange-600 text-white px-8 py-3 rounded-lg hover:bg-orange-700 transition-colors"
-            >
+            <button onClick={() => router.push('/menu')} className="bg-orange-600 text-white px-8 py-3 rounded-lg hover:bg-orange-700">
               Browse Menu
             </button>
           </div>
         ) : (
           <div className="space-y-6">
-            {orders.map(order => (
-              <div key={order.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                <div className="p-6">
-                  <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
-                    <div>
-                      <h3 className="text-lg font-semibold text-gray-800">
-                        Order #{order.id.substring(0, 8).toUpperCase()}
-                      </h3>
-                      <p className="text-gray-600">{formatDate(order.createdAt)}</p>
-                      <p className="text-sm text-gray-500">{getTimeElapsed(order.createdAt)}</p>
-                    </div>
-                    
-                    <div className="flex items-center space-x-4 mt-4 md:mt-0">
-                      <span className={`px-3 py-1 rounded-full text-sm font-medium ${
-                        statusColors[order.status as keyof typeof statusColors]
-                      }`}>
-                        {statusLabels[order.status as keyof typeof statusLabels]}
-                      </span>
-                      <span className="text-xl font-bold text-orange-600">
-                        {formatInr(order.totalPaise)}
-                      </span>
-                    </div>
-                  </div>
+            {orders.map((order) => {
+              const isOngoing = !['COMPLETED', 'CANCELLED'].includes(order.status);
+              const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';
 
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4">
-                    <div className="flex items-center">
-                      <MapPin className="h-4 w-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">
-                        Table {order.table?.number || order.tableId} - {order.table?.location || 'Not specified'}
-                      </span>
+              return (
+                <div key={order.id} className="bg-white rounded-lg shadow-md overflow-hidden">
+                  <div className="p-6">
+                    <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                      <div>
+                        <h3 className="text-lg font-semibold text-gray-800">Order #{order.id.substring(0, 8).toUpperCase()}</h3>
+                        <p className="text-gray-600">{formatDate(order.createdAt)}</p>
+                      </div>
+                      <div className="flex items-center space-x-4 mt-4 md:mt-0">
+                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
+                          {order.status}
+                        </span>
+                        <span className="text-xl font-bold text-orange-600">{formatInr(order.totalPaise)}</span>
+                      </div>
                     </div>
-                    
-                    <div className="flex items-center">
-                      <Clock className="h-4 w-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">
-                        Est. {order.estimatedTime || 30} minutes
-                      </span>
-                    </div>
-                    
-                    <div className="flex items-center">
-                      <CreditCard className="h-4 w-4 text-gray-400 mr-2" />
-                      <span className="text-sm text-gray-600">
-                        Payment: {order.paymentStatus.toLowerCase()}
-                      </span>
-                    </div>
-                  </div>
 
-                  {/* Order Items */}
-                  <div className="border-t border-gray-200 pt-4">
-                    <div className="flex justify-between items-center mb-2">
-                      <h4 className="font-medium text-gray-800">Items Ordered</h4>
-                      <button
-                        onClick={() => setSelectedOrder(selectedOrder === order.id ? null : order.id)}
-                        className="text-orange-600 hover:text-orange-700 text-sm"
-                      >
-                        {selectedOrder === order.id ? 'Hide Details' : 'View Details'}
-                      </button>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-sm text-gray-600">
+                      <div className="flex items-center"><MapPin className="h-4 w-4 mr-2" />Table {order.table?.number || order.tableId}</div>
+                      <div className="flex items-center"><Clock className="h-4 w-4 mr-2" />Est. {order.estimatedTime || 30} minutes</div>
+                      <div className="flex items-center"><CreditCard className="h-4 w-4 mr-2" />{order.paymentProvider} | {order.paymentStatus}</div>
                     </div>
-                    
-                    {selectedOrder === order.id && (
-                      <div className="space-y-2 mb-4">
-                        {order.items.map((item, index) => (
-                          <div key={index} className="flex justify-between items-center py-2">
-                            <div>
-                              <span className="font-medium">{item.menuItem?.name || 'Item'}</span>
-                              <span className="text-gray-600 ml-2">x{item.quantity}</span>
+
+                    <div className="border-t border-gray-200 pt-4">
+                      <div className="flex justify-between items-center mb-2">
+                        <h4 className="font-medium text-gray-800">Items Ordered</h4>
+                        <button onClick={() => setSelectedOrder(selectedOrder === order.id ? null : order.id)} className="text-orange-600 text-sm">
+                          {selectedOrder === order.id ? 'Hide Details' : 'View Details'}
+                        </button>
+                      </div>
+
+                      {selectedOrder === order.id && (
+                        <div className="space-y-2 mb-4">
+                          {order.items.map((item, index) => (
+                            <div key={index} className="flex justify-between items-center py-2">
+                              <div>
+                                <span className="font-medium">{item.menuItem?.name || 'Item'}</span>
+                                <span className="text-gray-600 ml-2">x{item.quantity}</span>
+                              </div>
+                              <span className="font-semibold">{formatInr(item.pricePaise * item.quantity)}</span>
                             </div>
-                            <span className="font-semibold">
-                              {formatInr(item.pricePaise * item.quantity)}
-                            </span>
-                          </div>
-                        ))}
-                        
-                        <div className="border-t border-gray-200 pt-2 space-y-1">
-                          <div className="flex justify-between text-sm">
+                          ))}
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="flex flex-wrap gap-2 mt-4">
+                      {isOngoing && (
+                        <button
+                          onClick={() => router.push(`/menu?orderId=${order.id}`)}
+                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
+                        >
+                          <PlusCircle className="h-4 w-4 mr-2" />
+                          Add Dishes
+                        </button>
+                      )}
+
+                      {canPayNow && (
+                        <button
+                          onClick={() => setPayNowOrderId(payNowOrderId === order.id ? null : order.id)}
+                          className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                        >
+                          {payNowOrderId === order.id ? 'Hide Pay Section' : 'Pay Now'}
+                        </button>
+                      )}
+
+                      {order.paymentProvider === 'CASH' && order.paymentStatus !== 'COMPLETED' && (
+                        <div className="px-4 py-2 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200 text-sm">
+                          Cash payment pending manager/admin confirmation.
+                        </div>
+                      )}
+
+                      {order.paymentStatus === 'COMPLETED' && (
+                        <>
+                          <button
+                            onClick={() => handleDownloadInvoice(order.id)}
+                            disabled={downloadingInvoice === order.id}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            {downloadingInvoice === order.id ? 'Downloading...' : 'Download Invoice'}
+                          </button>
+                          <button
+                            onClick={() => handleSendInvoice(order.id)}
+                            disabled={sendingInvoice === order.id}
+                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
+                          >
+                            <Mail className="h-4 w-4 mr-2" />
+                            {sendingInvoice === order.id ? 'Sending...' : 'Send Invoice'}
+                          </button>
+                        </>
+                      )}
+                    </div>
+
+                    {payNowOrderId === order.id && canPayNow && (
+                      <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
+                        <h4 className="font-semibold text-gray-900 mb-3">Pay Now Details</h4>
+
+                        <div className="space-y-2 mb-4">
+                          {order.items.map((item) => (
+                            <div key={item.id} className="flex items-center justify-between text-sm">
+                              <div className="text-gray-700">
+                                {item.menuItem?.name || 'Item'} x{item.quantity}
+                              </div>
+                              <div className="font-medium text-gray-900">
+                                {formatInr(item.pricePaise * item.quantity)}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+
+                        <div className="border-t border-orange-200 pt-3 space-y-1 text-sm">
+                          <div className="flex justify-between">
                             <span className="text-gray-600">Subtotal</span>
                             <span>{formatInr(order.subtotalPaise)}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between">
                             <span className="text-gray-600">Discount</span>
-                            <span className="text-green-600">- {formatInr(order.discountPaise || 0)}</span>
+                            <span className="text-green-700">- {formatInr(order.discountPaise || 0)}</span>
                           </div>
-                          <div className="flex justify-between text-sm">
+                          <div className="flex justify-between">
                             <span className="text-gray-600">Tax</span>
                             <span>{formatInr(order.taxPaise)}</span>
                           </div>
-                          <div className="flex justify-between font-semibold">
+                          <div className="flex justify-between text-base font-semibold pt-1">
                             <span>Total</span>
-                            <span className="text-orange-600">{formatInr(order.totalPaise)}</span>
+                            <span className="text-orange-700">{formatInr(order.totalPaise)}</span>
                           </div>
+                        </div>
+
+                        <div className="mt-4 flex flex-col md:flex-row gap-2">
+                          <input
+                            value={couponByOrder[order.id] || ''}
+                            onChange={(e) => setCouponByOrder((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                            placeholder="Enter coupon code"
+                            className="flex-1 px-3 py-2 border border-orange-200 rounded-lg"
+                          />
+                          <button
+                            onClick={() => handleApplyCouponToOrder(order.id)}
+                            disabled={applyingCouponOrderId === order.id}
+                            className="px-4 py-2 border border-orange-300 text-orange-800 rounded-lg hover:bg-orange-100 disabled:opacity-60"
+                          >
+                            {applyingCouponOrderId === order.id ? 'Applying...' : 'Apply Coupon'}
+                          </button>
+                          <button
+                            onClick={() => router.push(`/checkout?orderId=${order.id}&payNow=1`)}
+                            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                          >
+                            Continue to Payment
+                          </button>
                         </div>
                       </div>
                     )}
                   </div>
-
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap gap-2 mt-4">
-                    {order.status === 'PENDING' && (
-                      <button className="px-4 py-2 border border-red-300 text-red-600 rounded-lg hover:bg-red-50 transition-colors">
-                        Cancel Order
-                      </button>
-                    )}
-                    
-                    {(order.status === 'COMPLETED' || order.status === 'CANCELLED') && (
-                      <>
-                        <button className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 transition-colors">
-                          Reorder
-                        </button>
-                        {order.paymentStatus === 'COMPLETED' ? (
-                          <>
-                            <button 
-                              onClick={() => handleDownloadInvoice(order.id)}
-                              disabled={downloadingInvoice === order.id}
-                              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
-                            >
-                              <Download className="h-4 w-4 mr-2" />
-                              {downloadingInvoice === order.id ? 'Generating...' : 'Download Invoice'}
-                            </button>
-                            <button 
-                              onClick={() => handleSendInvoice(order.id)}
-                              disabled={sendingInvoice === order.id}
-                              className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
-                            >
-                              <Mail className="h-4 w-4 mr-2" />
-                              {sendingInvoice === order.id ? 'Sending...' : 'Send Invoice'}
-                            </button>
-                          </>
-                        ) : (
-                          <button 
-                            disabled
-                            className="px-4 py-2 border border-gray-300 text-gray-400 rounded-lg cursor-not-allowed flex items-center"
-                          >
-                            <Download className="h-4 w-4 mr-2" />
-                            Pay to Download Invoice
-                          </button>
-                        )}
-                      </>
-                    )}
-                    
-                    {order.status === 'READY' && (
-                      <div className="px-4 py-2 bg-green-100 text-green-800 rounded-lg">
-                        Your order is ready for pickup!
-                      </div>
-                    )}
-                    
-                    {/* Show invoice buttons for any order with completed payment, not just completed/cancelled orders */}
-                    {order.status !== 'COMPLETED' && order.status !== 'CANCELLED' && order.paymentStatus === 'COMPLETED' && (
-                      <>
-                        <button 
-                          onClick={() => handleDownloadInvoice(order.id)}
-                          disabled={downloadingInvoice === order.id}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
-                        >
-                          <Download className="h-4 w-4 mr-2" />
-                          {downloadingInvoice === order.id ? 'Generating...' : 'Download Invoice'}
-                        </button>
-                        <button 
-                          onClick={() => handleSendInvoice(order.id)}
-                          disabled={sendingInvoice === order.id}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors flex items-center"
-                        >
-                          <Mail className="h-4 w-4 mr-2" />
-                          {sendingInvoice === order.id ? 'Sending...' : 'Send Invoice'}
-                        </button>
-                      </>
-                    )}
-                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>

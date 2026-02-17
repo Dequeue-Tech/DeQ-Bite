@@ -1,144 +1,9 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
-import rateLimit from 'express-rate-limit';
-import dotenv from 'dotenv';
-import { errorHandler } from '@/middleware/errorHandler';
+import app from '@/app';
 import { logger } from '@/utils/logger';
 import { connectDatabase } from '@/config/database';
-import { attachRestaurant } from '@/middleware/restaurant';
 
-// Import route modules
-import authRoutes from '@/routes/auth';
-import paymentRoutes from '@/routes/payments';
-import invoiceRoutes from '@/routes/invoices';
-import pdfRoutes from '@/routes/pdf';
-import menuRoutes from '@/routes/menu';
-import categoryRoutes from '@/routes/categories';
-import tableRoutes from '@/routes/tables';
-import orderRoutes from '@/routes/orders'; // Added missing orders route import
-import couponRoutes from '@/routes/coupons';
-import restaurantRoutes from '@/routes/restaurants';
-
-// Load environment variables
-dotenv.config();
-
-// Add early validation for critical environment variables
-if (process.env.NODE_ENV === 'production') {
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
-    logger.error('❌ JWT_SECRET is not properly configured for production');
-    logger.error('Please set a secure JWT_SECRET in your Render environment variables');
-    // Note: We won't exit here to avoid crashing the app, but this should be addressed
-  }
-}
-
-const app = express();
 const PORT = process.env.PORT || 5000;
 
-// Security middleware
-app.use(helmet({
-  contentSecurityPolicy: false, // Disable CSP for API server - let frontend handle CSP
-  crossOriginEmbedderPolicy: false,
-}));
-
-// CORS configuration
-app.use(cors({
-  origin: (origin, callback) => {
-    const allowedOrigins = [
-      process.env.FRONTEND_URL?.replace(/\/$/, ''), // Remove trailing slash
-      'http://localhost:5174',
-      'http://localhost:3000',
-      'https://de-q-restaurants-frontend.vercel.app' // Add your frontend Render URL
-    ].filter(Boolean);
-    
-    // Allow requests with no origin (like mobile apps or curl requests)
-    if (!origin) return callback(null, true);
-    
-    if (allowedOrigins.includes(origin.replace(/\/$/, ''))) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain'],
-}));
-
-// Rate limiting
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // limit each IP to 100 requests per windowMs
-  message: {
-    error: 'Too many requests from this IP, please try again later.',
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
-app.use(limiter);
-
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true }));
-
-// Attach restaurant context from subdomain or header
-app.use(attachRestaurant);
-
-// Logging
-app.use(morgan('combined', {
-  stream: {
-    write: (message: string) => {
-      logger.info(message.trim());
-    },
-  },
-}));
-
-// Health check endpoint
-app.get('/health', (_req, res) => {
-  res.status(200).json({
-    status: 'OK',
-    timestamp: new Date().toISOString(),
-    uptime: process.uptime(),
-    environment: process.env.NODE_ENV || 'development',
-  });
-});
-
-app.get('/', (_req, res) => {
-  res.status(200).json({
-    message: 'Welcome to the Restaurant Management System API',
-  });
-});
-
-// API routes
-app.use('/api/auth', authRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/invoices', invoiceRoutes);
-app.use('/api/pdf', pdfRoutes);
-app.use('/api/menu', menuRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/tables', tableRoutes);
-app.use('/api/orders', orderRoutes); // Added missing orders route mounting
-app.use('/api/coupons', couponRoutes);
-app.use('/api/restaurants', restaurantRoutes);
-
-// Static files for invoices
-app.use('/invoices', express.static('public/invoices'));
-
-// 404 handler
-app.use((req, res) => {
-  res.status(404).json({
-    error: 'Endpoint not found',
-    path: req.originalUrl,
-    method: req.method,
-  });
-});
-
-// Error handling middleware
-app.use(errorHandler);
-
-// Graceful shutdown
 process.on('SIGTERM', () => {
   logger.info('SIGTERM received, shutting down gracefully');
   process.exit(0);
@@ -149,16 +14,14 @@ process.on('SIGINT', () => {
   process.exit(0);
 });
 
-// Start server
 async function startServer() {
   try {
-    // Connect to database
     await connectDatabase();
-    
+
     app.listen(PORT, () => {
-      logger.info(`🚀 Server running on port ${PORT}`);
-      logger.info(`📊 Health check available at http://localhost:${PORT}/health`);
-      logger.info(`🌍 Environment: ${process.env.NODE_ENV || 'development'}`);
+      logger.info(`Server running on port ${PORT}`);
+      logger.info(`Health check available at http://localhost:${PORT}/health`);
+      logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);
     });
   } catch (error) {
     logger.error('Failed to start server:', error);
@@ -167,5 +30,3 @@ async function startServer() {
 }
 
 startServer();
-
-export default app;

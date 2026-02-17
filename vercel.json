@@ -1,0 +1,16 @@
+{
+  "version": 2,
+  "installCommand": "cd restaurant-backend && npm ci",
+  "buildCommand": "cd restaurant-backend && npm run build",
+  "functions": {
+    "restaurant-backend/api/index.js": {
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/(.*)",
+      "destination": "/restaurant-backend/api/index.js"
+    }
+  ]
+}

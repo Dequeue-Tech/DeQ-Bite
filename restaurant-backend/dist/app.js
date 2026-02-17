@@ -29,6 +29,7 @@ if (process.env.NODE_ENV === 'production') {
     }
 }
 const app = (0, express_1.default)();
+app.set('trust proxy', 1);
 app.use((0, helmet_1.default)({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,

@@ -174,55 +174,55 @@ export default function AdminPage() {
   if (!hasAdminAccess) return null;
 
   return (
-    <div className="min-h-screen bg-gray-50 py-6">
-      <div className="max-w-7xl mx-auto px-4">
-        <div className="mb-6">
+    <div className="min-h-screen bg-gray-50 py-4 sm:py-6">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4">
+        <div className="mb-4 sm:mb-6">
           <div className="flex items-center gap-2">
-            <ChefHat className="h-6 w-6 text-orange-600" />
-            <h1 className="text-2xl font-bold text-gray-900">Restaurant Admin</h1>
+            <ChefHat className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Restaurant Admin</h1>
           </div>
-          <p className="text-sm text-gray-600 mt-1">Manage menu, users, and payments.</p>
+          <p className="text-xs sm:text-sm text-gray-600 mt-1">Manage menu, users, and payments.</p>
         </div>
 
-        <div className="flex gap-2 mb-6">
-          <button onClick={() => setActiveTab('menu')} className={`px-4 py-2 rounded-lg ${activeTab === 'menu' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Menu</button>
-          <button onClick={() => setActiveTab('users')} className={`px-4 py-2 rounded-lg ${activeTab === 'users' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Users</button>
-          <button onClick={() => setActiveTab('payments')} className={`px-4 py-2 rounded-lg ${activeTab === 'payments' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Payments</button>
+        <div className="flex flex-wrap gap-2 mb-4 sm:mb-6">
+          <button onClick={() => setActiveTab('menu')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'menu' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Menu</button>
+          <button onClick={() => setActiveTab('users')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'users' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Users</button>
+          <button onClick={() => setActiveTab('payments')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'payments' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Payments</button>
         </div>
 
         {activeTab === 'menu' && (
-          <div className="grid lg:grid-cols-3 gap-6">
-            <div className="lg:col-span-1 bg-white rounded-xl border border-gray-200 p-4">
-              <h2 className="font-semibold text-gray-900 mb-4">Add Dish</h2>
-              <div className="space-y-3">
-                <input placeholder="Dish name" value={menuForm.name} onChange={(e) => setMenuForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                <textarea placeholder="Description" rows={3} value={menuForm.description} onChange={(e) => setMenuForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                <input placeholder="Price (INR)" value={menuForm.priceInr} onChange={(e) => setMenuForm((prev) => ({ ...prev, priceInr: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2" />
-                <select value={menuForm.categoryId} onChange={(e) => setMenuForm((prev) => ({ ...prev, categoryId: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+            <div className="lg:col-span-1 bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+              <h2 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Add Dish</h2>
+              <div className="space-y-2 sm:space-y-3">
+                <input placeholder="Dish name" value={menuForm.name} onChange={(e) => setMenuForm((prev) => ({ ...prev, name: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <textarea placeholder="Description" rows={3} value={menuForm.description} onChange={(e) => setMenuForm((prev) => ({ ...prev, description: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <input placeholder="Price (INR)" value={menuForm.priceInr} onChange={(e) => setMenuForm((prev) => ({ ...prev, priceInr: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+                <select value={menuForm.categoryId} onChange={(e) => setMenuForm((prev) => ({ ...prev, categoryId: e.target.value }))} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm">
                   {categories.map((category) => (<option key={category.id} value={category.id}>{category.name}</option>))}
                 </select>
-                <button onClick={createMenuItem} disabled={saving} className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60 inline-flex items-center justify-center">
+                <button onClick={createMenuItem} disabled={saving} className="w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60 inline-flex items-center justify-center text-sm">
                   <Plus className="h-4 w-4 mr-1" />{saving ? 'Saving...' : 'Add Dish'}
                 </button>
               </div>
             </div>
 
             <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200">
-              <div className="p-4 border-b border-gray-200 flex items-center justify-between">
-                <h2 className="font-semibold text-gray-900">All Dishes ({menuItems.length})</h2>
-                <span className="text-sm text-gray-600">{availableCount} currently available</span>
+              <div className="p-3 sm:p-4 border-b border-gray-200 flex items-center justify-between">
+                <h2 className="font-semibold text-gray-900 text-sm sm:text-base">All Dishes ({menuItems.length})</h2>
+                <span className="text-xs sm:text-sm text-gray-600">{availableCount} available</span>
               </div>
-              <div className="p-4 space-y-3 max-h-[580px] overflow-auto">
+              <div className="p-3 sm:p-4 space-y-2 sm:space-y-3 max-h-[400px] sm:max-h-[580px] overflow-auto">
                 {menuItems.map((item) => (
-                  <div key={item.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold text-gray-900">{item.name}</p>
-                      <p className="text-sm text-gray-600">{item.category?.name} - {formatInr(item.pricePaise)}</p>
+                  <div key={item.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                      <p className="font-semibold text-gray-900 text-sm sm:text-base">{item.name}</p>
+                      <p className="text-xs text-gray-600">{item.category?.name} - {formatInr(item.pricePaise)}</p>
                       <span className={`inline-block text-xs mt-1 px-2 py-1 rounded ${item.available ? 'bg-green-100 text-green-700' : 'bg-gray-200 text-gray-700'}`}>{item.available ? 'Available' : 'Unavailable'}</span>
                     </div>
                     <div className="flex gap-2">
-                      <button onClick={() => toggleAvailability(item)} className="text-xs px-3 py-2 rounded border border-gray-300 hover:bg-gray-100">{item.available ? 'Mark Unavailable' : 'Mark Available'}</button>
-                      <button onClick={() => removeDish(item)} className="text-xs px-3 py-2 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 inline-flex items-center"><Trash2 className="h-3.5 w-3.5 mr-1" />Remove</button>
+                      <button onClick={() => toggleAvailability(item)} className="text-xs px-2.5 sm:px-3 py-1.5 sm:py-2 rounded border border-gray-300 hover:bg-gray-100 whitespace-nowrap">{item.available ? 'Mark Unavail.' : 'Mark Avail.'}</button>
+                      <button onClick={() => removeDish(item)} className="text-xs px-2.5 sm:px-3 py-1.5 sm:py-2 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 inline-flex items-center whitespace-nowrap"><Trash2 className="h-3.5 w-3.5 mr-1" />Remove</button>
                     </div>
                   </div>
                 ))}
@@ -232,21 +232,21 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'users' && (
-          <div className="bg-white rounded-xl border border-gray-200 p-4">
-            <h2 className="font-semibold text-gray-900 mb-4">Restaurant Users (Admin/Staff)</h2>
-            <div className="grid md:grid-cols-3 gap-3 mb-4">
-              <input value={userEmail} onChange={(e) => setUserEmail(e.target.value)} placeholder="Existing user email" className="border border-gray-300 rounded-lg px-3 py-2" />
-              <select value={userRole} onChange={(e) => setUserRole(e.target.value as 'OWNER' | 'ADMIN' | 'STAFF')} className="border border-gray-300 rounded-lg px-3 py-2">
+          <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+            <h2 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Restaurant Users (Admin/Staff)</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-3 mb-3 sm:mb-4">
+              <input value={userEmail} onChange={(e) => setUserEmail(e.target.value)} placeholder="Existing user email" className="border border-gray-300 rounded-lg px-3 py-2 text-sm" />
+              <select value={userRole} onChange={(e) => setUserRole(e.target.value as 'OWNER' | 'ADMIN' | 'STAFF')} className="border border-gray-300 rounded-lg px-3 py-2 text-sm">
                 <option value="STAFF">Staff</option><option value="ADMIN">Admin</option><option value="OWNER">Owner</option>
               </select>
-              <button onClick={addRestaurantUser} className="bg-orange-600 text-white rounded-lg px-4 py-2 hover:bg-orange-700">Add / Update User</button>
+              <button onClick={addRestaurantUser} className="bg-orange-600 text-white rounded-lg px-3 sm:px-4 py-2 hover:bg-orange-700 text-sm">Add / Update User</button>
             </div>
 
             <div className="space-y-2">
               {restaurantUsers.map((entry) => (
-                <div key={entry.membershipId} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between">
-                  <div><p className="font-medium text-gray-900">{entry.user.name}</p><p className="text-sm text-gray-600">{entry.user.email}</p></div>
-                  <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">{entry.role}</span>
+                <div key={entry.membershipId} className="border border-gray-200 rounded-lg p-2.5 sm:p-3 flex items-center justify-between">
+                  <div className="min-w-0 flex-1 mr-2"><p className="font-medium text-gray-900 text-sm sm:text-base truncate">{entry.user.name}</p><p className="text-xs text-gray-600 truncate">{entry.user.email}</p></div>
+                  <span className="text-xs px-2 py-1 rounded bg-orange-100 text-orange-700 whitespace-nowrap">{entry.role}</span>
                 </div>
               ))}
             </div>
@@ -254,25 +254,25 @@ export default function AdminPage() {
         )}
 
         {activeTab === 'payments' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h2 className="font-semibold text-gray-900 mb-3">Payment Policy</h2>
-              <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-4 sm:space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+              <h2 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Payment Policy</h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">When to collect payment</label>
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">When to collect payment</label>
                   <select
                     value={paymentPolicy?.paymentCollectionTiming || 'AFTER_MEAL'}
                     onChange={(e) => setPaymentPolicy((prev) => ({
                       paymentCollectionTiming: e.target.value as 'BEFORE_MEAL' | 'AFTER_MEAL',
                       cashPaymentEnabled: prev?.cashPaymentEnabled ?? true,
                     }))}
-                    className="w-full border border-gray-300 rounded-lg px-3 py-2"
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm"
                   >
                     <option value="BEFORE_MEAL">Before Meal (Compulsory)</option>
                     <option value="AFTER_MEAL">After Meal (Pay at End)</option>
                   </select>
                 </div>
-                <div className="flex items-center pt-6">
+                <div className="flex items-center pt-0 sm:pt-6">
                   <input
                     id="cashEnabled"
                     type="checkbox"
@@ -283,31 +283,31 @@ export default function AdminPage() {
                     }))}
                     className="mr-2"
                   />
-                  <label htmlFor="cashEnabled" className="text-sm text-gray-700">Allow cash payments</label>
+                  <label htmlFor="cashEnabled" className="text-xs sm:text-sm text-gray-700">Allow cash payments</label>
                 </div>
               </div>
-              <button onClick={savePaymentPolicy} className="mt-4 bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700">Save Policy</button>
+              <button onClick={savePaymentPolicy} className="mt-3 sm:mt-4 bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 text-sm">Save Policy</button>
             </div>
 
-            <div className="bg-white rounded-xl border border-gray-200 p-4">
-              <h2 className="font-semibold text-gray-900 mb-4">Cash Payments Pending Confirmation</h2>
+            <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+              <h2 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Cash Payments Pending Confirmation</h2>
               {cashOrders.length === 0 ? (
-                <p className="text-sm text-gray-600">No pending cash payments.</p>
+                <p className="text-xs sm:text-sm text-gray-600">No pending cash payments.</p>
               ) : (
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {cashOrders.map((order) => (
-                    <div key={order.id} className="border border-gray-200 rounded-lg p-3 flex items-center justify-between">
-                      <div>
-                        <p className="font-semibold text-gray-900">Order #{order.id.slice(0, 8).toUpperCase()}</p>
-                        <p className="text-sm text-gray-600">{order.user?.name || 'Customer'} | {formatInr(order.totalPaise)} | {order.status}</p>
+                    <div key={order.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-gray-900 text-sm sm:text-base">Order #{order.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} | {formatInr(order.totalPaise)} | {order.status}</p>
                       </div>
                       <button
                         onClick={() => confirmCashPayment(order.id)}
                         disabled={confirmingCashOrderId === order.id}
-                        className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-60 inline-flex items-center"
+                        className="bg-green-600 text-white px-3 py-2 rounded-lg hover:bg-green-700 disabled:opacity-60 inline-flex items-center justify-center text-xs sm:text-sm whitespace-nowrap"
                       >
-                        <CheckCircle className="h-4 w-4 mr-1" />
-                        {confirmingCashOrderId === order.id ? 'Confirming...' : 'Confirm Payment'}
+                        <CheckCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1" />
+                        {confirmingCashOrderId === order.id ? 'Confirming...' : 'Confirm'}
                       </button>
                     </div>
                   ))}

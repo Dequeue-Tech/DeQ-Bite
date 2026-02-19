@@ -234,22 +234,22 @@ export default function SecurePaymentProcessor({
   // Show success message when verification is successful but before transitioning
   if (verificationStatus === 'success' && paymentSuccess) {
     return (
-      <div className="bg-white rounded-lg shadow-md p-6 text-center">
-        <CheckCircle className="h-16 w-16 text-green-600 mx-auto mb-4" />
-        <h2 className="text-2xl font-bold text-green-800 mb-2">Payment Successful!</h2>
-        <p className="text-gray-600 mb-4">
+      <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 text-center">
+        <CheckCircle className="h-12 w-12 sm:h-16 sm:w-16 text-green-600 mx-auto mb-3 sm:mb-4" />
+        <h2 className="text-xl sm:text-2xl font-bold text-green-800 mb-2">Payment Successful!</h2>
+        <p className="text-sm sm:text-base text-gray-600 mb-4">
           Your order has been confirmed and you'll be redirected shortly.
         </p>
-        <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
-          <p className="text-green-800 font-medium">Order Details:</p>
-          <p className="text-green-700">Order ID: #{order.id.substring(0, 8).toUpperCase()}</p>
-          <p className="text-green-700">Amount: {formatInr(order.totalPaise)}</p>
-          <p className="text-green-700">Table: {order.table.number}</p>
+        <div className="bg-green-50 border border-green-200 rounded-lg p-3 sm:p-4 mb-4">
+          <p className="text-green-800 font-medium text-sm sm:text-base">Order Details:</p>
+          <p className="text-green-700 text-sm sm:text-base">Order ID: #{order.id.substring(0, 8).toUpperCase()}</p>
+          <p className="text-green-700 text-sm sm:text-base">Amount: {formatInr(order.totalPaise)}</p>
+          <p className="text-green-700 text-sm sm:text-base">Table: {order.table.number}</p>
         </div>
-        <div className="flex justify-center space-x-3">
+        <div className="flex justify-center">
           <button
             onClick={() => onPaymentSuccess()}
-            className="bg-orange-600 text-white py-2 px-4 rounded-lg hover:bg-orange-700 transition-colors"
+            className="bg-orange-600 text-white py-2.5 sm:py-2 px-4 sm:px-6 rounded-lg hover:bg-orange-700 transition-colors text-sm sm:text-base w-full sm:w-auto"
           >
             Continue to Order Summary
           </button>
@@ -259,53 +259,55 @@ export default function SecurePaymentProcessor({
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-md p-6">
-      <h2 className="text-xl font-semibold mb-4">Secure Payment</h2>
+    <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+      <h2 className="text-lg sm:text-xl font-semibold mb-4">Secure Payment</h2>
       
       {/* Security Features */}
-      <div className="space-y-4 mb-6">
-        <div className="flex items-center p-4 border border-green-200 rounded-lg bg-green-50">
-          <Shield className="h-5 w-5 text-green-600 mr-3" />
-          <div>
-            <p className="font-medium text-green-900">Bank-Grade Security</p>
-            <p className="text-sm text-green-700">Your payment is secured by Razorpay with end-to-end encryption</p>
+      <div className="space-y-3 sm:space-y-4 mb-4 sm:mb-6">
+        <div className="flex items-start sm:items-center p-3 sm:p-4 border border-green-200 rounded-lg bg-green-50">
+          <Shield className="h-5 w-5 text-green-600 mr-2 sm:mr-3 flex-shrink-0 mt-0.5 sm:mt-0" />
+          <div className="min-w-0">
+            <p className="font-medium text-green-900 text-sm sm:text-base">Bank-Grade Security</p>
+            <p className="text-xs sm:text-sm text-green-700">Your payment is secured by Razorpay with end-to-end encryption</p>
           </div>
         </div>
 
-        <div className="flex items-center p-4 border border-blue-200 rounded-lg bg-blue-50">
-          <CreditCard className="h-5 w-5 text-blue-600 mr-3" />
-          <div>
-            <p className="font-medium text-blue-900">Multiple Payment Options</p>
-            <p className="text-sm text-blue-700">Credit/Debit Cards, UPI, Net Banking, and Wallets</p>
+        <div className="flex items-start sm:items-center p-3 sm:p-4 border border-blue-200 rounded-lg bg-blue-50">
+          <CreditCard className="h-5 w-5 text-blue-600 mr-2 sm:mr-3 flex-shrink-0 mt-0.5 sm:mt-0" />
+          <div className="min-w-0">
+            <p className="font-medium text-blue-900 text-sm sm:text-base">Multiple Payment Options</p>
+            <p className="text-xs sm:text-sm text-blue-700">Credit/Debit Cards, UPI, Net Banking, and Wallets</p>
           </div>
         </div>
 
         {verificationStatus !== 'idle' && (
-          <div className="flex items-center p-4 border border-gray-200 rounded-lg bg-gray-50">
-            {getPaymentStatusIcon()}
-            <div className="ml-3">
-              <p className="font-medium text-gray-900">Payment Status</p>
-              <p className="text-sm text-gray-700">{getVerificationMessage()}</p>
+          <div className="flex items-start sm:items-center p-3 sm:p-4 border border-gray-200 rounded-lg bg-gray-50">
+            <div className="flex-shrink-0 mr-2 sm:mr-3 mt-0.5 sm:mt-0">
+              {getPaymentStatusIcon()}
+            </div>
+            <div className="min-w-0">
+              <p className="font-medium text-gray-900 text-sm sm:text-base">Payment Status</p>
+              <p className="text-xs sm:text-sm text-gray-700">{getVerificationMessage()}</p>
             </div>
           </div>
         )}
       </div>
 
       {/* Order Summary */}
-      <div className="border-t pt-4 mb-6">
-        <div className="flex justify-between items-center mb-2">
+      <div className="border-t pt-3 sm:pt-4 mb-4 sm:mb-6">
+        <div className="flex justify-between items-center mb-2 text-sm sm:text-base">
           <span className="text-gray-600">Subtotal:</span>
           <span>{formatInr(order.subtotalPaise)}</span>
         </div>
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex justify-between items-center mb-2 text-sm sm:text-base">
           <span className="text-gray-600">Discount:</span>
           <span className="text-green-600">- {formatInr(order.discountPaise)}</span>
         </div>
-        <div className="flex justify-between items-center mb-2">
+        <div className="flex justify-between items-center mb-2 text-sm sm:text-base">
           <span className="text-gray-600">Tax:</span>
           <span>{formatInr(order.taxPaise)}</span>
         </div>
-        <div className="flex justify-between items-center text-lg font-bold border-t pt-2">
+        <div className="flex justify-between items-center text-base sm:text-lg font-bold border-t pt-2">
           <span>Total:</span>
           <span>{formatInr(order.totalPaise)}</span>
         </div>
@@ -315,10 +317,10 @@ export default function SecurePaymentProcessor({
       <button
         onClick={initiateSecurePayment}
         disabled={paymentLoading || verificationStatus === 'verifying'}
-        className={`w-full py-3 px-4 rounded-lg font-medium transition-colors ${
+        className={`w-full py-3 sm:py-3.5 px-4 rounded-lg font-medium transition-colors text-sm sm:text-base min-h-[48px] touch-manipulation ${
           paymentLoading || verificationStatus === 'verifying'
             ? 'bg-gray-400 cursor-not-allowed text-white'
-            : 'bg-orange-600 hover:bg-orange-700 text-white'
+            : 'bg-orange-600 hover:bg-orange-700 active:bg-orange-800 text-white'
         }`}
       >
         {paymentLoading || verificationStatus === 'verifying' ? (
@@ -335,7 +337,7 @@ export default function SecurePaymentProcessor({
       </button>
 
       {/* Security Notice */}
-      <div className="mt-4 text-center text-sm text-gray-500">
+      <div className="mt-4 text-center text-xs sm:text-sm text-gray-500">
         <p>🔒 Your payment information is encrypted and secure</p>
         <p>Powered by Razorpay - PCI DSS Compliant</p>
       </div>

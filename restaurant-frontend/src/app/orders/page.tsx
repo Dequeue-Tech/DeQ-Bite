@@ -140,57 +140,57 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
-        <div className="flex justify-between items-center mb-6">
-          <h1 className="text-3xl font-bold text-gray-900">Your Orders</h1>
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Your Orders</h1>
           <button
             onClick={fetchOrders}
             disabled={loading}
-            className="flex items-center px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50"
+            className="flex items-center px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 text-sm sm:text-base"
           >
-            <RefreshCw className={`h-5 w-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh Orders
+            <RefreshCw className={`h-4 w-4 sm:h-5 sm:w-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
+            Refresh
           </button>
         </div>
 
         {loading ? (
-          <div className="flex justify-center items-center h-64">
-            <RefreshCw className="h-8 w-8 animate-spin text-orange-600" />
+          <div className="flex justify-center items-center h-48 sm:h-64">
+            <RefreshCw className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-orange-600" />
           </div>
         ) : orders.length === 0 ? (
-          <div className="text-center py-16">
-            <FileText className="h-16 w-16 text-gray-400 mx-auto mb-4" />
-            <h2 className="text-2xl font-bold text-gray-800 mb-4">No Orders Yet</h2>
-            <button onClick={() => router.push('/menu')} className="bg-orange-600 text-white px-8 py-3 rounded-lg hover:bg-orange-700">
+          <div className="text-center py-12 sm:py-16">
+            <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
+            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">No Orders Yet</h2>
+            <button onClick={() => router.push('/menu')} className="bg-orange-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 text-sm sm:text-base">
               Browse Menu
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-4 sm:space-y-6">
             {orders.map((order) => {
               const isOngoing = !['COMPLETED', 'CANCELLED'].includes(order.status);
               const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';
 
               return (
                 <div key={order.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <div className="p-6">
-                    <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-4">
+                  <div className="p-4 sm:p-6">
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
                       <div>
-                        <h3 className="text-lg font-semibold text-gray-800">Order #{order.id.substring(0, 8).toUpperCase()}</h3>
-                        <p className="text-gray-600">{formatDate(order.createdAt)}</p>
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-800">Order #{order.id.substring(0, 8).toUpperCase()}</h3>
+                        <p className="text-gray-600 text-xs sm:text-sm">{formatDate(order.createdAt)}</p>
                       </div>
-                      <div className="flex items-center space-x-4 mt-4 md:mt-0">
-                        <span className={`px-3 py-1 rounded-full text-sm font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
+                      <div className="flex items-center gap-2 sm:gap-4">
+                        <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
                           {order.status}
                         </span>
-                        <span className="text-xl font-bold text-orange-600">{formatInr(order.totalPaise)}</span>
+                        <span className="text-lg sm:text-xl font-bold text-orange-600">{formatInr(order.totalPaise)}</span>
                       </div>
                     </div>
 
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-4 text-sm text-gray-600">
-                      <div className="flex items-center"><MapPin className="h-4 w-4 mr-2" />Table {order.table?.number || order.tableId}</div>
-                      <div className="flex items-center"><Clock className="h-4 w-4 mr-2" />Est. {order.estimatedTime || 30} minutes</div>
-                      <div className="flex items-center"><CreditCard className="h-4 w-4 mr-2" />{order.paymentProvider} | {order.paymentStatus}</div>
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm text-gray-600">
+                      <div className="flex items-center"><MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />Table {order.table?.number || order.tableId}</div>
+                      <div className="flex items-center"><Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />Est. {order.estimatedTime || 30} min</div>
+                      <div className="flex items-center"><CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />{order.paymentProvider} | {order.paymentStatus}</div>
                     </div>
 
                     <div className="border-t border-gray-200 pt-4">
@@ -216,13 +216,13 @@ export default function OrdersPage() {
                       )}
                     </div>
 
-                    <div className="flex flex-wrap gap-2 mt-4">
+                    <div className="flex flex-wrap gap-2 mt-3 sm:mt-4">
                       {isOngoing && (
                         <button
                           onClick={() => router.push(`/menu?orderId=${order.id}`)}
-                          className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
+                          className="px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center text-xs sm:text-sm"
                         >
-                          <PlusCircle className="h-4 w-4 mr-2" />
+                          <PlusCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
                           Add Dishes
                         </button>
                       )}
@@ -230,15 +230,15 @@ export default function OrdersPage() {
                       {canPayNow && (
                         <button
                           onClick={() => setPayNowOrderId(payNowOrderId === order.id ? null : order.id)}
-                          className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                          className="px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-xs sm:text-sm"
                         >
-                          {payNowOrderId === order.id ? 'Hide Pay Section' : 'Pay Now'}
+                          {payNowOrderId === order.id ? 'Hide' : 'Pay Now'}
                         </button>
                       )}
 
                       {order.paymentProvider === 'CASH' && order.paymentStatus !== 'COMPLETED' && (
-                        <div className="px-4 py-2 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200 text-sm">
-                          Cash payment pending manager/admin confirmation.
+                        <div className="px-3 sm:px-4 py-2 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200 text-xs">
+                          Cash payment pending confirmation.
                         </div>
                       )}
 
@@ -247,41 +247,41 @@ export default function OrdersPage() {
                           <button
                             onClick={() => handleDownloadInvoice(order.id)}
                             disabled={downloadingInvoice === order.id}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
+                            className="px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center text-xs sm:text-sm"
                           >
-                            <Download className="h-4 w-4 mr-2" />
-                            {downloadingInvoice === order.id ? 'Downloading...' : 'Download Invoice'}
+                            <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                            {downloadingInvoice === order.id ? '...' : 'Download'}
                           </button>
                           <button
                             onClick={() => handleSendInvoice(order.id)}
                             disabled={sendingInvoice === order.id}
-                            className="px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center"
+                            className="px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center text-xs sm:text-sm"
                           >
-                            <Mail className="h-4 w-4 mr-2" />
-                            {sendingInvoice === order.id ? 'Sending...' : 'Send Invoice'}
+                            <Mail className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
+                            {sendingInvoice === order.id ? '...' : 'Send'}
                           </button>
                         </>
                       )}
                     </div>
 
                     {payNowOrderId === order.id && canPayNow && (
-                      <div className="mt-4 rounded-lg border border-orange-200 bg-orange-50 p-4">
-                        <h4 className="font-semibold text-gray-900 mb-3">Pay Now Details</h4>
+                      <div className="mt-3 sm:mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 sm:p-4">
+                        <h4 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Pay Now Details</h4>
 
-                        <div className="space-y-2 mb-4">
+                        <div className="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4">
                           {order.items.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between text-sm">
-                              <div className="text-gray-700">
+                            <div key={item.id} className="flex items-center justify-between text-xs sm:text-sm">
+                              <div className="text-gray-700 truncate flex-1 mr-2">
                                 {item.menuItem?.name || 'Item'} x{item.quantity}
                               </div>
-                              <div className="font-medium text-gray-900">
+                              <div className="font-medium text-gray-900 whitespace-nowrap">
                                 {formatInr(item.pricePaise * item.quantity)}
                               </div>
                             </div>
                           ))}
                         </div>
 
-                        <div className="border-t border-orange-200 pt-3 space-y-1 text-sm">
+                        <div className="border-t border-orange-200 pt-2 sm:pt-3 space-y-1 text-xs sm:text-sm">
                           <div className="flex justify-between">
                             <span className="text-gray-600">Subtotal</span>
                             <span>{formatInr(order.subtotalPaise)}</span>
@@ -294,31 +294,31 @@ export default function OrdersPage() {
                             <span className="text-gray-600">Tax</span>
                             <span>{formatInr(order.taxPaise)}</span>
                           </div>
-                          <div className="flex justify-between text-base font-semibold pt-1">
+                          <div className="flex justify-between text-sm sm:text-base font-semibold pt-1">
                             <span>Total</span>
                             <span className="text-orange-700">{formatInr(order.totalPaise)}</span>
                           </div>
                         </div>
 
-                        <div className="mt-4 flex flex-col md:flex-row gap-2">
+                        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row gap-2">
                           <input
                             value={couponByOrder[order.id] || ''}
                             onChange={(e) => setCouponByOrder((prev) => ({ ...prev, [order.id]: e.target.value }))}
-                            placeholder="Enter coupon code"
-                            className="flex-1 px-3 py-2 border border-orange-200 rounded-lg"
+                            placeholder="Coupon code"
+                            className="flex-1 px-3 py-2 border border-orange-200 rounded-lg text-sm"
                           />
                           <button
                             onClick={() => handleApplyCouponToOrder(order.id)}
                             disabled={applyingCouponOrderId === order.id}
-                            className="px-4 py-2 border border-orange-300 text-orange-800 rounded-lg hover:bg-orange-100 disabled:opacity-60"
+                            className="px-3 sm:px-4 py-2 border border-orange-300 text-orange-800 rounded-lg hover:bg-orange-100 disabled:opacity-60 text-sm whitespace-nowrap"
                           >
-                            {applyingCouponOrderId === order.id ? 'Applying...' : 'Apply Coupon'}
+                            {applyingCouponOrderId === order.id ? '...' : 'Apply'}
                           </button>
                           <button
                             onClick={() => router.push(`/checkout?orderId=${order.id}&payNow=1`)}
-                            className="px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700"
+                            className="px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm whitespace-nowrap"
                           >
-                            Continue to Payment
+                            Pay
                           </button>
                         </div>
                       </div>

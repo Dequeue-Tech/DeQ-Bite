@@ -107,6 +107,8 @@ router.get('/public/:id', async (req: AuthenticatedRequest, res: Response) => {
       address: true,
       email: true,
       phone: true,
+      logo: true,
+      backgroundImage: true,
       paymentCollectionTiming: true,
       cashPaymentEnabled: true,
       categories: {

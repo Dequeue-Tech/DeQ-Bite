@@ -30,7 +30,7 @@ export default function RootLayout({
       <body className="antialiased">
         <div id="root" className="min-h-screen flex flex-col">
           <Navbar />
-          <main className="flex-1">
+          <main className="flex-1 pb-20 md:pb-0">
             {children}
           </main>
           <Toaster 

@@ -41,14 +41,17 @@ app.use(cors({
       process.env.FRONTEND_URL?.replace(/\/$/, ''),
       'http://localhost:5174',
       'http://localhost:3000',
+      'http://localhost:3001',
       'https://de-q-restaurants-frontend.vercel.app',
     ].filter(Boolean);
 
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin.replace(/\/$/, ''))) {
       callback(null, true);
     } else {
+      console.warn(`CORS blocked request from origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },

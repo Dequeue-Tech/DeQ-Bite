@@ -35,6 +35,8 @@ model Restaurant {
   email       String?
   phone       String?
   address     String?
+  logo        String? 
+  backgroundImage String?  
   active      Boolean  @default(true)
   paymentCollectionTiming PaymentCollectionTiming @default(AFTER_MEAL)
   cashPaymentEnabled Boolean @default(true)

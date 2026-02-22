@@ -5,6 +5,10 @@ import { sampleCategories, sampleMenuItems, sampleTables } from '../src/lib/samp
 const prisma = new PrismaClient();
 
 async function main() {
+  // Sample image URLs (using reliable Unsplash images)
+  const demoLogo = 'https://images.unsplash.com/photo-1555396273-367ea4eb4db5?w=200&h=200&fit=crop';
+  const demoBackground = 'https://images.unsplash.com/photo-1517248135467-4c7edcad34c4?w=1200&h=600&fit=crop';
+
   const restaurant = await prisma.restaurant.upsert({
     where: { subdomain: 'demo' },
     update: {
@@ -12,6 +16,8 @@ async function main() {
       slug: 'demo',
       subdomain: 'demo',
       active: true,
+      logo: demoLogo,
+      backgroundImage: demoBackground,
     },
     create: {
       name: 'Demo Restaurant',
@@ -20,6 +26,8 @@ async function main() {
       email: 'demo@restaurant.com',
       phone: '+91 90000 00000',
       address: '123 Demo Street, Bengaluru',
+      logo: demoLogo,
+      backgroundImage: demoBackground,
     },
   });
 

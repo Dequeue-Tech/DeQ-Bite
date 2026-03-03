@@ -8,6 +8,7 @@ import { errorHandler } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { attachRestaurant } from '@/middleware/restaurant';
 
+
 import authRoutes from '@/routes/auth';
 import paymentRoutes from '@/routes/payments';
 import invoiceRoutes from '@/routes/invoices';
@@ -98,15 +99,16 @@ app.get('/', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/invoices', invoiceRoutes);
-app.use('/api/pdf', pdfRoutes);
-app.use('/api/menu', menuRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/tables', tableRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/coupons', couponRoutes);
 app.use('/api/restaurants', restaurantRoutes);
+
+app.use('/api/restaurants/:restaurantId/payments', attachRestaurant, paymentRoutes);
+app.use('/api/restaurants/:restaurantId/invoices', attachRestaurant, invoiceRoutes);
+app.use('/api/restaurants/:restaurantId/pdf', attachRestaurant, pdfRoutes);
+app.use('/api/restaurants/:restaurantId/menu', attachRestaurant, menuRoutes);
+app.use('/api/restaurants/:restaurantId/categories', attachRestaurant, categoryRoutes);
+app.use('/api/restaurants/:restaurantId/tables', attachRestaurant, tableRoutes);
+app.use('/api/restaurants/:restaurantId/orders', attachRestaurant, orderRoutes);
+app.use('/api/restaurants/:restaurantId/coupons', attachRestaurant, couponRoutes);
 
 app.use('/invoices', express.static('public/invoices'));
 

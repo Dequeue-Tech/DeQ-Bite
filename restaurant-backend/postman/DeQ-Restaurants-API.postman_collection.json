@@ -1,0 +1,1079 @@
+{
+    "info":  {
+                 "name":  "DeQ Restaurants API (Updated restaurantId routes)",
+                 "_postman_id":  "b6a6c4e7-6e07-4ce0-8ec9-8c9f3174b111",
+                 "schema":  "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+             },
+    "variable":  [
+                     {
+                         "key":  "baseUrl",
+                         "value":  "http://localhost:5000"
+                     },
+                     {
+                         "key":  "token",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "subdomain",
+                         "value":  "demo"
+                     },
+                     {
+                         "key":  "restaurantId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "orderId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "invoiceId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "invoiceOrOrderId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "menuItemId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "categoryId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "tableId",
+                         "value":  ""
+                     },
+                     {
+                         "key":  "couponId",
+                         "value":  ""
+                     }
+                 ],
+    "item":  [
+                 {
+                     "name":  "System",
+                     "item":  [
+                                  {
+                                      "name":  "Health",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/health"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Root",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Auth",
+                     "item":  [
+                                  {
+                                      "name":  "Register",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/auth/register",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Test User\",\n  \"email\": \"testuser@example.com\",\n  \"phone\": \"9999999999\",\n  \"password\": \"Password123\"\n}"
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Status is 201/200\u0027, function(){ pm.expect([200,201]).to.include(pm.response.code); });",
+                                                                                    "var json = pm.response.json();",
+                                                                                    "if (json \u0026\u0026 json.data \u0026\u0026 json.data.token) { pm.environment.set(\u0027token\u0027, json.data.token); }"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Login",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/auth/login",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"Password123\"\n}"
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Status is 200\u0027, function(){ pm.response.to.have.status(200); });",
+                                                                                    "var json = pm.response.json();",
+                                                                                    "if (json \u0026\u0026 json.data \u0026\u0026 json.data.token) { pm.environment.set(\u0027token\u0027, json.data.token); }"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Me",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/auth/me"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Profile",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/auth/profile"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Change Password",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/auth/change-password",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"currentPassword\": \"Password123\",\n  \"newPassword\": \"Password1234\"\n}"
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Refresh Token",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/auth/refresh"
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Restaurants",
+                     "item":  [
+                                  {
+                                      "name":  "Public Search",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/restaurants/public/search?query="
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Public By ID",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "url":  "{{baseUrl}}/api/restaurants/public/{{restaurantId}}"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Create Restaurant",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/restaurants",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"name\": \"Demo Restaurant\",\n  \"email\": \"restaurant@example.com\",\n  \"phone\": \"9999999999\",\n  \"address\": \"Sample Address\"\n}"
+                                                               }
+                                                  },
+                                      "event":  [
+                                                    {
+                                                        "listen":  "test",
+                                                        "script":  {
+                                                                       "type":  "text/javascript",
+                                                                       "exec":  [
+                                                                                    "pm.test(\u0027Status is 201/200\u0027, function(){ pm.expect([200,201]).to.include(pm.response.code); });",
+                                                                                    "var json = pm.response.json();",
+                                                                                    "var r = json \u0026\u0026 json.data \u0026\u0026 json.data.restaurant ? json.data.restaurant : null;",
+                                                                                    "if (r \u0026\u0026 r.id) { pm.environment.set(\u0027restaurantId\u0027, r.id); }",
+                                                                                    "if (r \u0026\u0026 r.subdomain) { pm.environment.set(\u0027subdomain\u0027, r.subdomain); }"
+                                                                                ]
+                                                                   }
+                                                    }
+                                                ]
+                                  },
+                                  {
+                                      "name":  "Current (uses subdomain context)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "x-restaurant-subdomain",
+                                                                         "value":  "{{subdomain}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/restaurants/current"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Mine",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/restaurants/mine"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Get Payment Policy (uses subdomain context)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "x-restaurant-subdomain",
+                                                                         "value":  "{{subdomain}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/restaurants/settings/payment-policy"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Update Payment Policy (uses subdomain context)",
+                                      "request":  {
+                                                      "method":  "PUT",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "x-restaurant-subdomain",
+                                                                         "value":  "{{subdomain}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/restaurants/settings/payment-policy",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"paymentCollectionTiming\": \"BEFORE_MEAL\",\n  \"cashPaymentEnabled\": true\n}"
+                                                               }
+                                                  }
+                                  },
+                                  {
+                                      "name":  "List Restaurant Users (uses subdomain context)",
+                                      "request":  {
+                                                      "method":  "GET",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "x-restaurant-subdomain",
+                                                                         "value":  "{{subdomain}}"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/restaurants/users"
+                                                  }
+                                  },
+                                  {
+                                      "name":  "Add/Update Restaurant User (uses subdomain context)",
+                                      "request":  {
+                                                      "method":  "POST",
+                                                      "header":  [
+                                                                     {
+                                                                         "key":  "Authorization",
+                                                                         "value":  "Bearer {{token}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "x-restaurant-subdomain",
+                                                                         "value":  "{{subdomain}}"
+                                                                     },
+                                                                     {
+                                                                         "key":  "Content-Type",
+                                                                         "value":  "application/json"
+                                                                     }
+                                                                 ],
+                                                      "url":  "{{baseUrl}}/api/restaurants/users",
+                                                      "body":  {
+                                                                   "mode":  "raw",
+                                                                   "raw":  "{\n  \"email\": \"staff@example.com\",\n  \"role\": \"STAFF\"\n}"
+                                                               }
+                                                  }
+                                  }
+                              ]
+                 },
+                 {
+                     "name":  "Tenant Routes (restaurantId in URL)",
+                     "item":  [
+                                  {
+                                      "name":  "Menu",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Get Menu",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Get Admin Menu",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu/admin/all"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Get Menu Item",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu/{{menuItemId}}"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Create Menu Item",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"name\": \"Paneer Tikka\",\n  \"description\": \"Grilled paneer\",\n  \"pricePaise\": 34900,\n  \"image\": \"https://example.com/item.jpg\",\n  \"categoryId\": \"{{categoryId}}\",\n  \"available\": true,\n  \"preparationTime\": 20,\n  \"ingredients\": [\"paneer\"],\n  \"allergens\": [\"dairy\"],\n  \"isVeg\": true,\n  \"isVegan\": false,\n  \"isGlutenFree\": true,\n  \"spiceLevel\": \"MILD\"\n}"
+                                                                                }
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 201/200\u0027, function(){ pm.expect([200,201]).to.include(pm.response.code); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var item = json \u0026\u0026 json.data ? json.data : null;",
+                                                                                                     "if (item \u0026\u0026 item.id) { pm.environment.set(\u0027menuItemId\u0027, item.id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "name":  "Update Menu Item",
+                                                       "request":  {
+                                                                       "method":  "PUT",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu/{{menuItemId}}",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"pricePaise\": 37900,\n  \"available\": true\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Toggle Menu Availability",
+                                                       "request":  {
+                                                                       "method":  "PATCH",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu/{{menuItemId}}/availability",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"available\": false\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Delete Menu Item",
+                                                       "request":  {
+                                                                       "method":  "DELETE",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/menu/{{menuItemId}}"
+                                                                   }
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Categories",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Get Categories",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/categories"
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 200\u0027, function(){ pm.response.to.have.status(200); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var items = json \u0026\u0026 json.data ? json.data : [];",
+                                                                                                     "if (Array.isArray(items) \u0026\u0026 items.length \u003e 0 \u0026\u0026 items[0].id) { pm.environment.set(\u0027categoryId\u0027, items[0].id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "name":  "Get Category By ID",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/categories/{{categoryId}}"
+                                                                   }
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Tables",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Get Tables",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/tables"
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 200\u0027, function(){ pm.response.to.have.status(200); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var items = json \u0026\u0026 json.data ? json.data : [];",
+                                                                                                     "if (Array.isArray(items) \u0026\u0026 items.length \u003e 0 \u0026\u0026 items[0].id) { pm.environment.set(\u0027tableId\u0027, items[0].id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "name":  "Get Available Tables",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/tables/available"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Get Table By ID",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/tables/{{tableId}}"
+                                                                   }
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Orders",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Create Order",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"tableId\": \"{{tableId}}\",\n  \"items\": [\n    { \"menuItemId\": \"{{menuItemId}}\", \"quantity\": 1, \"notes\": \"Less spicy\" }\n  ],\n  \"specialInstructions\": \"Serve quickly\",\n  \"couponCode\": \"\",\n  \"paymentProvider\": \"RAZORPAY\"\n}"
+                                                                                }
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 201/200\u0027, function(){ pm.expect([200,201]).to.include(pm.response.code); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var o = json \u0026\u0026 json.data ? json.data : null;",
+                                                                                                     "if (o \u0026\u0026 o.id) { pm.environment.set(\u0027orderId\u0027, o.id); pm.environment.set(\u0027invoiceOrOrderId\u0027, o.id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "name":  "Add Items To Order",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders/{{orderId}}/items",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"items\": [\n    { \"menuItemId\": \"{{menuItemId}}\", \"quantity\": 1 }\n  ],\n  \"specialInstructions\": \"Add extra napkins\"\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Apply Coupon",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders/{{orderId}}/apply-coupon",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"couponCode\": \"WELCOME10\"\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "My Orders",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Restaurant All Orders",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders/restaurant/all"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Get Order By ID",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders/{{orderId}}"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Update Order Status",
+                                                       "request":  {
+                                                                       "method":  "PUT",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders/{{orderId}}/status",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"status\": \"CONFIRMED\"\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Cancel Order",
+                                                       "request":  {
+                                                                       "method":  "PUT",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/orders/{{orderId}}/cancel"
+                                                                   }
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Coupons",
+                                      "item":  [
+                                                   {
+                                                       "name":  "List Coupons",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/coupons"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Create Coupon",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/coupons",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"code\": \"WELCOME10\",\n  \"description\": \"10% off\",\n  \"type\": \"PERCENT\",\n  \"value\": 10,\n  \"maxDiscountPaise\": 10000,\n  \"minOrderPaise\": 10000,\n  \"usageLimit\": 100,\n  \"active\": true\n}"
+                                                                                }
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 201/200\u0027, function(){ pm.expect([200,201]).to.include(pm.response.code); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var c = json \u0026\u0026 json.data \u0026\u0026 json.data.coupon ? json.data.coupon : null;",
+                                                                                                     "if (c \u0026\u0026 c.id) { pm.environment.set(\u0027couponId\u0027, c.id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "name":  "Update Coupon",
+                                                       "request":  {
+                                                                       "method":  "PUT",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/coupons/{{couponId}}",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"active\": false\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Validate Coupon",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/coupons/validate",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"code\": \"WELCOME10\",\n  \"subtotalPaise\": 50000\n}"
+                                                                                }
+                                                                   }
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Payments",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Get Providers",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/payments/providers"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Create Payment Order",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/payments/create",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"orderId\": \"{{orderId}}\",\n  \"paymentProvider\": \"RAZORPAY\"\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Verify Payment",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/payments/verify",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"razorpay_order_id\": \"\",\n  \"razorpay_payment_id\": \"\",\n  \"razorpay_signature\": \"\"\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Refund",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/payments/refund",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"orderId\": \"{{orderId}}\",\n  \"amount\": 100,\n  \"reason\": \"Customer requested\"\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Payment Status",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/payments/status/{{orderId}}"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Confirm Cash Payment",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/payments/cash/confirm",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"orderId\": \"{{orderId}}\"\n}"
+                                                                                }
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 200\u0027, function(){ pm.response.to.have.status(200); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var o = json \u0026\u0026 json.data \u0026\u0026 json.data.order ? json.data.order : null;",
+                                                                                                     "if (o \u0026\u0026 o.id) { pm.environment.set(\u0027orderId\u0027, o.id); pm.environment.set(\u0027invoiceOrOrderId\u0027, o.id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "Invoices",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Generate Invoice",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/invoices/generate",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"orderId\": \"{{orderId}}\",\n  \"methods\": [\"EMAIL\", \"SMS\"]\n}"
+                                                                                }
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 201/200\u0027, function(){ pm.expect([200,201]).to.include(pm.response.code); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var inv = json \u0026\u0026 json.data \u0026\u0026 json.data.invoice ? json.data.invoice : null;",
+                                                                                                     "if (inv \u0026\u0026 inv.id) { pm.environment.set(\u0027invoiceId\u0027, inv.id); pm.environment.set(\u0027invoiceOrOrderId\u0027, inv.id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "name":  "Get Invoice By Order ID",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/invoices/{{orderId}}"
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 200\u0027, function(){ pm.response.to.have.status(200); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var inv = json \u0026\u0026 json.data \u0026\u0026 json.data.invoice ? json.data.invoice : null;",
+                                                                                                     "if (inv \u0026\u0026 inv.id) { pm.environment.set(\u0027invoiceId\u0027, inv.id); pm.environment.set(\u0027invoiceOrOrderId\u0027, inv.id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   },
+                                                   {
+                                                       "name":  "List User Invoices",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/invoices/user/list"
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Resend Invoice",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      },
+                                                                                      {
+                                                                                          "key":  "Content-Type",
+                                                                                          "value":  "application/json"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/invoices/{{invoiceId}}/resend",
+                                                                       "body":  {
+                                                                                    "mode":  "raw",
+                                                                                    "raw":  "{\n  \"methods\": [\"EMAIL\", \"SMS\"]\n}"
+                                                                                }
+                                                                   }
+                                                   },
+                                                   {
+                                                       "name":  "Refresh Invoice PDF",
+                                                       "request":  {
+                                                                       "method":  "POST",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/invoices/{{invoiceOrOrderId}}/refresh-pdf"
+                                                                   },
+                                                       "event":  [
+                                                                     {
+                                                                         "listen":  "test",
+                                                                         "script":  {
+                                                                                        "type":  "text/javascript",
+                                                                                        "exec":  [
+                                                                                                     "pm.test(\u0027Status is 200\u0027, function(){ pm.response.to.have.status(200); });",
+                                                                                                     "var json = pm.response.json();",
+                                                                                                     "var inv = json \u0026\u0026 json.data \u0026\u0026 json.data.invoice ? json.data.invoice : null;",
+                                                                                                     "if (inv \u0026\u0026 inv.id) { pm.environment.set(\u0027invoiceId\u0027, inv.id); pm.environment.set(\u0027invoiceOrOrderId\u0027, inv.id); }"
+                                                                                                 ]
+                                                                                    }
+                                                                     }
+                                                                 ]
+                                                   }
+                                               ]
+                                  },
+                                  {
+                                      "name":  "PDF",
+                                      "item":  [
+                                                   {
+                                                       "name":  "Get Invoice PDF",
+                                                       "request":  {
+                                                                       "method":  "GET",
+                                                                       "header":  [
+                                                                                      {
+                                                                                          "key":  "Authorization",
+                                                                                          "value":  "Bearer {{token}}"
+                                                                                      }
+                                                                                  ],
+                                                                       "url":  "{{baseUrl}}/api/restaurants/{{restaurantId}}/pdf/invoice/{{invoiceId}}"
+                                                                   }
+                                                   }
+                                               ]
+                                  }
+                              ]
+                 }
+             ]
+}

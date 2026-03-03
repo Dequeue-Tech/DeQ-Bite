@@ -3,6 +3,7 @@ import { prisma } from '@/config/database';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
+import { logger } from '@/utils/logger';
 
 const router = Router();
 const TAX_RATE = 0.08;
@@ -158,8 +159,13 @@ router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
     const totalPaise = taxablePaise + taxPaise;
 
     const paymentCollectionTiming = req.restaurant!.paymentCollectionTiming;
-    const status = paymentCollectionTiming === 'AFTER_MEAL' ? 'CONFIRMED' : 'PENDING';
-    const initialPaymentStatus = selectedProvider === 'CASH' && paymentCollectionTiming === 'BEFORE_MEAL' ? 'PROCESSING' : 'PENDING';
+    // New orders always start in PENDING status and require staff/admin
+    // to explicitly confirm/advance them via the status endpoint.
+    const status: 'PENDING' = 'PENDING';
+    const initialPaymentStatus =
+      selectedProvider === 'CASH' && paymentCollectionTiming === 'BEFORE_MEAL'
+        ? 'PROCESSING'
+        : 'PENDING';
 
     const order = await prisma.$transaction(async (tx) => {
       if (appliedCouponId) {
@@ -195,7 +201,20 @@ router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
       });
     });
 
-    return res.status(201).json({ success: true, data: order, message: 'Order created successfully' });
+    // Notify staff/admin about new order awaiting confirmation.
+    logger.info('New order created and awaiting confirmation', {
+      orderId: order.id,
+      restaurantId: order.restaurantId,
+      tableId: order.tableId,
+      userId,
+      paymentCollectionTiming,
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: order,
+      message: 'Order created successfully and is awaiting confirmation from staff',
+    });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Internal server error while creating order' });
   }
@@ -230,6 +249,13 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
 
     if (['COMPLETED', 'CANCELLED'].includes(existingOrder.status)) {
       return res.status(400).json({ success: false, error: 'Cannot add dishes to a closed order' });
+    }
+
+    if (existingOrder.paymentCollectionTiming === 'BEFORE_MEAL') {
+      return res.status(400).json({
+        success: false,
+        error: 'Cannot add dishes to pay-before-meal orders. Please create a new order.',
+      });
     }
 
     const additionalItems: Array<{ menuItemId: string; quantity: number; pricePaise: number; notes: string }> = [];
@@ -292,7 +318,7 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
           taxPaise: updatedTax,
           totalPaise: updatedTotal,
           paymentStatus: 'PENDING',
-          status: existingOrder.paymentCollectionTiming === 'AFTER_MEAL' ? 'CONFIRMED' : existingOrder.status,
+          status: existingOrder.status,
           specialInstructions: typeof specialInstructions === 'string' ? specialInstructions : existingOrder.specialInstructions,
         },
         include: {

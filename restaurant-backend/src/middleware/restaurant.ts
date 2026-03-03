@@ -27,12 +27,54 @@ const extractSubdomain = (host?: string | null): string | null => {
   return null;
 };
 
+const mapRestaurantContext = (restaurant: {
+  id: string;
+  slug: string;
+  subdomain: string;
+  name: string;
+  paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
+  cashPaymentEnabled: boolean;
+}) => ({
+  id: restaurant.id,
+  slug: restaurant.slug,
+  subdomain: restaurant.subdomain,
+  name: restaurant.name,
+  paymentCollectionTiming: restaurant.paymentCollectionTiming,
+  cashPaymentEnabled: restaurant.cashPaymentEnabled,
+});
+
 export const attachRestaurant = async (
   req: AuthenticatedRequest,
   _res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    const routeRestaurantId = typeof req.params?.['restaurantId'] === 'string'
+      ? req.params['restaurantId'].trim()
+      : '';
+
+    if (routeRestaurantId) {
+      const restaurantById = await prisma.restaurant.findUnique({
+        where: { id: routeRestaurantId },
+        select: {
+          id: true,
+          slug: true,
+          subdomain: true,
+          name: true,
+          active: true,
+          paymentCollectionTiming: true,
+          cashPaymentEnabled: true,
+        },
+      });
+
+      if (!restaurantById || !restaurantById.active) {
+        return next(new AppError('Restaurant not found or inactive', 404));
+      }
+
+      req.restaurant = mapRestaurantContext(restaurantById);
+      return next();
+    }
+
     const headerSubdomain = req.get('x-restaurant-subdomain') || req.headers['x-restaurant-subdomain'];
     const host = req.get('host');
     let subdomain: string | null = null;
@@ -64,15 +106,7 @@ export const attachRestaurant = async (
       return next(new AppError('Restaurant not found or inactive', 404));
     }
 
-    req.restaurant = {
-      id: restaurant.id,
-      slug: restaurant.slug,
-      subdomain: restaurant.subdomain,
-      name: restaurant.name,
-      paymentCollectionTiming: restaurant.paymentCollectionTiming,
-      cashPaymentEnabled: restaurant.cashPaymentEnabled,
-    };
-
+    req.restaurant = mapRestaurantContext(restaurant);
     return next();
   } catch (error) {
     return next(error);

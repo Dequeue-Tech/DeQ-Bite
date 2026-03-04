@@ -93,7 +93,13 @@ router.get('/public/:id', async (req: AuthenticatedRequest, res: Response) => {
   }
 
   const restaurant = await prisma.restaurant.findFirst({
-    where: { id, active: true },
+    where: { 
+      OR: [
+        { id, active: true },
+        { subdomain: id, active: true },
+        { slug: id, active: true }
+      ]
+    },
     select: {
       id: true,
       name: true,
@@ -101,6 +107,8 @@ router.get('/public/:id', async (req: AuthenticatedRequest, res: Response) => {
       address: true,
       email: true,
       phone: true,
+      logo: true,
+      backgroundImage: true,
       paymentCollectionTiming: true,
       cashPaymentEnabled: true,
       categories: {

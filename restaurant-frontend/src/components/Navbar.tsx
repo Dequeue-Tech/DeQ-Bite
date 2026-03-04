@@ -1,10 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Link from 'next/link';
-import { ChefHat, ShoppingCart, Menu, X } from 'lucide-react';
+import { ChefHat, ShoppingCart, Home, UtensilsCrossed, ClipboardList, User, Settings, LogOut } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { apiClient } from '@/lib/api-client';
 
@@ -13,15 +13,10 @@ const Navbar = () => {
   const pathname = usePathname();
   const { isAuthenticated, user, logout, getProfile } = useAuthStore();
   const { getTotalItems } = useCartStore();
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
   const cartItemsCount = getTotalItems();
   const canAccessAdmin = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
   const canAccessKitchen = canAccessAdmin || user?.restaurantRole === 'STAFF';
-
-  // Close mobile menu when route changes
-  useEffect(() => {
-    setIsMenuOpen(false);
-  }, [pathname]);
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated && user && typeof user.restaurantRole === 'undefined') {
@@ -31,12 +26,14 @@ const Navbar = () => {
 
   const handleLogout = () => {
     logout();
-    router.push('/');
+    setShowUserDropdown(false);
+    router.push('/auth/signin');
   };
 
   const selectedRestaurantSubdomain = apiClient.getSelectedRestaurantSubdomain();
 
-  const navLinks = [
+  // Desktop navigation links
+  const desktopNavLinks = [
     { name: 'Home', href: '/' },
     { name: 'Menu', href: '/menu' },
     ...(isAuthenticated ? [
@@ -47,163 +44,167 @@ const Navbar = () => {
     ] : []),
   ];
 
+  // Mobile bottom navigation links (max 4 items, profile is in top nav)
+  const mobileNavLinks = [
+    { name: 'Home', href: '/', icon: Home },
+    { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
+    ...(isAuthenticated ? [
+      { name: 'Orders', href: '/orders', icon: ClipboardList },
+    ] : []),
+    { name: 'Cart', href: '/cart', icon: ShoppingCart, badge: cartItemsCount },
+  ].slice(0, 4); // Max 4 items since profile is in top nav
+
+  const isActive = (href: string) => pathname === href;
+
   return (
-    <nav className="bg-white shadow-md sticky top-0 z-50">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex justify-between h-16">
-          {/* Logo and brand */}
-          <div className="flex items-center">
-            <Link href="/" className="flex items-center">
-              <ChefHat className="h-8 w-8 text-orange-600 mr-2" />
-              <span className="text-xl font-bold text-gray-800">Restaurant</span>
-              {selectedRestaurantSubdomain && (
-                <span className="ml-2 text-xs px-2 py-1 rounded bg-orange-100 text-orange-700">
-                  @{selectedRestaurantSubdomain}
-                </span>
-              )}
-            </Link>
-          </div>
-
-          {/* Desktop Navigation */}
-          <div className="hidden md:flex items-center space-x-8">
-            {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                href={link.href}
-                className={`${
-                  pathname === link.href
-                    ? 'text-orange-600 font-medium'
-                    : 'text-gray-600 hover:text-orange-600'
-                } transition-colors`}
-              >
-                {link.name}
-              </Link>
-            ))}
-
-            {/* Cart icon for authenticated users */}
-            {isAuthenticated && (
-              <Link href="/cart" className="relative">
-                <ShoppingCart className="h-6 w-6 text-gray-600 hover:text-orange-600 transition-colors" />
-                {cartItemsCount > 0 && (
-                  <span className="absolute -top-2 -right-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {cartItemsCount}
+    <>
+      {/* Top Navigation Bar */}
+      <nav className="bg-white shadow-md sticky top-0 z-50">
+        <div className="max-w-7xl mx-auto px-3 sm:px-4 lg:px-8">
+          <div className="flex justify-between h-14 sm:h-16">
+            {/* Logo and brand */}
+            <div className="flex items-center min-w-0">
+              <Link href="/" className="flex items-center min-w-0">
+                <ChefHat className="h-7 w-7 sm:h-8 sm:w-8 text-orange-600 mr-1.5 sm:mr-2 flex-shrink-0" />
+                <span className="text-lg sm:text-xl font-bold text-gray-800 truncate">Restaurant</span>
+                {selectedRestaurantSubdomain && (
+                  <span className="hidden sm:inline ml-1.5 sm:ml-2 text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-orange-100 text-orange-700 truncate max-w-[80px] sm:max-w-[120px]">
+                    @{selectedRestaurantSubdomain}
                   </span>
                 )}
               </Link>
-            )}
+            </div>
 
-            {/* Auth actions */}
-            {isAuthenticated ? (
-              <div className="flex items-center space-x-4">
-                <span className="text-gray-600 text-sm">Welcome, {user?.name}</span>
-                <button
-                  onClick={handleLogout}
-                  className="text-gray-600 hover:text-gray-800 transition-colors"
-                >
-                  Logout
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center space-x-4">
+            {/* Desktop Navigation */}
+            <div className="hidden md:flex items-center space-x-6 lg:space-x-8">
+              {desktopNavLinks.map((link) => (
                 <Link
-                  href="/auth/signin"
-                  className="text-orange-600 hover:text-orange-700 transition-colors"
+                  key={link.name}
+                  href={link.href}
+                  className={`text-sm lg:text-base ${
+                    pathname === link.href
+                      ? 'text-orange-600 font-medium'
+                      : 'text-gray-600 hover:text-orange-600'
+                  } transition-colors`}
                 >
-                  Sign In
+                  {link.name}
                 </Link>
-                <Link
-                  href="/auth/signup"
-                  className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors"
-                >
-                  Sign Up
-                </Link>
-              </div>
-            )}
-          </div>
+              ))}
 
-          {/* Mobile menu button */}
-          <div className="md:hidden flex items-center">
-            <button
-              onClick={() => setIsMenuOpen(!isMenuOpen)}
-              className="text-gray-600 hover:text-gray-800"
-            >
-              {isMenuOpen ? (
-                <X className="h-6 w-6" />
-              ) : (
-                <Menu className="h-6 w-6" />
+              {/* Cart icon for authenticated users */}
+              {isAuthenticated && (
+                <Link href="/cart" className="relative p-2 -m-2">
+                  <ShoppingCart className="h-5 w-5 lg:h-6 lg:w-6 text-gray-600 hover:text-orange-600 transition-colors" />
+                  {cartItemsCount > 0 && (
+                    <span className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center text-[10px] sm:text-xs">
+                      {cartItemsCount > 9 ? '9+' : cartItemsCount}
+                    </span>
+                  )}
+                </Link>
               )}
-            </button>
-          </div>
-        </div>
-      </div>
 
-      {/* Mobile Navigation */}
-      {isMenuOpen && (
-        <div className="md:hidden bg-white border-t">
-          <div className="px-2 pt-2 pb-3 space-y-1">
-            {navLinks.map((link) => (
-              <Link
-                key={link.name}
-                href={link.href}
-                className={`block px-3 py-2 rounded-md ${
-                  pathname === link.href
-                    ? 'bg-orange-50 text-orange-600 font-medium'
-                    : 'text-gray-600 hover:bg-gray-50 hover:text-orange-600'
-                }`}
-              >
-                {link.name}
-              </Link>
-            ))}
-
-            {/* Mobile cart for authenticated users */}
-            {isAuthenticated && (
-              <Link
-                href="/cart"
-                className="flex items-center px-3 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-orange-600"
-              >
-                <ShoppingCart className="h-5 w-5 mr-2" />
-                Cart
-                {cartItemsCount > 0 && (
-                  <span className="ml-2 bg-red-500 text-white text-xs font-bold rounded-full h-5 w-5 flex items-center justify-center">
-                    {cartItemsCount}
-                  </span>
-                )}
-              </Link>
-            )}
-
-            {/* Mobile auth actions */}
-            {isAuthenticated ? (
-              <div className="pt-4 border-t border-gray-200">
-                <div className="px-3 py-2 text-sm text-gray-600">
-                  Welcome, {user?.name}
+              {/* Auth actions */}
+              {isAuthenticated ? (
+                <div className="flex items-center space-x-3 lg:space-x-4">
+                  <span className="text-gray-600 text-xs lg:text-sm truncate max-w-[100px] lg:max-w-[150px]">Welcome, {user?.name}</span>
+                  <button
+                    onClick={handleLogout}
+                    className="text-gray-600 hover:text-gray-800 transition-colors text-sm lg:text-base"
+                  >
+                    Logout
+                  </button>
                 </div>
+              ) : (
+                <div className="flex items-center space-x-3 lg:space-x-4">
+                  <Link
+                    href="/auth/signin"
+                    className="text-orange-600 hover:text-orange-700 transition-colors text-sm lg:text-base"
+                  >
+                    Sign In
+                  </Link>
+                  <Link
+                    href="/auth/signup"
+                    className="bg-orange-600 text-white px-3 lg:px-4 py-1.5 lg:py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm lg:text-base"
+                  >
+                    Sign Up
+                  </Link>
+                </div>
+              )}
+            </div>
+
+            {/* Mobile: Profile icon with dropdown */}
+            {isAuthenticated ? (
+              <div className="md:hidden relative flex items-center">
                 <button
-                  onClick={handleLogout}
-                  className="block w-full text-left px-3 py-2 rounded-md text-gray-600 hover:bg-gray-50 hover:text-gray-800"
+                  onClick={() => setShowUserDropdown(!showUserDropdown)}
+                  className="flex items-center justify-center p-2 text-gray-600 hover:text-orange-600 active:bg-gray-100 rounded-lg transition-colors"
+                  style={{ marginTop: '2px' }}
                 >
-                  Logout
+                  <User className="h-6 w-6" />
                 </button>
+                
+                {/* User dropdown */}
+                {showUserDropdown && (
+                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
+                    <div className="px-4 py-2 border-b border-gray-100">
+                      <p className="text-sm font-medium text-gray-800">{user?.name}</p>
+                      <p className="text-xs text-gray-500">{user?.email}</p>
+                    </div>
+                    <button
+                      onClick={handleLogout}
+                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                    >
+                      <LogOut className="h-4 w-4" />
+                      Logout
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
-              <div className="pt-4 border-t border-gray-200 space-y-2">
-                <Link
-                  href="/auth/signin"
-                  className="block px-3 py-2 rounded-md text-orange-600 hover:bg-orange-50"
-                >
-                  Sign In
-                </Link>
-                <Link
-                  href="/auth/signup"
-                  className="block px-3 py-2 rounded-md bg-orange-600 text-white hover:bg-orange-700 text-center"
-                >
-                  Sign Up
-                </Link>
-              </div>
+              <Link 
+                href="/auth/signin" 
+                className="md:hidden flex items-center p-2 text-orange-600 hover:text-orange-700 active:bg-gray-50 rounded-lg transition-colors"
+              >
+                <User className="h-6 w-6" />
+              </Link>
             )}
           </div>
         </div>
-      )}
-    </nav>
+      </nav>
+
+      {/* Mobile Bottom Navigation */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 safe-area-pb">
+        <div className="flex justify-around items-center h-16">
+          {mobileNavLinks.map((link) => {
+            const Icon = link.icon;
+            const active = isActive(link.href);
+            return (
+              <Link
+                key={link.name}
+                href={link.href}
+                className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 ${
+                  active
+                    ? 'text-orange-600'
+                    : 'text-gray-500 hover:text-gray-700'
+                } transition-colors active:bg-gray-50`}
+              >
+                <div className="relative">
+                  <Icon className="h-5 w-5 sm:h-6 sm:w-6" />
+                  {typeof link.badge === 'number' && link.badge > 0 && (
+                    <span className="absolute -top-2 -right-2 bg-red-500 text-white text-[10px] font-bold rounded-full h-4 w-4 flex items-center justify-center">
+                      {link.badge > 9 ? '9+' : link.badge}
+                    </span>
+                  )}
+                </div>
+                <span className="text-[10px] sm:text-xs mt-0.5 truncate max-w-[60px]">
+                  {link.name}
+                </span>
+              </Link>
+            );
+          })}
+        </div>
+      </nav>
+    </>
   );
 };
 

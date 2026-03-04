@@ -16,6 +16,10 @@
   }
 }
 
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   color: black;
   background: linear-gradient(
@@ -25,6 +29,9 @@ body {
     )
     rgb(var(--background-start-rgb));
   font-family: Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  min-width: 320px;
 }
 
 /* Restaurant app specific styles */
@@ -34,12 +41,24 @@ body {
   padding: 0 1rem;
 }
 
+@media (max-width: 640px) {
+  .restaurant-container {
+    padding: 0 0.75rem;
+  }
+}
+
 .menu-item-card {
   transition: transform 0.2s ease-in-out;
 }
 
 .menu-item-card:hover {
   transform: translateY(-2px);
+}
+
+@media (max-width: 768px) {
+  .menu-item-card:hover {
+    transform: none;
+  }
 }
 
 .cart-item {
@@ -66,4 +85,62 @@ body {
 @keyframes spin {
   0% { transform: rotate(0deg); }
   100% { transform: rotate(360deg); }
+}
+
+/* Mobile touch improvements */
+@media (hover: none) {
+  .hover\:bg-gray-100:active {
+    background-color: rgb(243 244 246);
+  }
+  
+  .hover\:bg-orange-50:active {
+    background-color: rgb(255 247 237);
+  }
+}
+
+/* Safe area insets for mobile devices */
+@supports (padding: max(0px)) {
+  .safe-area-inset {
+    padding-left: max(1rem, env(safe-area-inset-left));
+    padding-right: max(1rem, env(safe-area-inset-right));
+  }
+  
+  .safe-area-pb {
+    padding-bottom: max(0px, env(safe-area-inset-bottom));
+  }
+}
+
+/* Hide scrollbar but keep functionality */
+.hide-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+.hide-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Responsive text utilities */
+.text-responsive-xs {
+  font-size: clamp(0.75rem, 2vw, 0.875rem);
+}
+
+.text-responsive-sm {
+  font-size: clamp(0.875rem, 2.5vw, 1rem);
+}
+
+.text-responsive-base {
+  font-size: clamp(1rem, 3vw, 1.125rem);
+}
+
+.text-responsive-lg {
+  font-size: clamp(1.125rem, 4vw, 1.5rem);
+}
+
+.text-responsive-xl {
+  font-size: clamp(1.25rem, 5vw, 2rem);
+}
+
+.text-responsive-2xl {
+  font-size: clamp(1.5rem, 6vw, 2.5rem);
 }

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",
+    "@prisma/extension-accelerate": "^3.0.1",
     "@types/multer": "^1.4.12",
     "axios": "^1.12.2",
     "bcryptjs": "^3.0.2",

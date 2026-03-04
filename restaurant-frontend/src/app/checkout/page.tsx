@@ -340,56 +340,56 @@ function CheckoutPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-50">
-      <div className="max-w-7xl mx-auto px-4 py-8">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         {restaurantPolicy && (
-          <div className="mb-4 rounded-lg border border-orange-200 bg-orange-50 p-3 text-sm text-orange-800">
+          <div className="mb-3 sm:mb-4 rounded-lg border border-orange-200 bg-orange-50 p-2.5 sm:p-3 text-xs sm:text-sm text-orange-800">
             {restaurantPolicy.paymentCollectionTiming === 'BEFORE_MEAL'
               ? 'This restaurant requires payment before meal preparation.'
               : 'This restaurant allows payment at the end of meal.'}
           </div>
         )}
 
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          <div className="lg:col-span-2 space-y-6">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-8">
+          <div className="lg:col-span-2 space-y-4 sm:space-y-6">
             {!requestedOrderId && (
               <>
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4">Customer Information</h2>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4">Customer Information</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                     <input
                       type="text"
                       value={customerInfo.name}
                       onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm sm:text-base"
                       placeholder="Full name"
                     />
                     <input
                       type="email"
                       value={customerInfo.email}
                       onChange={(e) => setCustomerInfo({ ...customerInfo, email: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm sm:text-base"
                       placeholder="Email"
                     />
                   </div>
                 </div>
 
-                <div className="bg-white rounded-lg shadow-md p-6">
-                  <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                    <MapPin className="h-5 w-5 mr-2" />
+                <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                  <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center">
+                    <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                     Select Your Table
                   </h2>
                   {loading ? (
-                    <div className="py-4">Loading tables...</div>
+                    <div className="py-4 text-sm">Loading tables...</div>
                   ) : (
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                       {tables.map((table) => (
                         <div
                           key={table.id}
-                          className={`border-2 rounded-lg p-4 cursor-pointer ${selectedTable === table.id ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}
+                          className={`border-2 rounded-lg p-3 sm:p-4 cursor-pointer ${selectedTable === table.id ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}
                           onClick={() => setSelectedTable(table.id)}
                         >
-                          <h3 className="font-semibold text-lg">Table {table.number}</h3>
-                          <p className="text-gray-600 text-sm">{table.location || 'No location specified'}</p>
+                          <h3 className="font-semibold text-base sm:text-lg">Table {table.number}</h3>
+                          <p className="text-gray-600 text-xs sm:text-sm">{table.location || 'No location'}</p>
                         </div>
                       ))}
                     </div>
@@ -398,35 +398,35 @@ function CheckoutPageContent() {
               </>
             )}
 
-            <div className="bg-white rounded-lg shadow-md p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Special Instructions</h2>
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4">Special Instructions</h2>
               <textarea
                 value={specialInstructions}
                 onChange={(e) => setSpecialInstructions(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm sm:text-base"
                 rows={3}
                 placeholder="Any special requests..."
               />
             </div>
 
             {!requestedOrderId && (
-              <div className="bg-white rounded-lg shadow-md p-6">
-                <h2 className="text-xl font-semibold text-gray-800 mb-4 flex items-center">
-                  <CreditCard className="h-5 w-5 mr-2" />
+              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center">
+                  <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                   Payment Method
                 </h2>
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {(paymentProviders.length ? paymentProviders : ['RAZORPAY', 'CASH'])
                     .filter((provider) => restaurantPolicy?.cashPaymentEnabled || provider !== 'CASH')
                     .map((provider) => (
-                      <label key={provider} className="flex items-center">
+                      <label key={provider} className="flex items-center text-sm sm:text-base">
                         <input
                           type="radio"
                           name="payment"
                           value={provider}
                           checked={paymentProvider === provider}
                           onChange={(e) => setPaymentProvider(e.target.value as any)}
-                          className="mr-3"
+                          className="mr-2 sm:mr-3"
                         />
                         <span>{provider}</span>
                       </label>
@@ -437,50 +437,50 @@ function CheckoutPageContent() {
           </div>
 
           <div className="lg:col-span-1">
-            <div className="bg-white rounded-lg shadow-md p-6 sticky top-8">
-              <h2 className="text-xl font-semibold text-gray-800 mb-4">Order Summary</h2>
+            <div className="bg-white rounded-lg shadow-md p-4 sm:p-6 lg:sticky lg:top-8">
+              <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4">Order Summary</h2>
 
-              <div className="space-y-3 mb-4">
+              <div className="space-y-2 sm:space-y-3 mb-3 sm:mb-4 max-h-[200px] overflow-auto">
                 {cartItems.map((item: any) => (
-                  <div key={item.id} className="flex justify-between items-center">
-                    <div>
-                      <p className="font-medium">{item.name}</p>
-                      <p className="text-sm text-gray-600">Qty: {item.quantity}</p>
+                  <div key={item.id} className="flex justify-between items-center text-sm">
+                    <div className="flex-1 min-w-0 mr-2">
+                      <p className="font-medium truncate">{item.name}</p>
+                      <p className="text-xs text-gray-600">Qty: {item.quantity}</p>
                     </div>
-                    <span className="font-semibold">{formatInr(item.pricePaise * item.quantity)}</span>
+                    <span className="font-semibold whitespace-nowrap">{formatInr(item.pricePaise * item.quantity)}</span>
                   </div>
                 ))}
               </div>
 
-              <div className="border-t border-gray-200 pt-4 space-y-2">
-                <div className="flex justify-between">
+              <div className="border-t border-gray-200 pt-3 sm:pt-4 space-y-1.5 sm:space-y-2">
+                <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Subtotal</span>
                   <span className="font-semibold">{formatInr(getSubtotalPaise())}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Discount</span>
                   <span className="font-semibold text-green-600">- {formatInr(discountPaise)}</span>
                 </div>
-                <div className="flex justify-between">
+                <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Tax (8%)</span>
                   <span className="font-semibold">{formatInr(getTaxPaise(getSubtotalPaise(), discountPaise))}</span>
                 </div>
                 <div className="border-t border-gray-200 pt-2 flex justify-between">
-                  <span className="text-lg font-semibold">Total</span>
-                  <span className="text-lg font-bold text-orange-600">{formatInr(getTotalPaise(getSubtotalPaise(), discountPaise))}</span>
+                  <span className="text-base sm:text-lg font-semibold">Total</span>
+                  <span className="text-base sm:text-lg font-bold text-orange-600">{formatInr(getTotalPaise(getSubtotalPaise(), discountPaise))}</span>
                 </div>
               </div>
 
               {!requestedOrderId && (
-                <div className="mt-4">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">Coupon Code</label>
-                  <div className="flex space-x-2">
+                <div className="mt-3 sm:mt-4">
+                  <label className="block text-xs sm:text-sm font-medium text-gray-700 mb-1">Coupon Code</label>
+                  <div className="flex gap-2">
                     <input
                       type="text"
                       value={couponCode}
                       onChange={(e) => setCouponCode(e.target.value)}
-                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg"
-                      placeholder="Enter coupon code"
+                      className="flex-1 px-3 py-2 border border-gray-300 rounded-lg text-sm"
+                      placeholder="Enter coupon"
                     />
                     <button
                       onClick={async () => {
@@ -497,7 +497,7 @@ function CheckoutPageContent() {
                           toast.error(err?.message || 'Invalid coupon');
                         }
                       }}
-                      className="px-4 py-2 bg-gray-900 text-white rounded-lg"
+                      className="px-3 sm:px-4 py-2 bg-gray-900 text-white rounded-lg text-sm whitespace-nowrap"
                     >
                       Apply
                     </button>
@@ -505,11 +505,11 @@ function CheckoutPageContent() {
                 </div>
               )}
 
-              <div className="mt-6">
+              <div className="mt-4 sm:mt-6">
                 <button
                   onClick={handlePlaceOrder}
                   disabled={isProcessing || cartItems.length === 0 || (!requestedOrderId && !selectedTable)}
-                  className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center"
+                  className="w-full bg-orange-600 text-white py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center text-sm sm:text-base"
                 >
                   {isProcessing ? (
                     <>
@@ -519,7 +519,7 @@ function CheckoutPageContent() {
                   ) : (
                     <>
                       <Clock className="h-4 w-4 mr-2" />
-                      {requestedOrderId ? 'Add Dishes to Ongoing Meal' : 'Place Order'}
+                      {requestedOrderId ? 'Add to Order' : 'Place Order'}
                     </>
                   )}
                 </button>

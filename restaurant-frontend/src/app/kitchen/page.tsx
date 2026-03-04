@@ -77,43 +77,43 @@ export default function KitchenPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-4 md:p-6">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6">
       <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
           <div className="flex items-center gap-2">
-            <ChefHat className="h-6 w-6 text-orange-600" />
-            <h1 className="text-2xl font-bold text-gray-900">Kitchen Order Preparation</h1>
+            <ChefHat className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Kitchen Order Preparation</h1>
           </div>
           <button
             onClick={fetchOrders}
-            className="inline-flex items-center px-3 py-2 text-sm rounded-lg border border-gray-300 hover:bg-gray-100"
+            className="inline-flex items-center px-3 py-2 text-xs sm:text-sm rounded-lg border border-gray-300 hover:bg-gray-100"
           >
-            <RefreshCcw className="h-4 w-4 mr-2" />
+            <RefreshCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
             Refresh
           </button>
         </div>
 
         {loading ? (
-          <p className="text-gray-600">Loading kitchen queue...</p>
+          <p className="text-gray-600 text-sm">Loading kitchen queue...</p>
         ) : (
-          <div className="grid lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {['PENDING', 'CONFIRMED', 'PREPARING', 'READY'].map((status) => (
               <div key={status} className="bg-white rounded-xl border border-gray-200">
-                <div className="p-3 border-b border-gray-200">
-                  <p className="font-semibold text-gray-800">{status}</p>
+                <div className="p-2.5 sm:p-3 border-b border-gray-200">
+                  <p className="font-semibold text-gray-800 text-sm sm:text-base">{status}</p>
                   <p className="text-xs text-gray-500">{groupedOrders[status]?.length || 0} orders</p>
                 </div>
-                <div className="p-3 space-y-3">
+                <div className="p-2.5 sm:p-3 space-y-2 sm:space-y-3 max-h-[calc(100vh-200px)] overflow-auto">
                   {(groupedOrders[status] || []).length === 0 && (
-                    <p className="text-sm text-gray-500">No orders in this stage.</p>
+                    <p className="text-xs sm:text-sm text-gray-500">No orders in this stage.</p>
                   )}
                   {(groupedOrders[status] || []).map((order) => (
-                    <div key={order.id} className="border border-gray-200 rounded-lg p-3">
-                      <p className="font-semibold text-gray-900">#{order.id.slice(0, 8).toUpperCase()}</p>
-                      <p className="text-sm text-gray-600">{order.user?.name || 'Customer'} - Table {order.table?.number}</p>
-                      <div className="mt-2 space-y-1">
+                    <div key={order.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3">
+                      <p className="font-semibold text-gray-900 text-sm">#{order.id.slice(0, 8).toUpperCase()}</p>
+                      <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} - Table {order.table?.number}</p>
+                      <div className="mt-1.5 sm:mt-2 space-y-0.5 sm:space-y-1">
                         {order.items.map((item) => (
-                          <p key={item.id} className="text-sm text-gray-700">
+                          <p key={item.id} className="text-xs sm:text-sm text-gray-700 truncate">
                             {item.quantity}x {item.menuItem?.name}
                           </p>
                         ))}
@@ -121,9 +121,9 @@ export default function KitchenPage() {
                       <button
                         onClick={() => advanceStatus(order)}
                         disabled={updatingOrderId === order.id}
-                        className="mt-3 w-full bg-orange-600 text-white py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60"
+                        className="mt-2 sm:mt-3 w-full bg-orange-600 text-white py-1.5 sm:py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60 text-xs sm:text-sm"
                       >
-                        {updatingOrderId === order.id ? 'Updating...' : 'Move to Next Stage'}
+                        {updatingOrderId === order.id ? 'Updating...' : 'Next Stage'}
                       </button>
                     </div>
                   ))}

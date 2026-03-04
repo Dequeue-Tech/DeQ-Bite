@@ -1,0 +1,2345 @@
+{
+    "name": "Haveli Dhaba",
+    "menus": [
+        {
+            "name": "Today's Exclusive Dishes",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Chicken Butter Masala",
+                            "price": "499",
+                            "desc": "A popular Indian dish of grilled chicken simmered in a smooth, silky and creamy onion tomato and cashew gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/eb0/9e63fdf332b1f4171656fd9379c3deb0.jpg"
+                        },
+                        {
+                            "name": "Supreme Desi Mutton",
+                            "price": "599",
+                            "desc": "A delicious Indian curried dish of soft tender chunks of meat in a spicy onion tomato gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Bhuna Masala",
+                            "price": "489",
+                            "desc": "A delicious North Indian dish of chicken cooked in a spicy and flavorsome sautéed or fried masala.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Indian Starters",
+            "category": [
+                {
+                    "name": "Veg Starters",
+                    "items": [
+                        {
+                            "name": "Paneer Tikka",
+                            "price": "298",
+                            "desc": "Indian cottage cheese and paneer marinated in a spicy and super flavorful tandoori masala & grilled to perfection.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/477/fd34d2df6530fc486e19ef5f617de477.jpg"
+                        },
+                        {
+                            "name": "Paneer Achari Tikka",
+                            "price": "359",
+                            "desc": "Paneer tikka where the cottage cheese cubes are flavored with a marination of pickling spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/9ed/7db4e2aa85d9f7f41b872cc7840749ed.jpg"
+                        },
+                        {
+                            "name": "Veg Hara Bhara Kebab",
+                            "price": "315",
+                            "desc": "A delicious North Indian appetizer or snack made using spinach, potatoes and a few spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Tikka",
+                            "price": "289",
+                            "desc": "An Indian appetizer made by marinating mushrooms with spices, herbs & yogurt, later grilled to perfection.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Seek Kebab",
+                            "price": "279",
+                            "desc": "A delicious snack starter made using mixed vegetables like carrot, beans, cabbage, peas, capsicum, potatoes and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Malai Tikka",
+                            "price": "385",
+                            "desc": "Veg malai tikka refers to grilled supreme of veg kebab with ginger, garlic, green chilli, cream cheese, coriander steamed and cardamom.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Makhmali Tikka",
+                            "price": "398",
+                            "desc": "They are made with fresh and soft cottage cheese [paneer], some veggies, spices and yogurt. The paneer and veggies flavored with mild Indian spices and cooked over a pan [traditionally this tikka cook on tandoor or charcoal grilled].",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chef Special Tikka",
+                            "price": "499",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Baby Corn Tikka",
+                            "price": "289",
+                            "desc": "Baby corn tikka is a spicy and easy golden colour starter prepared with tender baby corn.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Haryali Tikka",
+                            "price": "389",
+                            "desc": "A delectable Indian appetizer made with cubes of soft paneer, crisp bell pepper and onion marinated in cilantro and mint along with yogurt and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Pahadi Tikka",
+                            "price": "399",
+                            "desc": "A wonderful tikka with an enticing flavour and the green chillies, mint and coriander ensure a well balanced taste.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Mushroom Tikka",
+                            "price": "322",
+                            "desc": "Mushroom tikka is an Indian appetizer made by marinating mushrooms with spices, herbs & yogurt, later grilled to perfection.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Soya Afghani Tikka",
+                            "price": "299",
+                            "desc": "Soya cubes are marinated in a creamy paste of yogurt, melon seeds, cashews, poppy seeds, cream and butter and then grilled in a tandoor.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Soya Achari Tikka",
+                            "price": "319",
+                            "desc": "This delectable fusion is a testament to the art of flavor pairing, offering succulent, marinated soya tikka pieces that are a revelation of taste and texture.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Soya Malai Tikka",
+                            "price": "349",
+                            "desc": "Malai soya tikka is a succulent soya chaap marinated in light spices, cream and yogurt and grilled.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Non Veg Starters",
+                    "items": [
+                        {
+                            "name": "Tandoori Chicken",
+                            "price": "589",
+                            "desc": "Tandoori chicken, a dish of roasted chicken marinated in yogurt and generously spiced, giving the meat its trademark red colour.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/ec5/9b050bea8aadce56bbf0b25bc4048ec5.jpg"
+                        },
+                        {
+                            "name": "Chicken Malai Tikka",
+                            "price": "399",
+                            "desc": "Tender pieces of boneless chicken are marinated in a unique blend of yogurt, cream, cheese, papaya and spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Tikka",
+                            "price": "389",
+                            "desc": "Tender chicken boneless fillets marinated in spicy masala, fried on tawa and smoked to perfection.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Lehsuni Murgh Tikka",
+                            "price": "385",
+                            "desc": "Lahsuni chicken tikka has a dominant garlic taste that is balanced with the heat of black pepper and the subtlety of yogurt and cumin powder.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Seekh Kebab",
+                            "price": "389",
+                            "desc": "Made of ground meat that is seasoned with aromatic spices and ginger, garlic, green chilies, onion, cilantro and more.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mastana Kebab",
+                            "price": "449",
+                            "desc": "mastana kebab",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Kali Mirch Tikka",
+                            "price": "399",
+                            "desc": "Cream cheese and marinated chicken tikka with cheese, hung curd, salt, red chilli powder, half of the cream, cornflour and all the powdered spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Keema Chicken Tikka",
+                            "price": "445",
+                            "desc": "Chicken keema is a simple and easy to make Indian dish with chicken mince, onion, tomatoes, spices and herbs.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Boti Kebab",
+                            "price": "399",
+                            "desc": "Chicken kebabs, which are boneless chicken with flavorful yoghurt based marinade and cooked until just done.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Haryali Kebab",
+                            "price": "385",
+                            "desc": "Boneless chicken is flavored with fresh green herbs, marinated in curd, skewered and then grilled to perfection.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/54f/ef64a72991507d0b801e5ee6c546654f.jpg"
+                        },
+                        {
+                            "name": "Chicken Reshmi Kebab",
+                            "price": "395",
+                            "desc": "Chicken reshmi kabab is made with boneless chicken breast that has been marinated in a juicy mixture of curd, cream, cashew nuts and spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Afghani Kebab",
+                            "price": "589",
+                            "desc": "Afghani chicken kebab is a delightful dish coming straight from the Mughal era. The chicken thighs are cut into bite sized chunks and are marinated with yogurt, lemon juice and spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Malai Kebab",
+                            "price": "439",
+                            "desc": "A delicious combination of minced chicken with almond paste flavored with fresh herbs.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Fish Fry",
+                            "price": "199",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Main Course",
+            "category": [
+                {
+                    "name": "Veg Main Course",
+                    "items": [
+                        {
+                            "name": "Kadhai Paneer",
+                            "price": "378",
+                            "desc": "A popular paneer where paneer and bell peppers are cooked in a spicy masala.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/822/7aee1bcbc2de150964f7da62354ee822.jpg"
+                        },
+                        {
+                            "name": "Paneer Butter Masala",
+                            "price": "385",
+                            "desc": "Soft paneer dunked in a creamy, silky, super flavorful and delicious curry.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/c84/5b0c32090aa42a8a1f5adcde167a5c84.jpg"
+                        },
+                        {
+                            "name": "Paneer Tikka Butter Masala",
+                            "price": "399",
+                            "desc": "With bright flavors from spiced tomato onion buttery gravy and marinated grilled paneer.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mixed Veg",
+                            "price": "299",
+                            "desc": "North Indian curry dish made with a variety of fresh vegetables in an onion tomato gravy flavored with spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/d2a/474ba243e33e7ee6cab44e2cc2d8dd2a.jpg"
+                        },
+                        {
+                            "name": "Paneer Do Pyaaza",
+                            "price": "385",
+                            "desc": "A rich, creamy curry of soft succulent paneer and plenty of onion in a wonderful medley of spices, herbs and tomatoes.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/2ef/438179a189948a87fff17935c01532ef.jpg"
+                        },
+                        {
+                            "name": "Kadhai Mushroom",
+                            "price": "389",
+                            "desc": "Kadai mushroom gravy recipe made button mushrooms. North Indian spicy, hot and delicious gravy.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/804/b5e2c5119ff166382119291c70f3b804.jpg"
+                        },
+                        {
+                            "name": "Paneer Chatpata",
+                            "price": "380",
+                            "desc": "Chatpata paneer is a combination of cottage cheese and capsicum in a thick spicy tangy tomato base.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Mushroom Masala",
+                            "price": "399",
+                            "desc": "This is a very rich thick creamy curry with paneer, mushroom and green peas.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Do Pyaaza",
+                            "price": "359",
+                            "desc": "Mushroom do pyaza is a semi dry veg preparation made with button mushroom, lots of onion and tomatoes.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/a87/15385d94ccb1425d53479873f7711a87.jpg"
+                        },
+                        {
+                            "name": "Mushroom Chatpata",
+                            "price": "349",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Masala",
+                            "price": "385",
+                            "desc": "A delicious Indian curry made with mushrooms, onions, tomatoes, spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Matar Paneer",
+                            "price": "369",
+                            "desc": "Paneer where paneer is cooked with green peas, onion, tomatoes and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Palak Paneer",
+                            "price": "381",
+                            "desc": "A popular Indian vegetarian dish consisting of paneer [Indian cheese] in a smooth, creamy and delicious spinach gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Shahi Paneer",
+                            "price": "399",
+                            "desc": "A rich, aromatic and delicious tasting mughlai made with paneer, onions, yogurt, spices and nuts.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Aloo Gobi Matar",
+                            "price": "269",
+                            "desc": "A lightly spiced curry made in a base of onion and tomatoes with potatoes, cauliflower and green peas.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Kaju Kadhai",
+                            "price": "449",
+                            "desc": "Ghee roasted cashews are cooked along with onion, tomatoes and a whole bunch of whole and ground spices to make this flavorful curry.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Kashmiri Dum Aloo",
+                            "price": "259",
+                            "desc": "Kashmiri style deep fried potatoes cooked in a deeply rich red colored sauce and fragrant spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/3e9/7eea75ed4b34e2510235277ca46363e9.jpg"
+                        },
+                        {
+                            "name": "Malai Kofta",
+                            "price": "339",
+                            "desc": "An Indian dish of potato paneer balls served with a flavorful, creamy and delicious curry.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/019/c6012944949ea28534bcbb97f3117019.jpg"
+                        },
+                        {
+                            "name": "Chana Masala",
+                            "price": "289",
+                            "desc": "This spin on an Indian chickpea curry features a healthy mixture of chickpeas, tomatoes, onion, and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Navratan Korma",
+                            "price": "289",
+                            "desc": "Navratan korma is a rich luxurious curry dish made with mixed vegetables and lot of dry fruits.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Punjabi Chana Masala",
+                            "price": "295",
+                            "desc": "A popular North Indian curry made with chickpeas a whole bunch of spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Kofta",
+                            "price": "299",
+                            "desc": "Dish made from mixed vegetable dumplings dunked in a onion tomato based gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Kadhai",
+                            "price": "369",
+                            "desc": "A delicious Indian vegetarian dish comprising of a mixture of vegetables cooked in a creamy spicy gravy flavoured with whole spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Green Peas Malai",
+                            "price": "285",
+                            "desc": "Green peas are cooked in creamy, rich flavorful white gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Palak Paneer Lehsuni",
+                            "price": "369",
+                            "desc": "This lehsuni palak recipe is prepared by blending the spinach into a puree and cooking along with onion and tomato masala and then served with a tadka of roasted garlic cloves.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Shahi Kofta",
+                            "price": "390",
+                            "desc": "Crispy paneer balls known as kofta are served with a creamy and super luxurious gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Tawa Veg",
+                            "price": "359",
+                            "desc": "A popular dish made in the live counters of buffet where assorted fried veggies are tossed in a spicy and tangy masala.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Aloo Matar",
+                            "price": "255",
+                            "desc": "A delicious North Indian curry made with potatoes, peas, onions, tomatoes, spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Do Pyaaza",
+                            "price": "379",
+                            "desc": "A delectable dish filled with loads of vegetables and it's incredibly flavourful with lots of Indian spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Methi Malai",
+                            "price": "379",
+                            "desc": "Methi malai paneer is a creamy, mildly sweet gravy with hints of bitterness from methi leaves.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Keema",
+                            "price": "349",
+                            "desc": "A delicious veg made with crumbled paneer, spices and vegetables.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Palak Corn Lehsuni",
+                            "price": "295",
+                            "desc": "A creamy spinach curry base and bits of sweet corn topped with a spicy garlicky tadka.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Baby Corn Masala",
+                            "price": "369",
+                            "desc": "An simple and rich cream based curry which has a strong resemblance to other paneer based curries especially to paneer butter masala.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Corn Mushroom Masala",
+                            "price": "379",
+                            "desc": "Mushroom masala a delicious appetizer made with fresh button mushrooms and sweet corn.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Matar Mushroom",
+                            "price": "369",
+                            "desc": "Curried side made with mushrooms, green peas, onions, tomatoes, spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Akbari",
+                            "price": "295",
+                            "desc": "Indian cheese [paneer] simmered in a satin smooth creamy tomato sauce. A blend of garden fresh vegetables, tomatoes, and bell peppers cooked in a tomato based sauce with mixed herbs and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Masala",
+                            "price": "379",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Hyderabadi",
+                            "price": "375",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Nov Veg Main Course",
+                    "items": [
+                        {
+                            "name": "Chicken Tikka Butter Masala",
+                            "price": "459",
+                            "desc": "It is rich dish of chunks of roasted/tandoori chicken cooked in creamy tomato base gravy and aromatic spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/6ad/950a8f7d1ca997a267053789861396ad.jpg"
+                        },
+                        {
+                            "name": "Chicken Butter Masala",
+                            "price": "499",
+                            "desc": "A popular Indian dish of grilled chicken simmered in a smooth, silky and creamy onion tomato and cashew gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/eb0/9e63fdf332b1f4171656fd9379c3deb0.jpg"
+                        },
+                        {
+                            "name": "Mutton Dehati",
+                            "price": "949",
+                            "desc": "The spices used in mutton masala curry include turmeric, red chili powder, coriander powder, garam masala and cumin seeds.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/558/6f8ecc70488eb2dc61b3b82b33fac558.jpg"
+                        },
+                        {
+                            "name": "Chicken Dehati",
+                            "price": "689",
+                            "desc": "Spicy chicken curry marinated and cooked with whole spices khada sabut masala.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Kadhai Chicken",
+                            "price": "475",
+                            "desc": "A delicious Indian chicken curry where chicken is cooked with freshly ground spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/64a/6a35fee9881db41860690ceeb5efc64a.jpg"
+                        },
+                        {
+                            "name": "Supreme Desi Mutton",
+                            "price": "599",
+                            "desc": "A delicious Indian curried dish of soft tender chunks of meat in a spicy onion tomato gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Kassa",
+                            "price": "479",
+                            "desc": "Chicken pieces are cooked in onion, ginger garlic and masala based gravy and the dish is semi dry.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Handi",
+                            "price": "489",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Fish Curry",
+                            "price": "269",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Kassa",
+                            "price": "579",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Boneless Chicken Patiala",
+                            "price": "489",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Tawa Chicken",
+                            "price": "499",
+                            "desc": "Punjabi dish where chicken pieces are marinated in a paste with gram flour and pices and cooked in a spiced curry base.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Lucknowi",
+                            "price": "480",
+                            "desc": "A delicious chicken curry made with creamy kaju, tomato paste, ghee, heavy cream and everything royal this dish can rival any non veg dish.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Murgh Masala",
+                            "price": "479",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Lababdar",
+                            "price": "489",
+                            "desc": "A delicious North Indian dish that combines tender pieces of chicken with a rich tomato onion based gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Curry",
+                            "price": "469",
+                            "desc": "Simple and delicious dish made by simmering chicken in fresh ground Kerala spice powder and coconut milk.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/d01/301b8f25a8be473db7bb00b9155a5d01.jpeg"
+                        },
+                        {
+                            "name": "Chicken Do Pyaaza",
+                            "price": "465",
+                            "desc": "Marinated chicken chunks cooked in a variety of spices, yogurt and kasoori methi.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/06e/1eb6f275fb449e9c01e3ba97cfc6d06e.jpg"
+                        },
+                        {
+                            "name": "Chicken Tikka Masala",
+                            "price": "449",
+                            "desc": "A popular curried dish made with boneless chicken, ground spices, onions, tomatoes, cream and herbs.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Patiala",
+                            "price": "479",
+                            "desc": "A dish with a yoghurt and spice marinated chicken in a cashew and creamy curry base.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Bhuna Masala",
+                            "price": "489",
+                            "desc": "A delicious North Indian dish of chicken cooked in a spicy and flavorsome sautéed or fried masala.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Murgh Musallam",
+                            "price": "699",
+                            "desc": "A spicy chicken dish where shredded chicken is cooked with Indian spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Bharta",
+                            "price": "449",
+                            "desc": "A spicy chicken dish where shredded chicken is cooked with Indian spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Egg Masala [2 Eggs]",
+                            "price": "222",
+                            "desc": "A Indian dish made with boiled eggs, onions, tomatoes, whole spices and spice powders.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Egg Curry [2 Eggs]",
+                            "price": "219",
+                            "desc": "A comforting Indian dish of curried eggs. It is basically made with hard boiled eggs, onions, tomatoes, whole and ground spices and herbs.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Masala",
+                            "price": "479",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Kolhapuri",
+                            "price": "485",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Methi Malai",
+                            "price": "689",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Haveli Dhaba Special Chicken",
+                            "price": "699",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Bhuna Gosht",
+                            "price": "489",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Fish Masala",
+                            "price": "289",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Fish Do Pyaaza",
+                            "price": "299",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Curry",
+                            "price": "599",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Rice and Veg Biryani",
+            "category": [
+                {
+                    "name": "Rice and Biryani",
+                    "items": [
+                        {
+                            "name": "Veg Hyderabadi Biryani",
+                            "price": "339",
+                            "desc": "An authentic Indian vegetarian dish packed full of your favorite rice, veggies and spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/1aa/923a0908713b01342cc5fab093be31aa.jpg"
+                        },
+                        {
+                            "name": "Paneer Biryani",
+                            "price": "329",
+                            "desc": "This biryani is dum cooked with basmati rice, paneer, spices, yogurt, herbs and nuts.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/019/165615c4bceb204f0e467eeabd7da019.jpg"
+                        },
+                        {
+                            "name": "Veg Kolhapuri Biryani",
+                            "price": "349",
+                            "desc": "This authentic Kolhapuri biryani variation is prepared with rice cooked in ghee and saffron strands. Dried fenugreek/ kasuri methi leaves are added to enhance the flavour while tamarind balances the tanginess of the dish.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/89d/33d52d9126e482e52c8567de4cd8589d.jpg"
+                        },
+                        {
+                            "name": "Veg Biryani",
+                            "price": "329",
+                            "desc": "An authentic Indian vegetarian dish packed full of your favorite rice, veggies and spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/4f5/a762a0f7008bdf1c1040fc443e4914f5.jpg"
+                        },
+                        {
+                            "name": "Jeera Rice",
+                            "price": "129",
+                            "desc": "Rice dish made by cooking basmati rice along with whole spices and then tempering with cumin seeds and green chilies.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/0fc/b56437d1d2272fbd74197be54f2490fc.jpg"
+                        },
+                        {
+                            "name": "Veg Pulao",
+                            "price": "199",
+                            "desc": "Rice dish made with rice, spices, vegetables and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/e63/3b6358dfae3d21c36e4beeb1e72e5e63.jpg"
+                        },
+                        {
+                            "name": "Steamed Rice",
+                            "price": "115",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/ffa/d1e77eb7dc2baa39c5d84e3703f0effa.jpg"
+                        },
+                        {
+                            "name": "Veg Mixed Pulao",
+                            "price": "199",
+                            "desc": "It is basically a combination of flavors or flavored rice cooked with a choice of vegetables, herbs and spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/b6c/eb0a189da7371bf3a145ced7effb1b6c.jpg"
+                        },
+                        {
+                            "name": "Peas Pulao",
+                            "price": "159",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Kashmiri Pulao",
+                            "price": "209",
+                            "desc": "Rice pulao from Kashmiri cuisine made with nuts, dried fruits, saffron and fresh fruits.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Non Veg Biryani",
+                    "items": [
+                        {
+                            "name": "Chicken Dum Biryani with Raita",
+                            "price": "369",
+                            "desc": "Basmati rice cooked with chicken and aromatic spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/923/1da9a44b106f549c9dbaac8e4c49e923.jpg"
+                        },
+                        {
+                            "name": "Chicken Hyderabadi Biryani",
+                            "price": "379",
+                            "desc": "The chicken pieces are marinated and cooked alongside the rice, and it is seasoned with coconut and saffron.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/3d0/fdf7c11867e101376407c6fe092703d0.jpg"
+                        },
+                        {
+                            "name": "Mutton Biryani",
+                            "price": "399",
+                            "desc": "A classic dish made by layering rice over slow cooked mutton gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/61f/776ed89331db48c5197ada7bd6ab061f.jpg"
+                        },
+                        {
+                            "name": "Kolkata Mutton Biryani",
+                            "price": "389",
+                            "desc": "Fragrant rice and soft mutton get together in this classic Calcutta biryani dish. Contains potatoes",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/27a/1bc879c601d88457f2367db89d7c027a.jpg"
+                        },
+                        {
+                            "name": "Kolkata Chicken Dum Biryani",
+                            "price": "389",
+                            "desc": "Chicken dum biryani is adopted from Awadhi biryani with well seasoned potato and hard boiled eggs.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Hyderabadi Biryani",
+                            "price": "385",
+                            "desc": "It is a mouthwatering dish loaded with all things decadent such as tender mutton, aromatic herbs, roasted dry spices, fried onions and more.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/9e6/30a47ca2dd8885f509eaf39b1728c9e6.jpg"
+                        },
+                        {
+                            "name": "Kolkata Mutton Dum Biryani",
+                            "price": "389",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Dum Biryani",
+                            "price": "369",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Dum Biryani",
+                            "price": "399",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Chinese Starters",
+            "category": [
+                {
+                    "name": "Chinese",
+                    "items": [
+                        {
+                            "name": "Drums of Heaven Chicken",
+                            "price": "369",
+                            "desc": "Drums of heaven are basically chicken lollipops tossed in a sweet, spicy sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/678/5b8459c83e5d896750075c8057cee678.jpg"
+                        },
+                        {
+                            "name": "Chicken Lollipop",
+                            "price": "359",
+                            "desc": "These crispy and flavorful chicken lollipops are marinated in a spicy yogurt mixture and then coated in a mixture of breadcrumbs and spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/3e3/79ec9956c1a054b54936e85bc242a3e3.jpeg"
+                        },
+                        {
+                            "name": "Chicken Chilli",
+                            "price": "339",
+                            "desc": "A popular Indo Chinese appetizer made by tossing fried chicken in spicy hot chilli sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/065/ebec16f8a7b62ffd4837b10223f83065.jpg"
+                        },
+                        {
+                            "name": "Boneless Chilli Chicken",
+                            "price": "349",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Chilli",
+                            "price": "285",
+                            "desc": "Paneer [Indian cottage cheese] is tossed in a flavorful spicy sauce made with soy sauce, chili sauce, vinegar.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Baby Corn Chilli",
+                            "price": "299",
+                            "desc": "A crispy and mouthwatering finger food with fried baby corn tossed in a fiery and garlicky sauce and topped with sesame seeds.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Chilli",
+                            "price": "289",
+                            "desc": "An Indian-Chinese vegetarian gravy with button mushrooms, and colourful peppers covered in a sweet and spicy sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Manchurian",
+                            "price": "269",
+                            "desc": "A tasty Indo Chinese dish of fried veggie balls in a spicy, sweet and tangy sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Haveli Dhaba Special Cheese Chilli",
+                            "price": "399",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Salt and Pepper",
+                            "price": "329",
+                            "desc": "Crispy seasoned chicken, fried up with crunchy onions and spicy chillies.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Schezwan Gravy",
+                            "price": "359",
+                            "desc": "Schezwan chicken is made by first marinating chicken with flour and spices then deep frying it until crispy finally tossing it in a schezwan based sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Baby Corn Salt and Pepper",
+                            "price": "289",
+                            "desc": "Deep fried baby corn tossed with garlic and pepper.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/69c/a3d247fd6dffbefc4fa06160afbbd69c.jpg"
+                        },
+                        {
+                            "name": "Honey Chilli Potato",
+                            "price": "269",
+                            "desc": "Sliced potatoes coated n red chilli, deep fried with the garlic paste and spring onions.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Corn Salt and Pepper",
+                            "price": "289",
+                            "desc": "A healthy wholesome gourmet recipe that is made with batter fried corn kernels and stir fried with host of veggies.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Chilli Dry",
+                            "price": "259",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Salt and Pepper",
+                            "price": "279",
+                            "desc": "Soft buttery mushrooms tossed in red Chinese sauce with white and black pepper, served with delectable veggies.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer 65",
+                            "price": "309",
+                            "desc": "A spicy South Indian appetizer made with paneer aka Indian cheese, flour, spices and herbs like curry leaves.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Salt and Pepper",
+                            "price": "299",
+                            "desc": "A preparation of tossed paneer with crushed pepper and hints of soya.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Schezwan Dry",
+                            "price": "259",
+                            "desc": "Schezwan paneer is an Indo Chinese dish where crispy paneer is tossed in a sauce made with schewzan chutney or sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Gobi Chilli",
+                            "price": "275",
+                            "desc": "Chilli gobi featuring perfect little bites of battered fried cauliflower coated in sweet and spicy Indo Chinese sauces.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Potato Chilli",
+                            "price": "259",
+                            "desc": "Chilli potato is starter snack made of crisp fried potatoes tossed in sweet spicy & sour chilli sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chana Chilli",
+                            "price": "279",
+                            "desc": "Chilli chana is a popular Indian Chinese appetizer. Crunchy chick peas are tossed in a spicy sauce with capsicum, onions and garlic.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Sweet and Sour",
+                            "price": "310",
+                            "desc": "Sweet and sour vegetables made with mixed vegetables. delectable sticky sweet and sour sauce and finished with crunchy sesame seeds.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Manchurian",
+                            "price": "359",
+                            "desc": "A popular Indo Chinese appetizer made of fried chicken in manchurian sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Schezwan Dry",
+                            "price": "359",
+                            "desc": "A popular Chinese dish made by tossing crisp chicken in moderately hot, spicy, sweet and flavorful sichuan sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Schezwan Semi Gravy",
+                            "price": "359",
+                            "desc": "This chicken preparation is made with schezwan sauce which has lots of red chillies and garlic.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Ginger Chicken Semi Gravy",
+                            "price": "339",
+                            "desc": "A delicious North Indian chicken curry that has a yogurt base with prominent ginger flavor.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Ginger Chicken Gravy",
+                            "price": "339",
+                            "desc": "Chinese dish made with lots of fresh ginger, garlic and scallions, cooked down into a sticky brown sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Ginger Chicken Latpt",
+                            "price": "339",
+                            "desc": "Delicious spicy ginger chicken made with onions, chicken and garlic tossed into chicken with some sauces makes it finger licking good.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Sweet and Sour",
+                            "price": "375",
+                            "desc": "Tasty sweet and sour chicken with pineapple chunks, green bell pepper and tender cubes of crispy chicken in a delicious homemade sweet and sour sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken 65",
+                            "price": "349",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Fried Rice",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Chicken Fried Rice",
+                            "price": "259",
+                            "desc": "Chinese style stir fried rice with vegetables, chicken and egg.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/932/9d0726d5a5b408045363df03b57e2932.jpg"
+                        },
+                        {
+                            "name": "Non Veg Mixed Fried Rice",
+                            "price": "289",
+                            "desc": "A little bit of everything comes together so well in this mixed fried rice made with chicken, prawns, eggs and veggies.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/c40/6e56bece39ca0676c945a240e1b9bc40.jpg"
+                        },
+                        {
+                            "name": "Mixed Veg Fried Rice",
+                            "price": "249",
+                            "desc": "An Asian dish made by stir fried cooked rice in a wok with vegetables and soya sauce.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/b37/eae06fa35291e2b5d383680a1a1afb37.jpg"
+                        },
+                        {
+                            "name": "Egg Fried Rice",
+                            "price": "229",
+                            "desc": "Cooked rice, beaten eggs, spring onions or scallions, oil and soy sauce cooked on high heat in a wok.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Fried Rice",
+                            "price": "189",
+                            "desc": "Stir frying cooked rice with vegetables and seasoned with soy sauce, aromatics and spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/6af/ac687b1ab84d2505a589e41e358ca6af.jpg"
+                        },
+                        {
+                            "name": "Schezwan Fried Rice",
+                            "price": "199",
+                            "desc": "Schezwan fried rice is hot and spicy with bursting flavors of ginger, garlic, soya sauce and red chilli paste.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Singapuri Fried Rice",
+                            "price": "229",
+                            "desc": "This is a spicy fried rice dish which is made with various sauces. Veggies give a crunchy twist to the rice.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Schezwan Fried Rice",
+                            "price": "255",
+                            "desc": "In this dish the cooked basmati rice is tossed with red hot schezwan sauce and veggies and chicken.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Shanghai Fried Rice",
+                            "price": "259",
+                            "desc": "Shanghai fried rice is a Chinese fried rice that is mixed with vegetables, sauces and chicken.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Singapuri Fried Rice",
+                            "price": "275",
+                            "desc": "Singapore fried rice with chicken, juicy prawns/shrimp, nutritious veggies, and fluffy pieces of scrambled egg with a distinctive Singapore-style spice mix and yummy umami sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Dal",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Dal Tadka",
+                            "price": "249",
+                            "desc": "A nutritious, comfort, delicious dish made by seasoning dal with ghee and spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/5fc/5f93fc476de4e239978e932566c005fc.jpg"
+                        },
+                        {
+                            "name": "Dal Makhani",
+                            "price": "239",
+                            "desc": "A delicious, rich and creamy dish made with black lentils, spices, butter and cream.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Egg Dal Tadka",
+                            "price": "265",
+                            "desc": "It is a lovely creamy medley of green mung bean and split chickpeas [chana dal] along with eggs.",
+                            "dietary_slugs": "egg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/5b5/3a1c68a8a2075b980459bbfda036e5b5.jpg"
+                        },
+                        {
+                            "name": "Dal Makhanwala",
+                            "price": "255",
+                            "desc": "An authentic, Punjabi version with subtle smoky flavors and creaminess of the lentils.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Dal Do Pyaaza",
+                            "price": "249",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Amritsari Dal",
+                            "price": "259",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Dal Fry",
+                            "price": "199",
+                            "desc": "A delicious and popular Indian dish made with lentils [toor dal], onions, tomatoes, spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Dal Pyaza",
+                            "price": "249",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Dal Handi",
+                            "price": "245",
+                            "desc": "Brown lentils in a rich and fragrant spiced onion bell pepper tomato yogurt sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Platters",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Veg Platter",
+                            "price": "399",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Platter",
+                            "price": "499",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Roti, Naan & Paratha",
+            "category": [
+                {
+                    "name": "Breads",
+                    "items": [
+                        {
+                            "name": "Stuffed Kulcha",
+                            "price": "95",
+                            "desc": "Stuffed vegetable kulcha is a soft and fluffy Indian leavened bread which is made stuffed with seasonal vegetables.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Aloo Paratha",
+                            "price": "60",
+                            "desc": "These stuffed parathas are made with spiced potato filling. Known as aloo paratha, these flatbreads are simply delicious and make a great meal.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Plain Tandoori Roti",
+                            "price": "30",
+                            "desc": "It's a flatbread made with whole wheat and traditionally cooked in tandoor [cylindrical clay oven] hence the name tandoori.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Butter Tandoori Roti",
+                            "price": "35",
+                            "desc": "Wheat flour flat bread cooked to perfection in tandoor & served with butter on top.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Plain Naan",
+                            "price": "60",
+                            "desc": "Soft unleavened bread baked in clay oven.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/e6e/bbfe038034929c17e355fa9a60b3ee6e.jpg"
+                        },
+                        {
+                            "name": "Butter Naan",
+                            "price": "80",
+                            "desc": "A butter flavored flatbread is one of the most extremely delicious dish of Indian breads.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/30c/4c7e1d6fe53bf05206d937656aeb930c.jpg"
+                        },
+                        {
+                            "name": "Garlic Naan",
+                            "price": "89",
+                            "desc": "Indian leavened flatbread made with all-purpose flour and spiced with garlic.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Missi Roti",
+                            "price": "60",
+                            "desc": "Missi Roti are savory and nutty flavored flatbreads made with a mix of whole wheat flour, gram flour and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Shahi Naan",
+                            "price": "95",
+                            "desc": "Naan stuffed with cheese.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Main Course Veg Specials",
+            "category": [
+                {
+                    "name": "Veg Main Course",
+                    "items": [
+                        {
+                            "name": "Kadhai Paneer",
+                            "price": "378",
+                            "desc": "A popular paneer where paneer and bell peppers are cooked in a spicy masala.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/822/7aee1bcbc2de150964f7da62354ee822.jpg"
+                        },
+                        {
+                            "name": "Paneer Butter Masala",
+                            "price": "385",
+                            "desc": "Soft paneer dunked in a creamy, silky, super flavorful and delicious curry.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/c84/5b0c32090aa42a8a1f5adcde167a5c84.jpg"
+                        },
+                        {
+                            "name": "Paneer Tikka Butter Masala",
+                            "price": "399",
+                            "desc": "With bright flavors from spiced tomato onion buttery gravy and marinated grilled paneer.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mixed Veg",
+                            "price": "299",
+                            "desc": "North Indian curry dish made with a variety of fresh vegetables in an onion tomato gravy flavored with spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/d2a/474ba243e33e7ee6cab44e2cc2d8dd2a.jpg"
+                        },
+                        {
+                            "name": "Paneer Do Pyaaza",
+                            "price": "385",
+                            "desc": "A rich, creamy curry of soft succulent paneer and plenty of onion in a wonderful medley of spices, herbs and tomatoes.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/2ef/438179a189948a87fff17935c01532ef.jpg"
+                        },
+                        {
+                            "name": "Kadhai Mushroom",
+                            "price": "389",
+                            "desc": "Kadai mushroom gravy recipe made button mushrooms. North Indian spicy, hot and delicious gravy.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/804/b5e2c5119ff166382119291c70f3b804.jpg"
+                        },
+                        {
+                            "name": "Paneer Chatpata",
+                            "price": "380",
+                            "desc": "Chatpata paneer is a combination of cottage cheese and capsicum in a thick spicy tangy tomato base.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Mushroom Masala",
+                            "price": "399",
+                            "desc": "This is a very rich thick creamy curry with paneer, mushroom and green peas.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Do Pyaaza",
+                            "price": "359",
+                            "desc": "Mushroom do pyaza is a semi dry veg preparation made with button mushroom, lots of onion and tomatoes.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/a87/15385d94ccb1425d53479873f7711a87.jpg"
+                        },
+                        {
+                            "name": "Mushroom Chatpata",
+                            "price": "349",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Masala",
+                            "price": "385",
+                            "desc": "A delicious Indian curry made with mushrooms, onions, tomatoes, spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Matar Paneer",
+                            "price": "369",
+                            "desc": "Paneer where paneer is cooked with green peas, onion, tomatoes and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Palak Paneer",
+                            "price": "381",
+                            "desc": "A popular Indian vegetarian dish consisting of paneer [Indian cheese] in a smooth, creamy and delicious spinach gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Shahi Paneer",
+                            "price": "399",
+                            "desc": "A rich, aromatic and delicious tasting mughlai made with paneer, onions, yogurt, spices and nuts.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Aloo Gobi Matar",
+                            "price": "269",
+                            "desc": "A lightly spiced curry made in a base of onion and tomatoes with potatoes, cauliflower and green peas.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Kaju Kadhai",
+                            "price": "449",
+                            "desc": "Ghee roasted cashews are cooked along with onion, tomatoes and a whole bunch of whole and ground spices to make this flavorful curry.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Kashmiri Dum Aloo",
+                            "price": "259",
+                            "desc": "Kashmiri style deep fried potatoes cooked in a deeply rich red colored sauce and fragrant spices.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/3e9/7eea75ed4b34e2510235277ca46363e9.jpg"
+                        },
+                        {
+                            "name": "Malai Kofta",
+                            "price": "339",
+                            "desc": "An Indian dish of potato paneer balls served with a flavorful, creamy and delicious curry.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/019/c6012944949ea28534bcbb97f3117019.jpg"
+                        },
+                        {
+                            "name": "Chana Masala",
+                            "price": "289",
+                            "desc": "This spin on an Indian chickpea curry features a healthy mixture of chickpeas, tomatoes, onion, and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Keema",
+                            "price": "349",
+                            "desc": "A delicious veg made with crumbled paneer, spices and vegetables.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Methi Malai",
+                            "price": "379",
+                            "desc": "Methi malai paneer is a creamy, mildly sweet gravy with hints of bitterness from methi leaves.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Green Peas Malai",
+                            "price": "",
+                            "desc": "Green peas are cooked in creamy, rich flavorful white gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Corn Mushroom Masala",
+                            "price": "379",
+                            "desc": "Mushroom masala a delicious appetizer made with fresh button mushrooms and sweet corn.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Matar Mushroom",
+                            "price": "369",
+                            "desc": "Curried side made with mushrooms, green peas, onions, tomatoes, spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Akbari",
+                            "price": "295",
+                            "desc": "Indian cheese [paneer] simmered in a satin smooth creamy tomato sauce. A blend of garden fresh vegetables, tomatoes, and bell peppers cooked in a tomato based sauce with mixed herbs and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Aloo Matar",
+                            "price": "255",
+                            "desc": "A delicious North Indian curry made with potatoes, peas, onions, tomatoes, spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Baby Corn Masala",
+                            "price": "369",
+                            "desc": "An simple and rich cream based curry which has a strong resemblance to other paneer based curries especially to paneer butter masala.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Palak Corn Lehsuni",
+                            "price": "295",
+                            "desc": "A creamy spinach curry base and bits of sweet corn topped with a spicy garlicky tadka.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Palak Paneer Lehsuni",
+                            "price": "369",
+                            "desc": "This lehsuni palak recipe is prepared by blending the spinach into a puree and cooking along with onion and tomato masala and then served with a tadka of roasted garlic cloves.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Navratan Korma",
+                            "price": "289",
+                            "desc": "Navratan korma is a rich luxurious curry dish made with mixed vegetables and lot of dry fruits.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Shahi Kofta",
+                            "price": "390",
+                            "desc": "Crispy paneer balls known as kofta are served with a creamy and super luxurious gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Kofta",
+                            "price": "299",
+                            "desc": "Dish made from mixed vegetable dumplings dunked in a onion tomato based gravy.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Kadhai",
+                            "price": "369",
+                            "desc": "A delicious Indian vegetarian dish comprising of a mixture of vegetables cooked in a creamy spicy gravy flavoured with whole spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Do Pyaaza",
+                            "price": "379",
+                            "desc": "A delectable dish filled with loads of vegetables and it's incredibly flavourful with lots of Indian spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Tawa Veg",
+                            "price": "359",
+                            "desc": "A popular dish made in the live counters of buffet where assorted fried veggies are tossed in a spicy and tangy masala.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Punjabi Chana Masala",
+                            "price": "295",
+                            "desc": "A popular North Indian curry made with chickpeas a whole bunch of spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Masala",
+                            "price": "379",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Hyderabadi",
+                            "price": "375",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Non Veg Specials",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Chicken Tikka Butter Masala",
+                            "price": "459",
+                            "desc": "It is rich dish of chunks of roasted/tandoori chicken cooked in creamy tomato base gravy and aromatic spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/6ad/950a8f7d1ca997a267053789861396ad.jpg"
+                        },
+                        {
+                            "name": "Chicken Butter Masala",
+                            "price": "499",
+                            "desc": "A popular Indian dish of grilled chicken simmered in a smooth, silky and creamy onion tomato and cashew gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/eb0/9e63fdf332b1f4171656fd9379c3deb0.jpg"
+                        },
+                        {
+                            "name": "Mutton Dehati",
+                            "price": "949",
+                            "desc": "The spices used in mutton masala curry include turmeric, red chili powder, coriander powder, garam masala and cumin seeds.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/558/6f8ecc70488eb2dc61b3b82b33fac558.jpg"
+                        },
+                        {
+                            "name": "Chicken Dehati",
+                            "price": "689",
+                            "desc": "Spicy chicken curry marinated and cooked with whole spices khada sabut masala.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Kadhai Chicken",
+                            "price": "475",
+                            "desc": "A delicious Indian chicken curry where chicken is cooked with freshly ground spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/64a/6a35fee9881db41860690ceeb5efc64a.jpg"
+                        },
+                        {
+                            "name": "Supreme Desi Mutton",
+                            "price": "599",
+                            "desc": "A delicious Indian curried dish of soft tender chunks of meat in a spicy onion tomato gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Kassa",
+                            "price": "479",
+                            "desc": "Chicken pieces are cooked in onion, ginger garlic and masala based gravy and the dish is semi dry.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Handi",
+                            "price": "489",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Fish Curry",
+                            "price": "269",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Kassa",
+                            "price": "579",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Boneless Chicken Patiala",
+                            "price": "489",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Tawa Chicken",
+                            "price": "499",
+                            "desc": "Punjabi dish where chicken pieces are marinated in a paste with gram flour and pices and cooked in a spiced curry base.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Lucknowi",
+                            "price": "480",
+                            "desc": "A delicious chicken curry made with creamy kaju, tomato paste, ghee, heavy cream and everything royal this dish can rival any non veg dish.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Murgh Masala",
+                            "price": "479",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Lababdar",
+                            "price": "489",
+                            "desc": "A delicious North Indian dish that combines tender pieces of chicken with a rich tomato onion based gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Egg Masala [2 Eggs]",
+                            "price": "222",
+                            "desc": "A Indian dish made with boiled eggs, onions, tomatoes, whole spices and spice powders.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Egg Curry [2 Eggs]",
+                            "price": "219",
+                            "desc": "A comforting Indian dish of curried eggs. It is basically made with hard boiled eggs, onions, tomatoes, whole and ground spices and herbs.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Curry",
+                            "price": "469",
+                            "desc": "Simple and delicious dish made by simmering chicken in fresh ground Kerala spice powder and coconut milk.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/d01/301b8f25a8be473db7bb00b9155a5d01.jpeg"
+                        },
+                        {
+                            "name": "Chicken Do Pyaaza",
+                            "price": "465",
+                            "desc": "Marinated chicken chunks cooked in a variety of spices, yogurt and kasoori methi.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/06e/1eb6f275fb449e9c01e3ba97cfc6d06e.jpg"
+                        },
+                        {
+                            "name": "Chicken Tikka Masala",
+                            "price": "449",
+                            "desc": "A popular curried dish made with boneless chicken, ground spices, onions, tomatoes, cream and herbs.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Patiala",
+                            "price": "479",
+                            "desc": "A dish with a yoghurt and spice marinated chicken in a cashew and creamy curry base.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Bhuna Masala",
+                            "price": "489",
+                            "desc": "A delicious North Indian dish of chicken cooked in a spicy and flavorsome sautéed or fried masala.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Murgh Musallam",
+                            "price": "699",
+                            "desc": "A spicy chicken dish where shredded chicken is cooked with Indian spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Bharta",
+                            "price": "449",
+                            "desc": "A spicy chicken dish where shredded chicken is cooked with Indian spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Masala",
+                            "price": "479",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Kolhapuri",
+                            "price": "485",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Methi Malai",
+                            "price": "689",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Bhuna Gosht",
+                            "price": "489",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Curry",
+                            "price": "599",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Fish Masala",
+                            "price": "289",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Fish Do Pyaaza",
+                            "price": "299",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Haveli Dhaba Special Chicken",
+                            "price": "699",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Soups and Salads",
+            "category": [
+                {
+                    "name": "Soups",
+                    "items": [
+                        {
+                            "name": "Veg Hot and Sour Soup",
+                            "price": "179",
+                            "desc": "A spicy and hot soup made with mixed fresh vegetables, mushrooms, spices and soy sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Manchow Soup",
+                            "price": "189",
+                            "desc": "Delicious vegan Asian soup loaded with vegetables.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Lemon Garlic Veg Soup",
+                            "price": "155",
+                            "desc": "Spicy sauce filled in mini wanton pockets boiled in a fragrant broth, this garlic lemon soup.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Coriander Soup",
+                            "price": "149",
+                            "desc": "Coriander [cilantro] soup with bold Indian flavors from ginger, garlic and chilies, loaded with colorful veggies.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Sweet Corn Soup",
+                            "price": "169",
+                            "desc": "Made from fresh American sweet corn, scallions, herbs and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Clear Soup",
+                            "price": "145",
+                            "desc": "[veg preparation] A soup made by simmering veggies or meat in a liquid until it turns flavorful.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Tomato Soup",
+                            "price": "160",
+                            "desc": "Creamy soup prepared with ripe & juicy tomatoes, veggies and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Cream of Tomato Soup",
+                            "price": "165",
+                            "desc": "Creamy soup prepared with ripe & juicy tomatoes, veggies and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Cream of Mushroom Soup",
+                            "price": "189",
+                            "desc": "A warm bowl of soup so deliciously creamy with tender bites of mushroom pieces.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Manchow Soup",
+                            "price": "189",
+                            "desc": "Its spicy, full of veggies and chicken and topped with crunchy fried noodles.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Hot and Sour Soup",
+                            "price": "185",
+                            "desc": "Delicious peppery soup made with chicken, mixed vegetables, ginger, garlic cooked in a hot and sour broth.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Lemon Garlic Soup",
+                            "price": "179",
+                            "desc": "Lemon chicken soup has plenty of chicken, fresh herbs, orzo pasta and a squeeze of lemon juice to warm you from the inside out.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Coriander Soup",
+                            "price": "175",
+                            "desc": "Made with fresh broth [not store bought], it has the herby flavors of cilantro and the tang of lemons. Shredded cabbage adds the perfect crunch.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Sweet Corn Soup",
+                            "price": "180",
+                            "desc": "Little chunks of chicken are cooked with sweetcorn and stock, plus couple of little flavour enhancers like white pepper and sesame oil.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Clear Soup",
+                            "price": "170",
+                            "desc": "A flavourful rich broth made using bone in chicken along with onion, carrots, ginger and garlic.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Salads",
+                    "items": [
+                        {
+                            "name": "Green Salad",
+                            "price": "99",
+                            "desc": "A green salad is a salad made mainly with lettuce and other green vegetables.",
+                            "dietary_slugs": "veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/917/8f99696a88686446444035e22d393917.jpg"
+                        },
+                        {
+                            "name": "Onion Salad",
+                            "price": "69",
+                            "desc": "",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Non Veg Biryani",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Chicken Dum Biryani with Raita",
+                            "price": "369",
+                            "desc": "Basmati rice cooked with chicken and aromatic spices.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/923/1da9a44b106f549c9dbaac8e4c49e923.jpg"
+                        },
+                        {
+                            "name": "Chicken Hyderabadi Biryani",
+                            "price": "379",
+                            "desc": "The chicken pieces are marinated and cooked alongside the rice, and it is seasoned with coconut and saffron.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/3d0/fdf7c11867e101376407c6fe092703d0.jpg"
+                        },
+                        {
+                            "name": "Mutton Biryani",
+                            "price": "399",
+                            "desc": "A classic dish made by layering rice over slow cooked mutton gravy.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/61f/776ed89331db48c5197ada7bd6ab061f.jpg"
+                        },
+                        {
+                            "name": "Kolkata Mutton Biryani",
+                            "price": "389",
+                            "desc": "Fragrant rice and soft mutton get together in this classic Calcutta biryani dish. Contains potatoes",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/27a/1bc879c601d88457f2367db89d7c027a.jpg"
+                        },
+                        {
+                            "name": "Kolkata Chicken Dum Biryani",
+                            "price": "389",
+                            "desc": "Chicken dum biryani is adopted from Awadhi biryani with well seasoned potato and hard boiled eggs.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Hyderabadi Biryani",
+                            "price": "385",
+                            "desc": "It is a mouthwatering dish loaded with all things decadent such as tender mutton, aromatic herbs, roasted dry spices, fried onions and more.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/9e6/30a47ca2dd8885f509eaf39b1728c9e6.jpg"
+                        },
+                        {
+                            "name": "Kolkata Mutton Dum Biryani",
+                            "price": "389",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Dum Biryani",
+                            "price": "369",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mutton Dum Biryani",
+                            "price": "399",
+                            "desc": "",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Noodles",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Mixed Hakka Noodles",
+                            "price": "289",
+                            "desc": "Fresh noodles tossed with jullien cut vegetables, egg, chicken and prawns.",
+                            "dietary_slugs": "non-veg",
+                            "image": "https://b.zmtcdn.com/data/dish_photos/bac/8647ba60f5d2bf644fe2fe4794709bac.jpg"
+                        },
+                        {
+                            "name": "Chicken Chilli Garlic Hakka Noodles",
+                            "price": "269",
+                            "desc": "An Indo Chinese style stir fry noodle made with prominent flavors of garlic and peppers, balanced out with sauces.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Schezwan Hakka Noodles",
+                            "price": "269",
+                            "desc": "A spicy, flavourful and tasty that is made by cooking noodles with schezwan sauce, tempered spices chicken and vegetables.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Chowmein",
+                            "price": "259",
+                            "desc": "A popular Indo Chinese dish of stir fried noodles, veggies and sauces.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Pan Fried Noodles",
+                            "price": "280",
+                            "desc": "These pan fried noodles are tossed with colorful vegetables and coated in a savory sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Schezwan Hakka Noodles",
+                            "price": "215",
+                            "desc": "Made with the spicy schezwan sauce and hakka noodles is made with soy sauce.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mushroom Chowmein",
+                            "price": "209",
+                            "desc": "Simple mushroom chowmein recipe made with mixed mushrooms, egg noodles, spring onions, garlic, onion and delicious soy based savoury sauce.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Veg Mixed Chowmein",
+                            "price": "259",
+                            "desc": "A popular Chinese dish of stir fried noodles with mix vegetables, soy sauce, aromatics and spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chilli Garlic Hakka Noodles",
+                            "price": "219",
+                            "desc": "It is a popular Indo Chinese noodles prepared with fresh hakka noodles with garlic and chilli flavour.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Shanghai Noodles",
+                            "price": "201",
+                            "desc": "These Chinese fried noodles feature cabbage, garlic, ginger, green onions and a sauce that will make your mouth water.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Egg Hakka Noodles",
+                            "price": "219",
+                            "desc": "Egg fried noodles are a delicious Chinese of stir fried noodles tossed with umami sauces, nutrient rich veggies and protein packed eggs.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Egg Schezwan Hakka Noodles",
+                            "price": "279",
+                            "desc": "Egg schezwan noodles is an easy and delicious hot and spicy noodle with eggs and vegetables.",
+                            "dietary_slugs": "egg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Hakka Noodles",
+                            "price": "279",
+                            "desc": "Stir fried noodles, chicken, vegetables and sauces. Made in Chinese hakka style.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Shanghai Noodles",
+                            "price": "289",
+                            "desc": "Stir fried wheat noodles with cabbage and soy sauce with chicken.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Chicken Sizzler Noodles",
+                            "price": "399",
+                            "desc": "Tender, succulent chicken pieces in a flavourful Chinese sauce, served on a bed of perfectly cooked noodles.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Pan Fried Non Veg Noodles",
+                            "price": "289",
+                            "desc": "These pan fried noodles are tossed with colorful vegetables & chicken and coated in a savory sauce.",
+                            "dietary_slugs": "non-veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Snacks",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Masala Kulcha",
+                            "price": "79",
+                            "desc": "A popular flatbread prepared with spiced potato and paneer stuffing.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Paneer Kulcha",
+                            "price": "80",
+                            "desc": "This stuffed paneer kulcha is a tasty leavened flatbread made with spiced, savory paneer filling.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Plain Kulcha",
+                            "price": "60",
+                            "desc": "It leavens the dough, making the kulcha light and fluffy. It also adds flavor to the kulcha.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Accompaniments",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Mixed Salad",
+                            "price": "189",
+                            "desc": "A mixed salad is a mixture of raw or cold foods such as lettuce, cucumber and tomatoes.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Plain Curd",
+                            "price": "89",
+                            "desc": "Made by curdling the milk with edible acidic substance such as lemon juice or vinegar.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Mixed Raita",
+                            "price": "129",
+                            "desc": "A tasty & creamy side dish made by blending veggies with curd & seasoned with spice powders.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Pineapple Raita",
+                            "price": "149",
+                            "desc": "A sweet, spicy and tangy raita bursting with juicy pineapples and seasoned with few spices and herbs.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Dessert",
+            "category": [
+                {
+                    "name": "",
+                    "items": [
+                        {
+                            "name": "Hot Gulab Jamun [2 Pieces]",
+                            "price": "79",
+                            "desc": "An Indian dessert of fried dough balls that are soaked in a sweet, sticky sugar syrup.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Drinks (Beverages)",
+            "category": [
+                {
+                    "name": "Cold Beverages",
+                    "items": [
+                        {
+                            "name": "Masala Cold Beverage",
+                            "price": "75",
+                            "desc": "Masala coke is a twist to regular drink with Indian spices.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        },
+                        {
+                            "name": "Cold Coffee",
+                            "price": "149",
+                            "desc": "A popular chilled beverage made with coffee, sugar and milk or water.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                },
+                {
+                    "name": "Hot Beverages",
+                    "items": [
+                        {
+                            "name": "Tea",
+                            "price": "50",
+                            "desc": "The spiced tea is typically brewed strong with milk and sweetened with sugar or honey.",
+                            "dietary_slugs": "veg",
+                            "image": ""
+                        }
+                    ]
+                }
+            ]
+        }
+    ]
+}

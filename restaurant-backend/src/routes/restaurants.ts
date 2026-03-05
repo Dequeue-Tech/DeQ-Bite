@@ -388,7 +388,7 @@ router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('O
           name: string;
           email: string;
           phone: string | null;
-          role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+          role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF' | 'CENTRAL_ADMIN' | 'KITCHEN_STAFF';
           createdAt: Date;
         };
       }) => ({

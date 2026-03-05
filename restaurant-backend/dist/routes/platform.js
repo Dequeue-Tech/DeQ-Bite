@@ -256,7 +256,7 @@ router.get('/earnings', async (_req, res) => {
                 grossAmountPaise: totals._sum.grossAmountPaise || 0,
                 platformCommissionPaise: totals._sum.platformCommissionPaise || 0,
                 restaurantEarningPaise: totals._sum.restaurantEarningPaise || 0,
-                pendingRestaurantSettlementPaise: pendingSettlements._sum.restaurantEarningPaise || 0,
+                pendingRestaurantSettlementPaise: pendingSettlements._sum?.restaurantEarningPaise || 0,
             },
             byRestaurant: byRestaurant.map((entry) => ({
                 restaurantId: entry.restaurantId,

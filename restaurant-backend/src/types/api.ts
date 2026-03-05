@@ -4,7 +4,7 @@ export interface AuthenticatedRequest extends Request {
   user?: {
     id: string;
     email: string;
-    role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+    role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF' | 'CENTRAL_ADMIN' | 'KITCHEN_STAFF';
     name: string;
   };
   restaurant?: {
@@ -22,7 +22,7 @@ export interface User {
   email: string;
   name: string;
   phone?: string;
-  role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+  role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF' | 'CENTRAL_ADMIN' | 'KITCHEN_STAFF';
   createdAt: Date;
   updatedAt: Date;
 }

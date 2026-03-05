@@ -4,6 +4,7 @@ const express_1 = require("express");
 const database_1 = require("../config/database");
 const auth_1 = require("../middleware/auth");
 const restaurant_1 = require("../middleware/restaurant");
+const logger_1 = require("../utils/logger");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 router.use(auth_1.authenticate);
@@ -133,8 +134,10 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
         const taxPaise = Math.round(taxablePaise * TAX_RATE);
         const totalPaise = taxablePaise + taxPaise;
         const paymentCollectionTiming = req.restaurant.paymentCollectionTiming;
-        const status = paymentCollectionTiming === 'AFTER_MEAL' ? 'CONFIRMED' : 'PENDING';
-        const initialPaymentStatus = selectedProvider === 'CASH' && paymentCollectionTiming === 'BEFORE_MEAL' ? 'PROCESSING' : 'PENDING';
+        const status = 'PENDING';
+        const initialPaymentStatus = selectedProvider === 'CASH' && paymentCollectionTiming === 'BEFORE_MEAL'
+            ? 'PROCESSING'
+            : 'PENDING';
         const order = await database_1.prisma.$transaction(async (tx) => {
             if (appliedCouponId) {
                 await tx.coupon.update({
@@ -169,7 +172,18 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
                 },
             });
         });
-        return res.status(201).json({ success: true, data: order, message: 'Order created successfully' });
+        logger_1.logger.info('New order created and awaiting confirmation', {
+            orderId: order.id,
+            restaurantId: order.restaurantId,
+            tableId: order.tableId,
+            userId,
+            paymentCollectionTiming,
+        });
+        return res.status(201).json({
+            success: true,
+            data: order,
+            message: 'Order created successfully and is awaiting confirmation from staff',
+        });
     }
     catch (error) {
         return res.status(500).json({ success: false, error: 'Internal server error while creating order' });
@@ -198,6 +212,12 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
         }
         if (['COMPLETED', 'CANCELLED'].includes(existingOrder.status)) {
             return res.status(400).json({ success: false, error: 'Cannot add dishes to a closed order' });
+        }
+        if (existingOrder.paymentCollectionTiming === 'BEFORE_MEAL') {
+            return res.status(400).json({
+                success: false,
+                error: 'Cannot add dishes to pay-before-meal orders. Please create a new order.',
+            });
         }
         const additionalItems = [];
         let addedSubtotalPaise = 0;

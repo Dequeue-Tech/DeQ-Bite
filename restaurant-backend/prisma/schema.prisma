@@ -30,6 +30,7 @@ model Restaurant {
   slug                    String                  @unique
   subdomain               String                  @unique
   status                  OnboardingStatus        @default(PENDING_APPROVAL)
+  suspendedReason         String?
   email                   String?
   phone                   String?
   address                 String?
@@ -64,6 +65,7 @@ model Restaurant {
   orders                  Order[]
   users                   RestaurantUser[]
   tables                  Table[]
+  earnings                Earning[]              @relation("earnings")
 
   @@map("restaurants")
 }
@@ -167,6 +169,7 @@ model Order {
   restaurant              Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   table                   Table                   @relation(fields: [tableId], references: [id])
   user                    User                    @relation(fields: [userId], references: [id])
+  payments                Payment[]
 
   @@map("orders")
 }
@@ -226,17 +229,25 @@ model Coupon {
 model Offer {
   id                   String     @id @default(cuid())
   restaurantId         String
-  title                String
+  title                String?
+  name                 String?
+  code                 String?
   description          String?
-  type                 OfferType
+  type                 OfferType?
+  discountType         String?
   value                Float
   minimumOrderValue    Int?
+  minOrderPaise        Int?
   maximumDiscount      Int?
+  maxDiscountPaise     Int?
   startDate            DateTime?
+  startsAt             DateTime?
   endDate              DateTime?
+  endsAt               DateTime?
   maxUses              Int?
   currentUses          Int        @default(0)
   isActive             Boolean    @default(true)
+  active               Boolean    @default(true)
   applicableItems      String[]   @default([])
   applicableCategories String[]   @default([])
   createdAt            DateTime   @default(now())
@@ -244,6 +255,54 @@ model Offer {
   restaurant           Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("offers")
+}
+
+model Payment {
+  id                String       @id @default(cuid())
+  orderId           String
+  userId            String
+  restaurantId      String
+  method            String
+  provider          String
+  amountPaise       Int
+  status            PaymentStatus
+  providerOrderId   String?
+  providerPaymentId String?
+  providerSignature String?
+  notes             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  order             Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Earning {
+  id                      String     @id @default(cuid())
+  restaurantId            String
+  orderId                 String     @unique
+  grossAmountPaise        Int
+  platformCommissionPaise Int
+  restaurantEarningPaise  Int
+  settled                 Boolean    @default(false)
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  restaurant              Restaurant @relation("earnings", fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("earnings")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String
+  restaurantId  String?
+  action        String
+  entityType    String
+  entityId      String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@map("audit_logs")
 }
 
 enum UserRole {

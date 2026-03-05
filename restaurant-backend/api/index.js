@@ -1,3 +1,5 @@
+const path = require('path');
+
 function requireFirst(paths) {
   const notFoundErrors = [];
   for (const modulePath of paths) {
@@ -15,18 +17,26 @@ function requireFirst(paths) {
   );
 }
 
-const appModule = requireFirst([
+// Try multiple path strategies to handle different deployment environments
+const apiDir = __dirname;
+const rootDir = path.join(apiDir, '..');
+
+const appPaths = [
+  path.join(rootDir, 'dist', 'app'),
+  path.join(rootDir, 'dist', 'src', 'app'),
   '../dist/app',
   '../dist/src/app',
-  '../../dist/app',
-  '../../dist/src/app',
-]);
-const dbModule = requireFirst([
+];
+
+const dbPaths = [
+  path.join(rootDir, 'dist', 'config', 'database'),
+  path.join(rootDir, 'dist', 'src', 'config', 'database'),
   '../dist/config/database',
   '../dist/src/config/database',
-  '../../dist/config/database',
-  '../../dist/src/config/database',
-]);
+];
+
+const appModule = requireFirst(appPaths);
+const dbModule = requireFirst(dbPaths);
 
 const app = appModule.default || appModule;
 const connectDatabase = dbModule.connectDatabase;

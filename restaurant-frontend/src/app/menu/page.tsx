@@ -254,108 +254,80 @@ function MenuPageContent() {
               <p className="text-gray-600 text-base sm:text-lg">No items found matching your criteria</p>
             </div>
           ) : (
-            filteredItems.map(item => {
-              const quantity = getCartItemQuantity(item.id);
-              
-              return (
-                <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden menu-item-card">
-                  <div className="relative">
-                    {item.image && (
-                      <Image
-                        src={"https://png.pngtree.com/png-vector/20221121/ourmid/pngtree-food-doodle-set-illustration-vector-collection-png-image_6472557.png"}
-                        alt={item.name || ''}
-                        width={300}
-                        height={200}
-                        className="w-full h-40 sm:h-48 object-cover"
-                      />
-                    )}
-                    
-                    {/* Dietary tags */}
-                    <div className="absolute top-2 left-2 flex space-x-1">
-                      {item.isVeg && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Veg</span>}
-                      {item.isVegan && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Vegan</span>}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {filteredItems.map((item) => {
+                const quantity = getCartItemQuantity(item.id);
+
+                return (
+                  <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden menu-item-card">
+                    <div className="relative">
+                      {item.image && (
+                        <Image
+                          src={item.image}
+                          alt={item.name || ''}
+                          width={300}
+                          height={200}
+                          className="w-full h-40 sm:h-48 object-cover"
+                        />
+                      )}
+
+                      <div className="absolute top-2 left-2 flex space-x-1">
+                        {item.isVeg && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Veg</span>}
+                        {item.isVegan && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Vegan</span>}
+                      </div>
                     </div>
-                  )}
-                  
-                  {/* Items grid for this category */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                    {items.map(item => {
-                      const quantity = getCartItemQuantity(item.id);
-                      const hasImage = item.image && item.image.trim() !== '';
-                      
-                      return (
-                        <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden menu-item-card">
-                          <div className="p-3 sm:p-4">
-                            <div className="flex gap-3 sm:gap-4">
-                              {/* Left side - Text content */}
-                              <div className="flex-1 min-w-0">
-                                {/* Dietary tags */}
-                                <div className="flex gap-1 mb-2">
-                                  {item.isVeg && <span className="bg-green-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Veg</span>}
-                                  {item.isVegan && <span className="bg-green-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Vegan</span>}
-                                  {!item.isVeg && !item.isVegan && <span className="bg-red-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Non-Veg</span>}
-                                </div>
-                                
-                                <h3 className="text-sm sm:text-base font-semibold text-gray-800 line-clamp-1 mb-1">{item.name || 'Unknown Item'}</h3>
-                                <p className="text-gray-600 text-xs sm:text-sm line-clamp-2 mb-2">{item.description || ''}</p>
-                                
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-sm sm:text-base font-bold text-orange-600">{formatInr(item.pricePaise)}</span>
-                                  <span className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide bg-gray-100 px-1.5 sm:px-2 py-0.5 rounded">
-                                    {getSpiceLevelDisplay(item.spiceLevel)}
-                                  </span>
-                                </div>
-                              </div>
-                              
-                              {/* Right side - Image and Add button */}
-                              <div className={`flex flex-col items-center ${hasImage ? 'gap-2' : 'gap-0 justify-end'}`}>
-                                {/* Small image if present */}
-                                {hasImage && (
-                                  <Image
-                                    src={item.image!}
-                                    alt={item.name || ''}
-                                    width={80}
-                                    height={80}
-                                    loading="lazy"
-                                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg"
-                                  />
-                                )}
-                                
-                                {/* Add button / Quantity controls */}
-                                {quantity === 0 ? (
-                                  <button
-                                    onClick={() => handleAddToCart(item)}
-                                    className="w-16 sm:w-20 bg-orange-600 text-white px-2 py-1.5 rounded-lg hover:bg-orange-700 transition-colors text-xs sm:text-sm font-medium"
-                                  >
-                                    Add
-                                  </button>
-                                ) : (
-                                  <div className="flex items-center border border-gray-300 rounded-lg w-16 sm:w-20 justify-center">
-                                    <button
-                                      onClick={() => handleUpdateQuantity(item, quantity - 1)}
-                                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
-                                    >
-                                      <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    </button>
-                                    <span className="px-1 sm:px-2 py-0.5 text-xs sm:text-sm font-medium min-w-[1rem] text-center">{quantity}</span>
-                                    <button
-                                      onClick={() => handleUpdateQuantity(item, quantity + 1)}
-                                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
-                                    >
-                                      <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+
+                    <div className="p-3 sm:p-4">
+                      <div className="flex justify-between items-start mb-2 gap-2">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-800 line-clamp-1">
+                          {item.name || 'Unknown Item'}
+                        </h3>
+                        <span className="text-base sm:text-lg font-bold text-orange-600 whitespace-nowrap">
+                          {formatInr(item.pricePaise)}
+                        </span>
+                      </div>
+
+                      <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm line-clamp-2">
+                        {item.description || ''}
+                      </p>
+
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mb-3 sm:mb-4">
+                        <span className="text-xs text-gray-500 uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
+                          {getSpiceLevelDisplay(item.spiceLevel)}
+                        </span>
+
+                        <div className="flex items-center w-full sm:w-auto">
+                          {quantity === 0 ? (
+                            <button
+                              onClick={() => handleAddToCart(item)}
+                              className="w-full sm:w-auto bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm"
+                            >
+                              Add to Cart
+                            </button>
+                          ) : (
+                            <div className="flex items-center border border-gray-300 rounded-lg w-full sm:w-auto justify-center sm:justify-start">
+                              <button
+                                onClick={() => handleUpdateQuantity(item, quantity - 1)}
+                                className="p-2 text-gray-600 hover:bg-gray-100 flex-1 sm:flex-none"
+                              >
+                                <Minus className="h-4 w-4 mx-auto" />
+                              </button>
+                              <span className="px-3 py-1 font-medium min-w-[2rem] text-center">{quantity}</span>
+                              <button
+                                onClick={() => handleUpdateQuantity(item, quantity + 1)}
+                                className="p-2 text-gray-600 hover:bg-gray-100 flex-1 sm:flex-none"
+                              >
+                                <Plus className="h-4 w-4 mx-auto" />
+                              </button>
                             </div>
-                          </div>
+                          )}
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ));
-            })()
+                );
+              })}
+            </div>
           )}
         </div>
       </div>

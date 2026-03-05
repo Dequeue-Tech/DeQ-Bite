@@ -7,11 +7,44 @@ import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 
 const router = Router();
 
+const slugify = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9\s-]/g, '')
+    .replace(/\s+/g, '-')
+    .replace(/-+/g, '-');
+
+const ensureUniqueRestaurantHandles = async (name: string) => {
+  const base = slugify(name) || 'restaurant';
+  let suffix = 0;
+
+  while (true) {
+    const candidate = suffix === 0 ? base : `${base}-${suffix}`;
+    const exists = await prisma.restaurant.findFirst({
+      where: {
+        OR: [{ slug: candidate }, { subdomain: candidate }],
+      },
+      select: { id: true },
+    });
+
+    if (!exists) {
+      return { slug: candidate, subdomain: candidate };
+    }
+
+    suffix += 1;
+  }
+};
+
 const createRestaurantSchema = z.object({
   name: z.string().min(2).max(120),
   email: z.string().email().optional(),
   phone: z.string().optional(),
   address: z.string().optional(),
+  city: z.string().optional(),
+  state: z.string().optional(),
+  country: z.string().optional(),
+  cuisineTypes: z.array(z.string().min(2).max(40)).max(10).optional(),
 });
 
 const updatePaymentPolicySchema = z.object({
@@ -24,51 +57,37 @@ const addRestaurantUserSchema = z.object({
   role: z.enum(['OWNER', 'ADMIN', 'STAFF']),
 });
 
-const slugify = (value: string) =>
-  value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/-+/g, '-')
-    .replace(/^-|-$/g, '')
-    .slice(0, 50);
-
-const generateRestaurantKeys = async (name: string) => {
-  const base = slugify(name) || 'restaurant';
-
-  for (let attempt = 0; attempt < 50; attempt += 1) {
-    const suffix = attempt === 0 ? '' : `-${Math.random().toString(36).slice(2, 6)}`;
-    const candidate = `${base}${suffix}`.slice(0, 60);
-
-    const existing = await prisma.restaurant.findFirst({
-      where: {
-        OR: [{ slug: candidate }, { subdomain: candidate }],
-      },
-      select: { id: true },
-    });
-
-    if (!existing) {
-      return { slug: candidate, subdomain: candidate };
-    }
-  }
-
-  throw new Error('Unable to generate unique restaurant key');
-};
-
-// GET /api/restaurants/public/search?query=abc
+// GET /api/restaurants/public/search?query=abc&cuisine=indian&location=city
 router.get('/public/search', async (req: AuthenticatedRequest, res: Response) => {
   const query = (req.query['query'] as string | undefined)?.trim() || '';
+  const cuisine = (req.query['cuisine'] as string | undefined)?.trim();
+  const location = (req.query['location'] as string | undefined)?.trim();
 
   const restaurants = await prisma.restaurant.findMany({
     where: {
       active: true,
+      status: 'APPROVED',
       ...(query ? { name: { contains: query, mode: 'insensitive' } } : {}),
+      ...(cuisine ? { cuisineTypes: { has: cuisine } } : {}),
+      ...(location
+        ? {
+            OR: [
+              { city: { contains: location, mode: 'insensitive' } },
+              { state: { contains: location, mode: 'insensitive' } },
+              { address: { contains: location, mode: 'insensitive' } },
+            ],
+          }
+        : {}),
     },
     select: {
       id: true,
       name: true,
+      slug: true,
       subdomain: true,
       address: true,
+      city: true,
+      state: true,
+      cuisineTypes: true,
       paymentCollectionTiming: true,
       cashPaymentEnabled: true,
     },
@@ -78,35 +97,40 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
 
   const response: ApiResponse = {
     success: true,
-    data: { restaurants },
+    data: {
+      restaurants,
+    },
   };
 
   res.json(response);
 });
 
-// GET /api/restaurants/public/:id
-router.get('/public/:id', async (req: AuthenticatedRequest, res: Response) => {
-  const { id } = req.params;
+// GET /api/restaurants/public/:identifier
+router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Response) => {
+  const identifier = req.params['identifier'];
 
-  if (!id) {
-    return res.status(400).json({ success: false, error: 'Restaurant id is required' });
+  if (!identifier) {
+    return res.status(400).json({ success: false, error: 'Restaurant identifier is required' });
   }
 
   const restaurant = await prisma.restaurant.findFirst({
-    where: { 
-      OR: [
-        { id, active: true },
-        { subdomain: id, active: true },
-        { slug: id, active: true }
-      ]
+    where: {
+      active: true,
+      status: 'APPROVED',
+      OR: [{ id: identifier }, { slug: identifier }, { subdomain: identifier }],
     },
     select: {
       id: true,
       name: true,
+      slug: true,
       subdomain: true,
       address: true,
+      city: true,
+      state: true,
+      country: true,
       email: true,
       phone: true,
+      cuisineTypes: true,
       paymentCollectionTiming: true,
       cashPaymentEnabled: true,
       categories: {
@@ -136,7 +160,9 @@ router.get('/public/:id', async (req: AuthenticatedRequest, res: Response) => {
 
   return res.json({
     success: true,
-    data: { restaurant },
+    data: {
+      restaurant,
+    },
   });
 });
 
@@ -158,17 +184,40 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
       active: true,
     },
     include: {
-      restaurant: true,
+      restaurant: {
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          subdomain: true,
+          status: true,
+          paymentCollectionTiming: true,
+          cashPaymentEnabled: true,
+        },
+      },
     },
   });
 
   const response: ApiResponse = {
     success: true,
     data: {
-      restaurants: restaurants.map((entry) => ({
+      restaurants: restaurants.map((entry: {
+        restaurant: {
+          id: string;
+          name: string;
+          slug: string;
+          subdomain: string;
+          status: string;
+          paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
+          cashPaymentEnabled: boolean;
+        };
+        role: string;
+      }) => ({
         id: entry.restaurant.id,
         name: entry.restaurant.name,
+        slug: entry.restaurant.slug,
         subdomain: entry.restaurant.subdomain,
+        status: entry.restaurant.status,
         role: entry.role,
         paymentCollectionTiming: entry.restaurant.paymentCollectionTiming,
         cashPaymentEnabled: entry.restaurant.cashPaymentEnabled,
@@ -182,37 +231,68 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
 // POST /api/restaurants
 router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) => {
   const payload = createRestaurantSchema.parse(req.body);
-  const keys = await generateRestaurantKeys(payload.name);
+  const handles = await ensureUniqueRestaurantHandles(payload.name);
 
-  const restaurant = await prisma.$transaction(async (tx) => {
-    const created = await tx.restaurant.create({
-      data: {
-        name: payload.name,
-        slug: keys.slug,
-        subdomain: keys.subdomain,
-        email: payload.email ?? null,
-        phone: payload.phone ?? null,
-        address: payload.address ?? null,
-        paymentCollectionTiming: 'AFTER_MEAL',
-        cashPaymentEnabled: true,
+  const restaurant = await prisma.restaurant.create({
+    data: {
+      name: payload.name,
+      slug: handles.slug,
+      subdomain: handles.subdomain,
+      email: payload.email ?? null,
+      phone: payload.phone ?? null,
+      address: payload.address ?? null,
+      city: payload.city ?? null,
+      state: payload.state ?? null,
+      country: payload.country ?? null,
+      cuisineTypes: payload.cuisineTypes ?? [],
+      active: true,
+      status: 'APPROVED',
+      approvedAt: new Date(),
+      approvedByUserId: req.user!.id,
+    },
+    select: {
+      id: true,
+      name: true,
+      slug: true,
+      subdomain: true,
+      address: true,
+      email: true,
+      phone: true,
+      active: true,
+      status: true,
+      paymentCollectionTiming: true,
+      cashPaymentEnabled: true,
+      createdAt: true,
+      updatedAt: true,
+    },
+  });
+
+  await prisma.restaurantUser.create({
+    data: {
+      restaurantId: restaurant.id,
+      userId: req.user!.id,
+      role: 'OWNER',
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.user!.id,
+      restaurantId: restaurant.id,
+      action: 'RESTAURANT_CREATED',
+      entityType: 'restaurant',
+      entityId: restaurant.id,
+      metadata: {
+        slug: restaurant.slug,
+        subdomain: restaurant.subdomain,
       },
-    });
-
-    await tx.restaurantUser.create({
-      data: {
-        restaurantId: created.id,
-        userId: req.user!.id,
-        role: 'OWNER',
-      },
-    });
-
-    return created;
+    },
   });
 
   const response: ApiResponse = {
     success: true,
     data: { restaurant },
-    message: 'Restaurant created',
+    message: 'Restaurant onboarded successfully',
   };
 
   res.status(201).json(response);
@@ -254,6 +334,17 @@ router.put('/settings/payment-policy', authenticate, requireRestaurant, authoriz
     },
   });
 
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.user!.id,
+      restaurantId: req.restaurant!.id,
+      action: 'PAYMENT_POLICY_UPDATED',
+      entityType: 'restaurant',
+      entityId: req.restaurant!.id,
+      metadata: payload,
+    },
+  });
+
   return res.json({
     success: true,
     message: 'Payment policy updated',
@@ -288,7 +379,19 @@ router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('O
   const response: ApiResponse = {
     success: true,
     data: {
-      users: users.map((entry) => ({
+      users: users.map((entry: {
+        id: string;
+        role: string;
+        active: boolean;
+        user: {
+          id: string;
+          name: string;
+          email: string;
+          phone: string | null;
+          role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+          createdAt: Date;
+        };
+      }) => ({
         membershipId: entry.id,
         role: entry.role,
         active: entry.active,
@@ -341,6 +444,20 @@ router.post('/users', authenticate, requireRestaurant, authorizeRestaurantRole('
           email: true,
           phone: true,
         },
+      },
+    },
+  });
+
+  await prisma.auditLog.create({
+    data: {
+      actorUserId: req.user!.id,
+      restaurantId: req.restaurant!.id,
+      action: 'RESTAURANT_USER_UPSERT',
+      entityType: 'restaurant_user',
+      entityId: membership.id,
+      metadata: {
+        userId: membership.userId,
+        role: membership.role,
       },
     },
   });

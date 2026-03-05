@@ -10,12 +10,6 @@ import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
 import SecurePaymentProcessor from '@/components/SecurePaymentProcessor';
 
-const sampleTables: Table[] = [
-  { id: '1', number: 1, capacity: 4, location: 'Outdoor', active: true },
-  { id: '2', number: 2, capacity: 6, location: 'Indoor', active: true },
-  { id: '3', number: 3, capacity: 8, location: 'Outdoor', active: true },
-];
-
 function CheckoutPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -35,6 +29,7 @@ function CheckoutPageContent() {
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [customerInfo, setCustomerInfo] = useState({ name: '', email: '', phone: '' });
   const [tables, setTables] = useState<Table[]>([]);
+  const [tablesError, setTablesError] = useState<string | null>(null);
   const [paymentProvider, setPaymentProvider] = useState<'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH'>('RAZORPAY');
   const [paymentProviders, setPaymentProviders] = useState<string[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -53,7 +48,7 @@ function CheckoutPageContent() {
     }
 
     if (cartItems.length === 0 && !requestedOrderId && step === 1) {
-      router.push('/menu');
+      router.push(apiClient.buildRestaurantPath('/menu'));
       return;
     }
 
@@ -105,15 +100,24 @@ function CheckoutPageContent() {
 
   const fetchTables = async () => {
     try {
+      const activeSlug = apiClient.getActiveRestaurantSlug();
+      if (!activeSlug) {
+        setTables([]);
+        setTablesError('Select a restaurant before choosing a table.');
+        return;
+      }
       setLoading(true);
+      setTablesError(null);
       const response = await apiClient.getTables();
       if (response.success && Array.isArray(response.data)) {
         setTables(response.data.filter((table) => table.active));
       } else {
-        setTables(sampleTables);
+        setTables([]);
+        setTablesError('Failed to load tables from the restaurant.');
       }
     } catch {
-      setTables(sampleTables);
+      setTables([]);
+      setTablesError('Failed to load tables from the restaurant.');
     } finally {
       setLoading(false);
     }
@@ -273,7 +277,7 @@ function CheckoutPageContent() {
 
             <div className="space-y-3">
               <button
-                onClick={() => router.push('/orders')}
+                onClick={() => router.push(apiClient.buildRestaurantPath('/orders'))}
                 className="w-full bg-orange-600 text-white py-3 rounded-lg hover:bg-orange-700 transition-colors"
               >
                 View My Orders
@@ -380,6 +384,8 @@ function CheckoutPageContent() {
                   </h2>
                   {loading ? (
                     <div className="py-4 text-sm">Loading tables...</div>
+                  ) : tablesError ? (
+                    <div className="py-4 text-sm text-red-600">{tablesError}</div>
                   ) : (
                     <div className="grid grid-cols-2 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
                       {tables.map((table) => (
@@ -508,7 +514,7 @@ function CheckoutPageContent() {
               <div className="mt-4 sm:mt-6">
                 <button
                   onClick={handlePlaceOrder}
-                  disabled={isProcessing || cartItems.length === 0 || (!requestedOrderId && !selectedTable)}
+                  disabled={isProcessing || cartItems.length === 0 || (!requestedOrderId && !selectedTable) || !!tablesError}
                   className="w-full bg-orange-600 text-white py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 font-semibold disabled:bg-gray-400 disabled:cursor-not-allowed flex items-center justify-center text-sm sm:text-base"
                 >
                   {isProcessing ? (

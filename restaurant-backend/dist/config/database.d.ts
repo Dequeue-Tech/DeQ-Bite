@@ -1,7 +1,8 @@
 import { PrismaClient } from '@prisma/client';
-declare let prisma: PrismaClient;
+declare const createPrismaClient: () => PrismaClient;
+declare let prisma: ReturnType<typeof createPrismaClient>;
 declare global {
-    var __prisma: PrismaClient | undefined;
+    var __prisma: ReturnType<typeof createPrismaClient> | undefined;
 }
 export declare const connectDatabase: () => Promise<void>;
 export declare const disconnectDatabase: () => Promise<void>;

@@ -153,6 +153,8 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
                     totalPaise,
                     paymentProvider: selectedProvider,
                     paymentStatus: initialPaymentStatus,
+                    paidAmountPaise: 0,
+                    dueAmountPaise: totalPaise,
                     paymentCollectionTiming,
                     specialInstructions: specialInstructions || '',
                     couponId: appliedCouponId,
@@ -241,6 +243,12 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                     notes: item.notes,
                 })),
             });
+            const updatedDue = Math.max(updatedTotal - existingOrder.paidAmountPaise, 0);
+            const updatedPaymentStatus = updatedDue === 0
+                ? 'COMPLETED'
+                : existingOrder.paidAmountPaise > 0
+                    ? 'PARTIALLY_PAID'
+                    : 'PENDING';
             return tx.order.update({
                 where: { id: existingOrder.id },
                 data: {
@@ -248,7 +256,8 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                     discountPaise: updatedDiscount,
                     taxPaise: updatedTax,
                     totalPaise: updatedTotal,
-                    paymentStatus: 'PENDING',
+                    dueAmountPaise: updatedDue,
+                    paymentStatus: updatedPaymentStatus,
                     status: existingOrder.paymentCollectionTiming === 'AFTER_MEAL' ? 'CONFIRMED' : existingOrder.status,
                     specialInstructions: typeof specialInstructions === 'string' ? specialInstructions : existingOrder.specialInstructions,
                 },
@@ -309,6 +318,12 @@ router.post('/:id/apply-coupon', restaurant_1.requireRestaurant, async (req, res
                     data: { usageCount: { increment: 1 } },
                 });
             }
+            const updatedDue = Math.max(newTotal - existingOrder.paidAmountPaise, 0);
+            const updatedPaymentStatus = updatedDue === 0
+                ? 'COMPLETED'
+                : existingOrder.paidAmountPaise > 0
+                    ? 'PARTIALLY_PAID'
+                    : 'PENDING';
             return tx.order.update({
                 where: { id: existingOrder.id },
                 data: {
@@ -316,7 +331,8 @@ router.post('/:id/apply-coupon', restaurant_1.requireRestaurant, async (req, res
                     discountPaise: newDiscount,
                     taxPaise: newTax,
                     totalPaise: newTotal,
-                    paymentStatus: 'PENDING',
+                    dueAmountPaise: updatedDue,
+                    paymentStatus: updatedPaymentStatus,
                 },
                 include: {
                     items: { include: { menuItem: true } },
@@ -461,13 +477,19 @@ router.put('/:id/cancel', restaurant_1.requireRestaurant, async (req, res) => {
         const userId = req.user.id;
         const order = await database_1.prisma.order.findFirst({
             where: { id, userId, restaurantId: req.restaurant.id },
-            select: { status: true },
+            select: { status: true, paidAmountPaise: true },
         });
         if (!order) {
             return res.status(404).json({ success: false, error: 'Order not found' });
         }
         if (!['PENDING', 'CONFIRMED'].includes(order.status)) {
             return res.status(400).json({ success: false, error: 'Order cannot be cancelled at this stage' });
+        }
+        if (order.paidAmountPaise > 0) {
+            return res.status(400).json({
+                success: false,
+                error: 'Order has payment captured. Refund the payment before cancellation.',
+            });
         }
         const cancelled = await database_1.prisma.order.update({
             where: { id },

@@ -161,7 +161,7 @@ export default function OrdersPage() {
           <div className="text-center py-12 sm:py-16">
             <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
             <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">No Orders Yet</h2>
-            <button onClick={() => router.push('/menu')} className="bg-orange-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 text-sm sm:text-base">
+            <button onClick={() => router.push(apiClient.buildRestaurantPath('/menu'))} className="bg-orange-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 text-sm sm:text-base">
               Browse Menu
             </button>
           </div>
@@ -219,7 +219,7 @@ export default function OrdersPage() {
                     <div className="flex flex-wrap gap-2 mt-3 sm:mt-4">
                       {isOngoing && (
                         <button
-                          onClick={() => router.push(`/menu?orderId=${order.id}`)}
+                          onClick={() => router.push(apiClient.buildRestaurantPath(`/menu?orderId=${order.id}`))}
                           className="px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center text-xs sm:text-sm"
                         >
                           <PlusCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
@@ -315,7 +315,7 @@ export default function OrdersPage() {
                             {applyingCouponOrderId === order.id ? '...' : 'Apply'}
                           </button>
                           <button
-                            onClick={() => router.push(`/checkout?orderId=${order.id}&payNow=1`)}
+                            onClick={() => router.push(apiClient.buildRestaurantPath(`/checkout?orderId=${order.id}&payNow=1`))}
                             className="px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm whitespace-nowrap"
                           >
                             Pay

@@ -18,6 +18,8 @@ import tableRoutes from '@/routes/tables';
 import orderRoutes from '@/routes/orders';
 import couponRoutes from '@/routes/coupons';
 import restaurantRoutes from '@/routes/restaurants';
+import offerRoutes from '@/routes/offers';
+import platformRoutes from '@/routes/platform';
 
 dotenv.config();
 
@@ -54,7 +56,7 @@ app.use(cors({
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain'],
+  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
 }));
 
 const limiter = rateLimit({
@@ -98,15 +100,22 @@ app.get('/', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
-app.use('/api/payments', paymentRoutes);
-app.use('/api/invoices', invoiceRoutes);
-app.use('/api/pdf', pdfRoutes);
-app.use('/api/menu', menuRoutes);
-app.use('/api/categories', categoryRoutes);
-app.use('/api/tables', tableRoutes);
-app.use('/api/orders', orderRoutes);
-app.use('/api/coupons', couponRoutes);
 app.use('/api/restaurants', restaurantRoutes);
+app.use('/api/platform', platformRoutes);
+
+const tenantRouter = express.Router({ mergeParams: true });
+tenantRouter.use('/payments', paymentRoutes);
+tenantRouter.use('/invoices', invoiceRoutes);
+tenantRouter.use('/pdf', pdfRoutes);
+tenantRouter.use('/menu', menuRoutes);
+tenantRouter.use('/categories', categoryRoutes);
+tenantRouter.use('/tables', tableRoutes);
+tenantRouter.use('/orders', orderRoutes);
+tenantRouter.use('/coupons', couponRoutes);
+tenantRouter.use('/restaurants', restaurantRoutes);
+tenantRouter.use('/offers', offerRoutes);
+
+app.use('/api/r/:restaurantSlug', tenantRouter);
 
 app.use('/invoices', express.static('public/invoices'));
 

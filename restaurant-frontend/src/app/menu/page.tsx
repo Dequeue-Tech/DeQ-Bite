@@ -22,7 +22,7 @@ function MenuPageContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSubdomain, setSelectedSubdomain] = useState<string | null>(null);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -33,7 +33,11 @@ function MenuPageContent() {
   });
 
   useEffect(() => {
-    setSelectedSubdomain(apiClient.getSelectedRestaurantSubdomain());
+    const slug = apiClient.getSelectedRestaurantSlug() || apiClient.getActiveRestaurantSlug();
+    if (slug) {
+      apiClient.setSelectedRestaurantSlug(slug);
+    }
+    setSelectedSlug(slug);
     setActiveOrderId(searchParams.get('orderId'));
     fetchMenuData();
   }, [searchParams, setActiveOrderId]);
@@ -206,8 +210,8 @@ function MenuPageContent() {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         <div className="mb-4 sm:mb-8">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2 sm:mb-4">Our Menu</h2>
-          {selectedSubdomain ? (
-            <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Restaurant context: @{selectedSubdomain}</p>
+          {selectedSlug ? (
+            <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Restaurant context: @{selectedSlug}</p>
           ) : (
             <p className="text-xs sm:text-sm text-orange-700 mb-1 sm:mb-2">No restaurant selected. Go to Home and select a restaurant first.</p>
           )}
@@ -257,7 +261,7 @@ function MenuPageContent() {
                   <div className="relative">
                     {item.image && (
                       <Image
-                        src={item.image}
+                        src={"https://png.pngtree.com/png-vector/20221121/ourmid/pngtree-food-doodle-set-illustration-vector-collection-png-image_6472557.png"}
                         alt={item.name || ''}
                         width={300}
                         height={200}

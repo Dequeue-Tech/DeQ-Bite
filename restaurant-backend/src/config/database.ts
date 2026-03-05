@@ -1,20 +1,14 @@
 import { PrismaClient } from '@prisma/client';
-import { withAccelerate } from '@prisma/extension-accelerate';
 import { logger } from '@/utils/logger';
 
-const createPrismaClient = () => {
+const createPrismaClient = (): PrismaClient => {
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'production' 
       ? ['error', 'warn'] 
       : ['query', 'info', 'warn', 'error'],
   });
 
-  // Check if using Prisma Accelerate (prisma+postgres:// or prisma+mysql://)
-  const databaseUrl = process.env.DATABASE_URL || '';
-  if (databaseUrl.startsWith('prisma+')) {
-    return client.$extends(withAccelerate());
-  }
-  
+  // Keep a single PrismaClient type across environments to avoid union type issues.
   return client;
 };
 

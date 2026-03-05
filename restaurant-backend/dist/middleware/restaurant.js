@@ -29,18 +29,26 @@ const attachRestaurant = async (req, _res, next) => {
     try {
         const headerSubdomain = req.get('x-restaurant-subdomain') || req.headers['x-restaurant-subdomain'];
         const host = req.get('host');
-        let subdomain = null;
+        let restaurantIdentifier = null;
         if (typeof headerSubdomain === 'string' && headerSubdomain.trim()) {
-            subdomain = headerSubdomain.trim().toLowerCase();
+            restaurantIdentifier = headerSubdomain.trim().toLowerCase();
         }
         else if (!isLocalHost(host)) {
-            subdomain = extractSubdomain(host);
+            restaurantIdentifier = extractSubdomain(host);
         }
-        if (!subdomain) {
+        if (!restaurantIdentifier) {
             return next();
         }
-        const restaurant = await database_1.prisma.restaurant.findUnique({
-            where: { subdomain },
+        const restaurant = await database_1.prisma.restaurant.findFirst({
+            where: {
+                active: true,
+                status: 'APPROVED',
+                OR: [
+                    { id: restaurantIdentifier },
+                    { slug: restaurantIdentifier },
+                    { subdomain: restaurantIdentifier },
+                ],
+            },
             select: {
                 id: true,
                 slug: true,
@@ -51,9 +59,8 @@ const attachRestaurant = async (req, _res, next) => {
                 cashPaymentEnabled: true,
             },
         });
-        if (!restaurant || !restaurant.active) {
-            return next(new errorHandler_1.AppError('Restaurant not found or inactive', 404));
-        }
+        if (!restaurant)
+            return next();
         req.restaurant = {
             id: restaurant.id,
             slug: restaurant.slug,

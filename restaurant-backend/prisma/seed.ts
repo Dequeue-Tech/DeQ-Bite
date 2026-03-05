@@ -12,6 +12,9 @@ async function main() {
       slug: 'demo',
       subdomain: 'demo',
       active: true,
+      status: 'APPROVED',
+      commissionRate: 10,
+      cuisineTypes: ['Indian', 'Continental'],
     },
     create: {
       name: 'Demo Restaurant',
@@ -20,6 +23,12 @@ async function main() {
       email: 'demo@restaurant.com',
       phone: '+91 90000 00000',
       address: '123 Demo Street, Bengaluru',
+      city: 'Bengaluru',
+      state: 'Karnataka',
+      country: 'India',
+      status: 'APPROVED',
+      commissionRate: 10,
+      cuisineTypes: ['Indian', 'Continental'],
     },
   });
 

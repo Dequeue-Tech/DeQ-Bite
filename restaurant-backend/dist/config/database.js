@@ -3,17 +3,21 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.prisma = exports.disconnectDatabase = exports.connectDatabase = void 0;
 const client_1 = require("@prisma/client");
 const logger_1 = require("../utils/logger");
+const createPrismaClient = () => {
+    const client = new client_1.PrismaClient({
+        log: process.env.NODE_ENV === 'production'
+            ? ['error', 'warn']
+            : ['query', 'info', 'warn', 'error'],
+    });
+    return client;
+};
 let prisma;
 if (process.env.NODE_ENV === 'production') {
-    exports.prisma = prisma = new client_1.PrismaClient({
-        log: ['error', 'warn'],
-    });
+    exports.prisma = prisma = createPrismaClient();
 }
 else {
     if (!global.__prisma) {
-        global.__prisma = new client_1.PrismaClient({
-            log: ['query', 'info', 'warn', 'error'],
-        });
+        global.__prisma = createPrismaClient();
     }
     exports.prisma = prisma = global.__prisma;
 }

@@ -22,6 +22,8 @@ const tables_1 = __importDefault(require("./routes/tables"));
 const orders_1 = __importDefault(require("./routes/orders"));
 const coupons_1 = __importDefault(require("./routes/coupons"));
 const restaurants_1 = __importDefault(require("./routes/restaurants"));
+const offers_1 = __importDefault(require("./routes/offers"));
+const platform_1 = __importDefault(require("./routes/platform"));
 dotenv_1.default.config();
 if (process.env.NODE_ENV === 'production') {
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
@@ -98,6 +100,8 @@ app.use('/api/tables', tables_1.default);
 app.use('/api/orders', orders_1.default);
 app.use('/api/coupons', coupons_1.default);
 app.use('/api/restaurants', restaurants_1.default);
+app.use('/api/offers', offers_1.default);
+app.use('/api/platform', platform_1.default);
 app.use('/invoices', express_1.default.static('public/invoices'));
 app.use((req, res) => {
     res.status(404).json({

@@ -1,4 +1,4 @@
-import { Response, NextFunction } from 'express';
+import { Response, NextFunction, Request } from 'express';
 import { prisma } from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { AuthenticatedRequest } from '@/types/api';
@@ -27,42 +27,117 @@ const extractSubdomain = (host?: string | null): string | null => {
   return null;
 };
 
+const extractSlugFromPath = (req: Request): string | null => {
+  const params = req.params as Record<string, string | undefined>;
+  const paramSlug = params?.['restaurantSlug'] || params?.['slug'];
+  if (paramSlug) return paramSlug.toLowerCase();
+
+  const url = req.originalUrl || req.url || '';
+  const match = /\/r\/([^\/?#]+)(\/|$)/i.exec(url);
+  if (match && match[1]) return match[1].toLowerCase();
+
+  return null;
+};
+
 export const attachRestaurant = async (
   req: AuthenticatedRequest,
   _res: Response,
   next: NextFunction
 ): Promise<void> => {
   try {
+    if (req.restaurant) {
+      return next();
+    }
+    const headerSlug = req.get('x-restaurant-slug') || req.headers['x-restaurant-slug'];
     const headerSubdomain = req.get('x-restaurant-subdomain') || req.headers['x-restaurant-subdomain'];
     const host = req.get('host');
-    let subdomain: string | null = null;
+    let restaurantIdentifier: string | null = null;
 
-    if (typeof headerSubdomain === 'string' && headerSubdomain.trim()) {
-      subdomain = headerSubdomain.trim().toLowerCase();
+    const pathSlug = extractSlugFromPath(req);
+    if (pathSlug) {
+      restaurantIdentifier = pathSlug;
+    } else if (typeof headerSlug === 'string' && headerSlug.trim()) {
+      restaurantIdentifier = headerSlug.trim().toLowerCase();
+    } else if (typeof headerSubdomain === 'string' && headerSubdomain.trim()) {
+      restaurantIdentifier = headerSubdomain.trim().toLowerCase();
     } else if (!isLocalHost(host)) {
-      subdomain = extractSubdomain(host);
+      restaurantIdentifier = extractSubdomain(host);
     }
 
-    if (!subdomain) {
+    if (!restaurantIdentifier) {
       return next();
     }
 
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { subdomain },
-      select: {
-        id: true,
-        slug: true,
-        subdomain: true,
-        name: true,
-        active: true,
-        paymentCollectionTiming: true,
-        cashPaymentEnabled: true,
-      },
-    });
-
-    if (!restaurant || !restaurant.active) {
-      return next(new AppError('Restaurant not found or inactive', 404));
+    let restaurant: {
+      id: string;
+      slug: string;
+      subdomain: string;
+      name: string;
+      active: boolean;
+      paymentCollectionTiming: any;
+      cashPaymentEnabled: boolean;
+    } | null;
+    try {
+      restaurant = await prisma.restaurant.findFirst({
+        where: {
+          active: true,
+          status: 'APPROVED',
+          OR: [
+            { id: restaurantIdentifier },
+            { slug: restaurantIdentifier },
+            { subdomain: restaurantIdentifier },
+          ],
+        },
+        select: {
+          id: true,
+          slug: true,
+          subdomain: true,
+          name: true,
+          active: true,
+          paymentCollectionTiming: true,
+          cashPaymentEnabled: true,
+        },
+      });
+    } catch (err: any) {
+      // If the primary query fails due to schema mismatch, try a simplified query
+      if (err.code === 'P2009' || (err.message && err.message.includes('does not exist'))) {
+        console.warn('Database schema mismatch detected, trying alternative query:', err.message);
+        try {
+          // Try to query with just ID as a fallback
+          const partialRestaurant = await prisma.restaurant.findFirst({
+            where: {
+              active: true,
+              id: restaurantIdentifier,
+            },
+            select: {
+              id: true,
+              name: true,
+              active: true,
+              paymentCollectionTiming: true,
+              cashPaymentEnabled: true,
+            },
+          });
+          
+          // If found, create a complete restaurant object with fallback values
+          if (partialRestaurant) {
+            restaurant = {
+              ...partialRestaurant,
+              slug: restaurantIdentifier,
+              subdomain: restaurantIdentifier,
+            };
+          } else {
+            restaurant = null;
+          }
+        } catch (fallbackErr: any) {
+          console.warn('Fallback query also failed:', fallbackErr?.message || fallbackErr);
+          restaurant = null;
+        }
+      } else {
+        throw err; // Re-throw if it's a different error
+      }
     }
+
+    if (!restaurant) return next();
 
     req.restaurant = {
       id: restaurant.id,

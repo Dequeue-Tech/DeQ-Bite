@@ -14,28 +14,73 @@ export interface User {
   name: string;
   email: string;
   phone?: string;
-  role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+  role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF' | 'CENTRAL_ADMIN' | 'KITCHEN_STAFF';
   restaurantRole?: 'OWNER' | 'ADMIN' | 'STAFF' | null;
   verified: boolean;
   createdAt: string;
+  updatedAt?: string;
+  totalOrders?: number;
+  totalSpent?: number;
+  recentOrders?: Array<{
+    id: string;
+    status: string;
+    totalPaise: number;
+    createdAt: string;
+    table?: {
+      number?: number;
+      location?: string | null;
+    };
+  }>;
 }
 
 export interface RestaurantSummary {
   id: string;
   name: string;
-  subdomain: string;
+  slug?: string;
+  subdomain?: string;
   address?: string | null;
+  city?: string | null;
+  state?: string | null;
+  country?: string | null;
+  email?: string | null;
+  phone?: string | null;
+  cuisineTypes?: string[];
+  status?: 'PENDING_APPROVAL' | 'APPROVED' | 'SUSPENDED';
   paymentCollectionTiming?: 'BEFORE_MEAL' | 'AFTER_MEAL';
   cashPaymentEnabled?: boolean;
+  active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface RestaurantMembership {
   id: string;
   name: string;
-  subdomain: string;
+  slug?: string;
+  subdomain?: string;
   role: 'OWNER' | 'ADMIN' | 'STAFF';
+  status?: 'PENDING_APPROVAL' | 'APPROVED' | 'SUSPENDED';
   paymentCollectionTiming?: 'BEFORE_MEAL' | 'AFTER_MEAL';
   cashPaymentEnabled?: boolean;
+  active?: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface Offer {
+  id: string;
+  name: string;
+  description?: string | null;
+  code?: string | null;
+  discountType: 'PERCENT' | 'FIXED';
+  value: number;
+  minOrderPaise?: number | null;
+  maxDiscountPaise?: number | null;
+  startsAt?: string | null;
+  endsAt?: string | null;
+  active: boolean;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface RestaurantUserEntry {
@@ -47,7 +92,7 @@ export interface RestaurantUserEntry {
     name: string;
     email: string;
     phone?: string;
-    role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF';
+    role: 'CUSTOMER' | 'OWNER' | 'ADMIN' | 'STAFF' | 'CENTRAL_ADMIN' | 'KITCHEN_STAFF';
     createdAt: string;
   };
 }
@@ -111,15 +156,19 @@ export interface Order {
   id: string;
   userId: string;
   tableId: string;
-  status: string;
+  status: 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SERVED' | 'COMPLETED' | 'CANCELLED';
   items: OrderItem[];
   subtotalPaise: number;
   taxPaise: number;
   discountPaise: number;
   totalPaise: number;
+  paidAmountPaise?: number;
+  dueAmountPaise?: number;
+  couponId?: string | null;
   paymentId?: string;
+  paymentTransactionId?: string | null;
   paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH';
-  paymentStatus: string;
+  paymentStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REFUNDED' | 'PARTIALLY_PAID';
   paymentCollectionTiming?: 'BEFORE_MEAL' | 'AFTER_MEAL';
   specialInstructions?: string;
   estimatedTime?: number;
@@ -161,9 +210,9 @@ class ApiClient {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
-        const subdomain = this.getRestaurantSubdomain();
-        if (subdomain) {
-          config.headers['x-restaurant-subdomain'] = subdomain;
+        const slug = this.getRestaurantSlug();
+        if (slug) {
+          config.headers['x-restaurant-slug'] = slug;
         }
         return config;
       },
@@ -214,42 +263,57 @@ class ApiClient {
     }
   }
 
-  setSelectedRestaurantSubdomain(subdomain: string): void {
+  setSelectedRestaurantSlug(slug: string): void {
     if (typeof window !== 'undefined') {
-      localStorage.setItem('selected_restaurant_subdomain', subdomain.toLowerCase());
+      localStorage.setItem('selected_restaurant_slug', slug.toLowerCase());
     }
   }
 
-  getSelectedRestaurantSubdomain(): string | null {
+  getSelectedRestaurantSlug(): string | null {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('selected_restaurant_subdomain');
+      return localStorage.getItem('selected_restaurant_slug');
     }
     return null;
   }
 
-  private getRestaurantSubdomain(): string | null {
+  private getRestaurantSlugFromPath(): string | null {
+    if (typeof window === 'undefined') return null;
+    const match = /^\/r\/([^\/?#]+)/i.exec(window.location.pathname);
+    if (!match || !match[1]) return null;
+    return match[1].toLowerCase();
+  }
+
+  private getRestaurantSlug(): string | null {
     if (typeof window === 'undefined') return null;
 
-    const selectedSubdomain = this.getSelectedRestaurantSubdomain();
-    if (selectedSubdomain) {
-      return selectedSubdomain.toLowerCase();
-    }
+    const pathSlug = this.getRestaurantSlugFromPath();
+    if (pathSlug) return pathSlug;
 
-    const host = window.location.hostname.toLowerCase();
-    const baseDomain = (process.env.NEXT_PUBLIC_BASE_DOMAIN || '').toLowerCase();
+    const selectedSlug = this.getSelectedRestaurantSlug();
+    if (selectedSlug) return selectedSlug.toLowerCase();
 
-    if (baseDomain && host.endsWith(`.${baseDomain}`)) {
-      return host.replace(`.${baseDomain}`, '');
-    }
-
-    if (host.includes('.') && !host.endsWith('localhost')) {
-      return host.split('.')[0];
-    }
-
-    const devSubdomain = process.env.NEXT_PUBLIC_DEV_SUBDOMAIN;
-    if (devSubdomain) return devSubdomain.toLowerCase();
+    const devSlug = process.env.NEXT_PUBLIC_DEV_RESTAURANT_SLUG || process.env.NEXT_PUBLIC_DEV_SUBDOMAIN;
+    if (devSlug) return devSlug.toLowerCase();
 
     return null;
+  }
+
+  getActiveRestaurantSlug(): string | null {
+    return this.getRestaurantSlug();
+  }
+
+  buildRestaurantPath(path: string): string {
+    const slug = this.getRestaurantSlug();
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    if (!slug) return cleanPath;
+    return `/r/${slug}${cleanPath}`;
+  }
+
+  private buildTenantEndpoint(path: string): string {
+    const slug = this.getRestaurantSlug();
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    if (!slug) return cleanPath;
+    return `/r/${slug}${cleanPath}`;
   }
 
   // Authentication methods
@@ -303,7 +367,7 @@ class ApiClient {
 
   // Payment methods
   async createPayment(orderId: string, paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE'): Promise<any> {
-    const response = await this.api.post<ApiResponse>('/payments/create', { orderId, paymentProvider });
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/payments/create'), { orderId, paymentProvider });
     if (response.data.success) {
       return response.data.data;
     }
@@ -311,7 +375,7 @@ class ApiClient {
   }
 
   async getPaymentProviders(): Promise<string[]> {
-    const response = await this.api.get<ApiResponse>('/payments/providers');
+    const response = await this.api.get<ApiResponse>(this.buildTenantEndpoint('/payments/providers'));
     if (response.data.success) {
       return response.data.data.providers || [];
     }
@@ -324,7 +388,7 @@ class ApiClient {
     razorpay_signature: string;
   }): Promise<any> {
     try {
-      const response = await this.api.post<ApiResponse>('/payments/verify', paymentData);
+      const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/payments/verify'), paymentData);
       if (response.data.success) {
         return response.data.data;
       }
@@ -356,7 +420,7 @@ class ApiClient {
   }
 
   async getPaymentStatus(orderId: string): Promise<any> {
-    const response = await this.api.get<ApiResponse>(`/payments/status/${orderId}`);
+    const response = await this.api.get<ApiResponse>(this.buildTenantEndpoint(`/payments/status/${orderId}`));
     if (response.data.success) {
       return response.data.data;
     }
@@ -365,7 +429,7 @@ class ApiClient {
 
   // Invoice methods
   async generateInvoice(orderId: string, methods: ('EMAIL' | 'SMS')[]): Promise<any> {
-    const response = await this.api.post<ApiResponse>('/invoices/generate', {
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/invoices/generate'), {
       orderId,
       methods,
     });
@@ -376,7 +440,7 @@ class ApiClient {
   }
 
   async getInvoice(orderId: string): Promise<any> {
-    const response = await this.api.get<ApiResponse>(`/invoices/${orderId}`);
+    const response = await this.api.get<ApiResponse>(this.buildTenantEndpoint(`/invoices/${orderId}`));
     if (response.data.success) {
       return response.data.data;
     }
@@ -384,7 +448,7 @@ class ApiClient {
   }
 
   async getUserInvoices(): Promise<any[]> {
-    const response = await this.api.get<ApiResponse>('/invoices/user/list');
+    const response = await this.api.get<ApiResponse>(this.buildTenantEndpoint('/invoices/user/list'));
     if (response.data.success) {
       return response.data.data.invoices;
     }
@@ -392,7 +456,7 @@ class ApiClient {
   }
 
   async resendInvoice(invoiceId: string, methods: ('EMAIL' | 'SMS')[]): Promise<any> {
-    const response = await this.api.post<ApiResponse>(`/invoices/${invoiceId}/resend`, {
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint(`/invoices/${invoiceId}/resend`), {
       methods,
     });
     if (response.data.success) {
@@ -404,7 +468,7 @@ class ApiClient {
   // PDF download
   async downloadInvoicePdf(invoiceId: string): Promise<{ blob: Blob; filename: string }> {
     // Use a direct GET to the PDF endpoint with auth header; expect application/pdf
-    const url = `/pdf/invoice/${invoiceId}`;
+    const url = this.buildTenantEndpoint(`/pdf/invoice/${invoiceId}`);
     const response = await this.api.get(url, { responseType: 'blob' });
 
     // Try to extract filename from Content-Disposition
@@ -421,7 +485,7 @@ class ApiClient {
 
   // Refresh/regenerate the stored PDF for an invoice
   async refreshInvoicePdf(invoiceId: string): Promise<any> {
-    const response = await this.api.post<ApiResponse>(`/invoices/${invoiceId}/refresh-pdf`);
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint(`/invoices/${invoiceId}/refresh-pdf`));
     if (response.data.success) {
       return response.data.data;
     }
@@ -431,17 +495,17 @@ class ApiClient {
   // Menu methods
   async getMenuItems(categoryId?: string): Promise<ApiResponse<MenuItem[]>> {
     const params = categoryId ? `?categoryId=${categoryId}` : '';
-    const response = await this.api.get<ApiResponse<MenuItem[]>>(`/menu${params}`);
+    const response = await this.api.get<ApiResponse<MenuItem[]>>(this.buildTenantEndpoint(`/menu${params}`));
     return response.data;
   }
 
   async getMenuItem(id: string): Promise<ApiResponse<MenuItem>> {
-    const response = await this.api.get<ApiResponse<MenuItem>>(`/menu/${id}`);
+    const response = await this.api.get<ApiResponse<MenuItem>>(this.buildTenantEndpoint(`/menu/${id}`));
     return response.data;
   }
 
   async getAdminMenuItems(): Promise<ApiResponse<MenuItem[]>> {
-    const response = await this.api.get<ApiResponse<MenuItem[]>>('/menu/admin/all');
+    const response = await this.api.get<ApiResponse<MenuItem[]>>(this.buildTenantEndpoint('/menu/admin/all'));
     return response.data;
   }
 
@@ -460,7 +524,7 @@ class ApiClient {
     isGlutenFree?: boolean;
     spiceLevel?: 'NONE' | 'MILD' | 'MEDIUM' | 'HOT' | 'EXTRA_HOT';
   }): Promise<ApiResponse<MenuItem>> {
-    const response = await this.api.post<ApiResponse<MenuItem>>('/menu', payload);
+    const response = await this.api.post<ApiResponse<MenuItem>>(this.buildTenantEndpoint('/menu'), payload);
     return response.data;
   }
 
@@ -479,39 +543,39 @@ class ApiClient {
     isGlutenFree: boolean;
     spiceLevel: 'NONE' | 'MILD' | 'MEDIUM' | 'HOT' | 'EXTRA_HOT';
   }>): Promise<ApiResponse<MenuItem>> {
-    const response = await this.api.put<ApiResponse<MenuItem>>(`/menu/${id}`, payload);
+    const response = await this.api.put<ApiResponse<MenuItem>>(this.buildTenantEndpoint(`/menu/${id}`), payload);
     return response.data;
   }
 
   async updateMenuAvailability(id: string, available: boolean): Promise<ApiResponse<MenuItem>> {
-    const response = await this.api.patch<ApiResponse<MenuItem>>(`/menu/${id}/availability`, { available });
+    const response = await this.api.patch<ApiResponse<MenuItem>>(this.buildTenantEndpoint(`/menu/${id}/availability`), { available });
     return response.data;
   }
 
   async deleteMenuItem(id: string): Promise<ApiResponse<any>> {
-    const response = await this.api.delete<ApiResponse<any>>(`/menu/${id}`);
+    const response = await this.api.delete<ApiResponse<any>>(this.buildTenantEndpoint(`/menu/${id}`));
     return response.data;
   }
 
   // Category methods
   async getCategories(): Promise<ApiResponse<Category[]>> {
-    const response = await this.api.get<ApiResponse<Category[]>>('/categories');
+    const response = await this.api.get<ApiResponse<Category[]>>(this.buildTenantEndpoint('/categories'));
     return response.data;
   }
 
   async getCategory(id: string): Promise<ApiResponse<Category>> {
-    const response = await this.api.get<ApiResponse<Category>>(`/categories/${id}`);
+    const response = await this.api.get<ApiResponse<Category>>(this.buildTenantEndpoint(`/categories/${id}`));
     return response.data;
   }
 
   // Table methods
   async getTables(): Promise<ApiResponse<Table[]>> {
-    const response = await this.api.get<ApiResponse<Table[]>>('/tables');
+    const response = await this.api.get<ApiResponse<Table[]>>(this.buildTenantEndpoint('/tables'));
     return response.data;
   }
 
   async getAvailableTables(): Promise<ApiResponse<Table[]>> {
-    const response = await this.api.get<ApiResponse<Table[]>>('/tables/available');
+    const response = await this.api.get<ApiResponse<Table[]>>(this.buildTenantEndpoint('/tables/available'));
     return response.data;
   }
 
@@ -527,33 +591,33 @@ class ApiClient {
     console.log('API URL:', this.api.defaults.baseURL);
     console.log('Headers:', this.api.defaults.headers);
     
-    const response = await this.api.post<ApiResponse<Order>>('/orders', orderData);
+    const response = await this.api.post<ApiResponse<Order>>(this.buildTenantEndpoint('/orders'), orderData);
     console.log('Order creation response:', response);
     return response.data;
   }
 
   async getOrders(): Promise<ApiResponse<Order[]>> {
-    const response = await this.api.get<ApiResponse<Order[]>>('/orders');
+    const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint('/orders'));
     return response.data;
   }
 
   async getRestaurantOrders(): Promise<ApiResponse<Order[]>> {
-    const response = await this.api.get<ApiResponse<Order[]>>('/orders/restaurant/all');
+    const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint('/orders/restaurant/all'));
     return response.data;
   }
 
   async getOrder(id: string): Promise<ApiResponse<Order>> {
-    const response = await this.api.get<ApiResponse<Order>>(`/orders/${id}`);
+    const response = await this.api.get<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${id}`));
     return response.data;
   }
 
   async updateOrderStatus(id: string, status: string): Promise<ApiResponse<Order>> {
-    const response = await this.api.put<ApiResponse<Order>>(`/orders/${id}/status`, { status });
+    const response = await this.api.put<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${id}/status`), { status });
     return response.data;
   }
 
   async cancelOrder(id: string): Promise<ApiResponse<Order>> {
-    const response = await this.api.put<ApiResponse<Order>>(`/orders/${id}/cancel`);
+    const response = await this.api.put<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${id}/cancel`));
     return response.data;
   }
 
@@ -561,18 +625,18 @@ class ApiClient {
     items: { menuItemId: string; quantity: number; notes?: string }[];
     specialInstructions?: string;
   }): Promise<ApiResponse<Order>> {
-    const response = await this.api.post<ApiResponse<Order>>(`/orders/${orderId}/items`, payload);
+    const response = await this.api.post<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${orderId}/items`), payload);
     return response.data;
   }
 
   async applyCouponToOrder(orderId: string, couponCode: string): Promise<ApiResponse<Order>> {
-    const response = await this.api.post<ApiResponse<Order>>(`/orders/${orderId}/apply-coupon`, { couponCode });
+    const response = await this.api.post<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${orderId}/apply-coupon`), { couponCode });
     return response.data;
   }
 
   // Coupon methods
   async validateCoupon(code: string, subtotalPaise: number): Promise<any> {
-    const response = await this.api.post<ApiResponse>('/coupons/validate', { code, subtotalPaise });
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/coupons/validate'), { code, subtotalPaise });
     if (response.data.success) {
       return response.data.data;
     }
@@ -580,7 +644,7 @@ class ApiClient {
   }
 
   async getCoupons(): Promise<any> {
-    const response = await this.api.get<ApiResponse>('/coupons');
+    const response = await this.api.get<ApiResponse>(this.buildTenantEndpoint('/coupons'));
     if (response.data.success) {
       return response.data.data;
     }
@@ -588,7 +652,7 @@ class ApiClient {
   }
 
   async createCoupon(payload: any): Promise<any> {
-    const response = await this.api.post<ApiResponse>('/coupons', payload);
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/coupons'), payload);
     if (response.data.success) {
       return response.data.data;
     }
@@ -596,7 +660,7 @@ class ApiClient {
   }
 
   async updateCoupon(id: string, payload: any): Promise<any> {
-    const response = await this.api.put<ApiResponse>(`/coupons/${id}`, payload);
+    const response = await this.api.put<ApiResponse>(this.buildTenantEndpoint(`/coupons/${id}`), payload);
     if (response.data.success) {
       return response.data.data;
     }
@@ -626,6 +690,10 @@ class ApiClient {
     email?: string;
     phone?: string;
     address?: string;
+    city?: string;
+    state?: string;
+    country?: string;
+    cuisineTypes?: string[];
   }): Promise<RestaurantSummary> {
     const response = await this.api.post<ApiResponse<{ restaurant: RestaurantSummary }>>('/restaurants', payload);
     if (response.data.success && response.data.data) {
@@ -635,7 +703,7 @@ class ApiClient {
   }
 
   async getRestaurantUsers(): Promise<RestaurantUserEntry[]> {
-    const response = await this.api.get<ApiResponse<{ users: RestaurantUserEntry[] }>>('/restaurants/users');
+    const response = await this.api.get<ApiResponse<{ users: RestaurantUserEntry[] }>>(this.buildTenantEndpoint('/restaurants/users'));
     if (response.data.success) {
       return response.data.data?.users || [];
     }
@@ -643,14 +711,14 @@ class ApiClient {
   }
 
   async addRestaurantUser(payload: { email: string; role: 'OWNER' | 'ADMIN' | 'STAFF' }): Promise<void> {
-    const response = await this.api.post<ApiResponse>('/restaurants/users', payload);
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/restaurants/users'), payload);
     if (!response.data.success) {
       throw new Error(response.data.error || 'Failed to add restaurant user');
     }
   }
 
   async getCurrentRestaurant(): Promise<any> {
-    const response = await this.api.get<ApiResponse<{ restaurant: any }>>('/restaurants/current');
+    const response = await this.api.get<ApiResponse<{ restaurant: any }>>(this.buildTenantEndpoint('/restaurants/current'));
     if (response.data.success) {
       return response.data.data?.restaurant;
     }
@@ -666,7 +734,7 @@ class ApiClient {
   }
 
   async getRestaurantPaymentPolicy(): Promise<any> {
-    const response = await this.api.get<ApiResponse<{ paymentPolicy: any }>>('/restaurants/settings/payment-policy');
+    const response = await this.api.get<ApiResponse<{ paymentPolicy: any }>>(this.buildTenantEndpoint('/restaurants/settings/payment-policy'));
     if (response.data.success) {
       return response.data.data?.paymentPolicy;
     }
@@ -677,7 +745,7 @@ class ApiClient {
     paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
     cashPaymentEnabled: boolean;
   }): Promise<any> {
-    const response = await this.api.put<ApiResponse<{ paymentPolicy: any }>>('/restaurants/settings/payment-policy', payload);
+    const response = await this.api.put<ApiResponse<{ paymentPolicy: any }>>(this.buildTenantEndpoint('/restaurants/settings/payment-policy'), payload);
     if (response.data.success) {
       return response.data.data?.paymentPolicy;
     }
@@ -685,11 +753,83 @@ class ApiClient {
   }
 
   async confirmCashPayment(orderId: string): Promise<any> {
-    const response = await this.api.post<ApiResponse<{ order: Order }>>('/payments/cash/confirm', { orderId });
+    const response = await this.api.post<ApiResponse<{ order: Order }>>(this.buildTenantEndpoint('/payments/cash/confirm'), { orderId });
     if (response.data.success) {
       return response.data.data?.order;
     }
     throw new Error(response.data.error || 'Failed to confirm cash payment');
+  }
+
+  // Offer methods
+  async getOffers(): Promise<Offer[]> {
+    const response = await this.api.get<ApiResponse<{ offers: Offer[] }>>(this.buildTenantEndpoint('/offers'));
+    if (response.data.success) {
+      return response.data.data?.offers || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch offers');
+  }
+
+  async createOffer(payload: {
+    name: string;
+    description?: string;
+    code?: string;
+    discountType: 'PERCENT' | 'FIXED';
+    value: number;
+    minOrderPaise?: number;
+    maxDiscountPaise?: number;
+    startsAt?: string;
+    endsAt?: string;
+    active?: boolean;
+  }): Promise<Offer> {
+    const response = await this.api.post<ApiResponse<{ offer: Offer }>>(this.buildTenantEndpoint('/offers'), payload);
+    if (response.data.success && response.data.data) {
+      return response.data.data.offer;
+    }
+    throw new Error(response.data.error || 'Failed to create offer');
+  }
+
+  async updateOffer(id: string, payload: Partial<Offer>): Promise<Offer> {
+    const response = await this.api.put<ApiResponse<{ offer: Offer }>>(this.buildTenantEndpoint(`/offers/${id}`), payload);
+    if (response.data.success && response.data.data) {
+      return response.data.data.offer;
+    }
+    throw new Error(response.data.error || 'Failed to update offer');
+  }
+
+  async deleteOffer(id: string): Promise<void> {
+    const response = await this.api.delete<ApiResponse>(this.buildTenantEndpoint(`/offers/${id}`));
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to delete offer');
+    }
+  }
+
+  // Platform admin methods
+  async getPlatformRestaurants(status?: 'PENDING_APPROVAL' | 'APPROVED' | 'SUSPENDED'): Promise<any[]> {
+    const params = status ? `?status=${status}` : '';
+    const response = await this.api.get<ApiResponse<{ restaurants: any[] }>>(`/platform/restaurants${params}`);
+    if (response.data.success) {
+      return response.data.data?.restaurants || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch platform restaurants');
+  }
+
+  async updatePlatformRestaurantStatus(restaurantId: string, payload: {
+    status: 'APPROVED' | 'SUSPENDED';
+    suspendedReason?: string;
+  }): Promise<any> {
+    const response = await this.api.patch<ApiResponse<{ restaurant: any }>>(`/platform/restaurants/${restaurantId}/status`, payload);
+    if (response.data.success) {
+      return response.data.data?.restaurant;
+    }
+    throw new Error(response.data.error || 'Failed to update restaurant status');
+  }
+
+  async updatePlatformCommission(restaurantId: string, commissionRate: number): Promise<any> {
+    const response = await this.api.patch<ApiResponse<{ restaurant: any }>>(`/platform/restaurants/${restaurantId}/commission`, { commissionRate });
+    if (response.data.success) {
+      return response.data.data?.restaurant;
+    }
+    throw new Error(response.data.error || 'Failed to update commission');
   }
 
   // Generic API methods

@@ -2,6 +2,7 @@ import { Response, NextFunction, Request } from 'express';
 import { prisma } from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { AuthenticatedRequest } from '@/types/api';
+import { Prisma } from '@prisma/client';
 
 const isLocalHost = (host?: string | null) => {
   if (!host) return false;
@@ -77,17 +78,28 @@ export const attachRestaurant = async (
       paymentCollectionTiming: any;
       cashPaymentEnabled: boolean;
     } | null;
+
+    // figure out whether the generated client has the "status" field
+    // PrismaClient does not expose `_dmmf` in the types, so cast to any to
+    // detect whether the schema has a `status` field. This allows us to avoid
+    // referencing it if the deployed client is out of date.
+    const hasStatus =
+      !!(prisma as any)._dmmf?.modelMap?.Restaurant?.fields?.some((f: any) => f.name === 'status');
+
+    // build the primary filter once so we can modify if needed
+    const baseFilter: Prisma.RestaurantWhereInput = {
+      active: true,
+      ...(hasStatus ? { status: 'APPROVED' } : {}),
+      OR: [
+        { id: restaurantIdentifier },
+        { slug: restaurantIdentifier },
+        { subdomain: restaurantIdentifier },
+      ],
+    };
+
     try {
       restaurant = await prisma.restaurant.findFirst({
-        where: {
-          active: true,
-          status: 'APPROVED',
-          OR: [
-            { id: restaurantIdentifier },
-            { slug: restaurantIdentifier },
-            { subdomain: restaurantIdentifier },
-          ],
-        },
+        where: baseFilter,
         select: {
           id: true,
           slug: true,
@@ -99,16 +111,21 @@ export const attachRestaurant = async (
         },
       });
     } catch (err: any) {
-      // If the primary query fails due to schema mismatch, try a simplified query
-      if (err.code === 'P2009' || (err.message && err.message.includes('does not exist'))) {
-        console.warn('Database schema mismatch detected, trying alternative query:', err.message);
+      // If the client schema doesn't know about "status" or other fields, fall back
+      const isSchemaMismatch =
+        err.code === 'P2009' ||
+        (err.message &&
+          (err.message.includes('does not exist') || err.message.includes('Unknown argument `status`')));
+
+      if (isSchemaMismatch) {
+        console.warn('Database/client schema mismatch detected, trying alternative query:', err.message);
         try {
-          // Try to query with just ID as a fallback
+          // remove the status clause for the fallback query
+          const fallbackFilter = { ...baseFilter };
+          delete (fallbackFilter as any).status;
+
           const partialRestaurant = await prisma.restaurant.findFirst({
-            where: {
-              active: true,
-              id: restaurantIdentifier,
-            },
+            where: fallbackFilter,
             select: {
               id: true,
               name: true,
@@ -117,13 +134,12 @@ export const attachRestaurant = async (
               cashPaymentEnabled: true,
             },
           });
-          
-          // If found, create a complete restaurant object with fallback values
+
           if (partialRestaurant) {
             restaurant = {
               ...partialRestaurant,
-              slug: restaurantIdentifier,
-              subdomain: restaurantIdentifier,
+              slug: restaurantIdentifier!,
+              subdomain: restaurantIdentifier!,
             };
           } else {
             restaurant = null;

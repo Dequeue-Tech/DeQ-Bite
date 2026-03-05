@@ -62,17 +62,19 @@ const attachRestaurant = async (req, _res, next) => {
             return next();
         }
         let restaurant;
+        const hasStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
+        const baseFilter = {
+            active: true,
+            ...(hasStatus ? { status: 'APPROVED' } : {}),
+            OR: [
+                { id: restaurantIdentifier },
+                { slug: restaurantIdentifier },
+                { subdomain: restaurantIdentifier },
+            ],
+        };
         try {
             restaurant = await database_1.prisma.restaurant.findFirst({
-                where: {
-                    active: true,
-                    status: 'APPROVED',
-                    OR: [
-                        { id: restaurantIdentifier },
-                        { slug: restaurantIdentifier },
-                        { subdomain: restaurantIdentifier },
-                    ],
-                },
+                where: baseFilter,
                 select: {
                     id: true,
                     slug: true,
@@ -85,14 +87,16 @@ const attachRestaurant = async (req, _res, next) => {
             });
         }
         catch (err) {
-            if (err.code === 'P2009' || (err.message && err.message.includes('does not exist'))) {
-                console.warn('Database schema mismatch detected, trying alternative query:', err.message);
+            const isSchemaMismatch = err.code === 'P2009' ||
+                (err.message &&
+                    (err.message.includes('does not exist') || err.message.includes('Unknown argument `status`')));
+            if (isSchemaMismatch) {
+                console.warn('Database/client schema mismatch detected, trying alternative query:', err.message);
                 try {
+                    const fallbackFilter = { ...baseFilter };
+                    delete fallbackFilter.status;
                     const partialRestaurant = await database_1.prisma.restaurant.findFirst({
-                        where: {
-                            active: true,
-                            id: restaurantIdentifier,
-                        },
+                        where: fallbackFilter,
                         select: {
                             id: true,
                             name: true,

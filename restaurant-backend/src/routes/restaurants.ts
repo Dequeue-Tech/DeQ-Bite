@@ -1,11 +1,19 @@
 import { Router, Response } from 'express';
 import { z } from 'zod';
 import { prisma } from '@/config/database';
+import { Prisma } from '@prisma/client';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 
 const router = Router();
+
+// determine at runtime whether prisma client has the `status` field on Restaurant
+// PrismaClient does not expose `_dmmf` in the types, cast to any to
+// inspect the generated schema at runtime. This helps when deployments may
+// still be running an older client that lacks the `status` field.
+const hasRestaurantStatus =
+  !!(prisma as any)._dmmf?.modelMap?.Restaurant?.fields?.some((f: any) => f.name === 'status');
 
 const slugify = (value: string) =>
   value
@@ -63,37 +71,72 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
   const cuisine = (req.query['cuisine'] as string | undefined)?.trim();
   const location = (req.query['location'] as string | undefined)?.trim();
 
-  const restaurants = await prisma.restaurant.findMany({
-    where: {
-      active: true,
-      status: 'APPROVED',
-      ...(query ? { name: { contains: query, mode: 'insensitive' } } : {}),
-      ...(cuisine ? { cuisineTypes: { has: cuisine } } : {}),
-      ...(location
-        ? {
-            OR: [
-              { city: { contains: location, mode: 'insensitive' } },
-              { state: { contains: location, mode: 'insensitive' } },
-              { address: { contains: location, mode: 'insensitive' } },
-            ],
-          }
-        : {}),
-    },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      subdomain: true,
-      address: true,
-      city: true,
-      state: true,
-      cuisineTypes: true,
-      paymentCollectionTiming: true,
-      cashPaymentEnabled: true,
-    },
-    orderBy: { name: 'asc' },
-    take: 50,
-  });
+  // build the base filter for the search
+  const baseFilter: Prisma.RestaurantWhereInput = {
+    active: true,
+    status: 'APPROVED',
+    ...(query ? { name: { contains: query, mode: 'insensitive' } } : {}),
+    ...(cuisine ? { cuisineTypes: { has: cuisine } } : {}),
+    ...(location
+      ? {
+          OR: [
+            { city: { contains: location, mode: 'insensitive' } },
+            { state: { contains: location, mode: 'insensitive' } },
+            { address: { contains: location, mode: 'insensitive' } },
+          ],
+        }
+      : {}),
+  };
+
+  let restaurants;
+  try {
+    restaurants = await prisma.restaurant.findMany({
+      where: baseFilter,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        subdomain: true,
+        address: true,
+        city: true,
+        state: true,
+        cuisineTypes: true,
+        paymentCollectionTiming: true,
+        cashPaymentEnabled: true,
+      },
+      orderBy: { name: 'asc' },
+      take: 50,
+    });
+  } catch (err: any) {
+    const isStatusError =
+      err instanceof Prisma.PrismaClientValidationError ||
+      (err.message && err.message.includes('Unknown argument `status`'));
+    if (isStatusError) {
+      // drop the status check and retry
+      console.warn('Prisma schema mismatch in search, retrying without status filter');
+      const fallback = { ...baseFilter };
+      delete (fallback as any).status;
+      restaurants = await prisma.restaurant.findMany({
+        where: fallback,
+        select: {
+          id: true,
+          name: true,
+          slug: true,
+          subdomain: true,
+          address: true,
+          city: true,
+          state: true,
+          cuisineTypes: true,
+          paymentCollectionTiming: true,
+          cashPaymentEnabled: true,
+        },
+        orderBy: { name: 'asc' },
+        take: 50,
+      });
+    } else {
+      throw err;
+    }
+  }
 
   const response: ApiResponse = {
     success: true,
@@ -113,46 +156,100 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
     return res.status(400).json({ success: false, error: 'Restaurant identifier is required' });
   }
 
-  const restaurant = await prisma.restaurant.findFirst({
-    where: {
-      active: true,
-      status: 'APPROVED',
-      OR: [{ id: identifier }, { slug: identifier }, { subdomain: identifier }],
-    },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      subdomain: true,
-      address: true,
-      city: true,
-      state: true,
-      country: true,
-      email: true,
-      phone: true,
-      cuisineTypes: true,
-      paymentCollectionTiming: true,
-      cashPaymentEnabled: true,
-      categories: {
-        where: { active: true },
-        orderBy: { sortOrder: 'asc' },
-        select: { id: true, name: true },
+  const baseFilter: Prisma.RestaurantWhereInput = {
+    active: true,
+    status: 'APPROVED',
+    OR: [{ id: identifier }, { slug: identifier }, { subdomain: identifier }],
+  };
+
+  let restaurant;
+  try {
+    restaurant = await prisma.restaurant.findFirst({
+      where: baseFilter,
+      select: {
+        id: true,
+        name: true,
+        slug: true,
+        subdomain: true,
+        address: true,
+        city: true,
+        state: true,
+        country: true,
+        email: true,
+        phone: true,
+        cuisineTypes: true,
+        paymentCollectionTiming: true,
+        cashPaymentEnabled: true,
+        categories: {
+          where: { active: true },
+          orderBy: { sortOrder: 'asc' },
+          select: { id: true, name: true },
+        },
+        menuItems: {
+          where: { available: true },
+          take: 12,
+          orderBy: { createdAt: 'desc' },
+          select: {
+            id: true,
+            name: true,
+            description: true,
+            pricePaise: true,
+            isVeg: true,
+            category: { select: { id: true, name: true } },
+          },
+        },
       },
-      menuItems: {
-        where: { available: true },
-        take: 12,
-        orderBy: { createdAt: 'desc' },
+    });
+  } catch (err: any) {
+    const isStatusError =
+      err instanceof Prisma.PrismaClientValidationError ||
+      (err.message && err.message.includes('Unknown argument `status`'));
+    if (isStatusError) {
+      console.warn(
+        'Prisma schema mismatch fetching single restaurant, retrying without status filter'
+      );
+      const fallback = { ...baseFilter };
+      delete (fallback as any).status;
+      restaurant = await prisma.restaurant.findFirst({
+        where: fallback,
         select: {
           id: true,
           name: true,
-          description: true,
-          pricePaise: true,
-          isVeg: true,
-          category: { select: { id: true, name: true } },
+          slug: true,
+          subdomain: true,
+          address: true,
+          city: true,
+          state: true,
+          country: true,
+          email: true,
+          phone: true,
+          cuisineTypes: true,
+          paymentCollectionTiming: true,
+          cashPaymentEnabled: true,
+          categories: {
+            where: { active: true },
+            orderBy: { sortOrder: 'asc' },
+            select: { id: true, name: true },
+          },
+          menuItems: {
+            where: { available: true },
+            take: 12,
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              name: true,
+              description: true,
+              pricePaise: true,
+              isVeg: true,
+              category: { select: { id: true, name: true } },
+            },
+          },
         },
-      },
-    },
-  });
+      });
+    } else {
+      throw err;
+    }
+  }
 
   if (!restaurant) {
     return res.status(404).json({ success: false, error: 'Restaurant not found' });
@@ -190,7 +287,7 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
           name: true,
           slug: true,
           subdomain: true,
-          status: true,
+          ...(hasRestaurantStatus ? { status: true } : {}),
           paymentCollectionTiming: true,
           cashPaymentEnabled: true,
         },
@@ -207,7 +304,7 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
           name: string;
           slug: string;
           subdomain: string;
-          status: string;
+          status?: string;
           paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
           cashPaymentEnabled: boolean;
         };
@@ -246,7 +343,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
       country: payload.country ?? null,
       cuisineTypes: payload.cuisineTypes ?? [],
       active: true,
-      status: 'APPROVED',
+      ...(hasRestaurantStatus ? { status: 'APPROVED' } : {}),
       approvedAt: new Date(),
       approvedByUserId: req.user!.id,
     },
@@ -259,7 +356,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
       email: true,
       phone: true,
       active: true,
-      status: true,
+      ...(hasRestaurantStatus ? { status: true } : {}),
       paymentCollectionTiming: true,
       cashPaymentEnabled: true,
       createdAt: true,

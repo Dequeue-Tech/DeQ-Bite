@@ -3,6 +3,16 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorizeRestaurantRole = exports.requireRestaurant = exports.attachRestaurant = void 0;
 const database_1 = require("../config/database");
 const errorHandler_1 = require("./errorHandler");
+const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
+function pickFields(fields) {
+    const out = {};
+    for (const f of fields) {
+        if (restaurantFields.includes(f)) {
+            out[f] = true;
+        }
+    }
+    return out;
+}
 const isLocalHost = (host) => {
     if (!host)
         return false;
@@ -72,18 +82,19 @@ const attachRestaurant = async (req, _res, next) => {
                 { subdomain: restaurantIdentifier },
             ],
         };
+        const basicSelect = pickFields([
+            'id',
+            'slug',
+            'subdomain',
+            'name',
+            'active',
+            'paymentCollectionTiming',
+            'cashPaymentEnabled',
+        ]);
         try {
             restaurant = await database_1.prisma.restaurant.findFirst({
                 where: baseFilter,
-                select: {
-                    id: true,
-                    slug: true,
-                    subdomain: true,
-                    name: true,
-                    active: true,
-                    paymentCollectionTiming: true,
-                    cashPaymentEnabled: true,
-                },
+                select: basicSelect,
             });
         }
         catch (err) {
@@ -95,15 +106,16 @@ const attachRestaurant = async (req, _res, next) => {
                 try {
                     const fallbackFilter = { ...baseFilter };
                     delete fallbackFilter.status;
+                    const fallbackSelect = pickFields([
+                        'id',
+                        'name',
+                        'active',
+                        'paymentCollectionTiming',
+                        'cashPaymentEnabled',
+                    ]);
                     const partialRestaurant = await database_1.prisma.restaurant.findFirst({
                         where: fallbackFilter,
-                        select: {
-                            id: true,
-                            name: true,
-                            active: true,
-                            paymentCollectionTiming: true,
-                            cashPaymentEnabled: true,
-                        },
+                        select: fallbackSelect,
                     });
                     if (partialRestaurant) {
                         restaurant = {

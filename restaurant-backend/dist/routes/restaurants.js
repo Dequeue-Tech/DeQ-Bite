@@ -8,6 +8,16 @@ const auth_1 = require("../middleware/auth");
 const restaurant_1 = require("../middleware/restaurant");
 const router = (0, express_1.Router)();
 const hasRestaurantStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
+const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
+function pickFields(fields) {
+    const out = {};
+    for (const f of fields) {
+        if (restaurantFields.includes(f)) {
+            out[f] = true;
+        }
+    }
+    return out;
+}
 const slugify = (value) => value
     .toLowerCase()
     .trim()
@@ -55,7 +65,7 @@ router.get('/public/search', async (req, res) => {
     const location = req.query['location']?.trim();
     const baseFilter = {
         active: true,
-        status: 'APPROVED',
+        ...(hasRestaurantStatus ? { status: 'APPROVED' } : {}),
         ...(query ? { name: { contains: query, mode: 'insensitive' } } : {}),
         ...(cuisine ? { cuisineTypes: { has: cuisine } } : {}),
         ...(location
@@ -68,22 +78,23 @@ router.get('/public/search', async (req, res) => {
             }
             : {}),
     };
+    const searchSelect = pickFields([
+        'id',
+        'name',
+        'slug',
+        'subdomain',
+        'address',
+        'city',
+        'state',
+        'cuisineTypes',
+        'paymentCollectionTiming',
+        'cashPaymentEnabled',
+    ]);
     let restaurants;
     try {
         restaurants = await database_1.prisma.restaurant.findMany({
             where: baseFilter,
-            select: {
-                id: true,
-                name: true,
-                slug: true,
-                subdomain: true,
-                address: true,
-                city: true,
-                state: true,
-                cuisineTypes: true,
-                paymentCollectionTiming: true,
-                cashPaymentEnabled: true,
-            },
+            select: searchSelect,
             orderBy: { name: 'asc' },
             take: 50,
         });
@@ -97,18 +108,7 @@ router.get('/public/search', async (req, res) => {
             delete fallback.status;
             restaurants = await database_1.prisma.restaurant.findMany({
                 where: fallback,
-                select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    subdomain: true,
-                    address: true,
-                    city: true,
-                    state: true,
-                    cuisineTypes: true,
-                    paymentCollectionTiming: true,
-                    cashPaymentEnabled: true,
-                },
+                select: searchSelect,
                 orderBy: { name: 'asc' },
                 take: 50,
             });
@@ -132,46 +132,47 @@ router.get('/public/:identifier', async (req, res) => {
     }
     const baseFilter = {
         active: true,
-        status: 'APPROVED',
+        ...(hasRestaurantStatus ? { status: 'APPROVED' } : {}),
         OR: [{ id: identifier }, { slug: identifier }, { subdomain: identifier }],
     };
     let restaurant;
+    const detailSelect = pickFields([
+        'id',
+        'name',
+        'slug',
+        'subdomain',
+        'address',
+        'city',
+        'state',
+        'country',
+        'email',
+        'phone',
+        'cuisineTypes',
+        'paymentCollectionTiming',
+        'cashPaymentEnabled',
+    ]);
+    detailSelect.categories = {
+        where: { active: true },
+        orderBy: { sortOrder: 'asc' },
+        select: { id: true, name: true },
+    };
+    detailSelect.menuItems = {
+        where: { available: true },
+        take: 12,
+        orderBy: { createdAt: 'desc' },
+        select: {
+            id: true,
+            name: true,
+            description: true,
+            pricePaise: true,
+            isVeg: true,
+            category: { select: { id: true, name: true } },
+        },
+    };
     try {
         restaurant = await database_1.prisma.restaurant.findFirst({
             where: baseFilter,
-            select: {
-                id: true,
-                name: true,
-                slug: true,
-                subdomain: true,
-                address: true,
-                city: true,
-                state: true,
-                country: true,
-                email: true,
-                phone: true,
-                cuisineTypes: true,
-                paymentCollectionTiming: true,
-                cashPaymentEnabled: true,
-                categories: {
-                    where: { active: true },
-                    orderBy: { sortOrder: 'asc' },
-                    select: { id: true, name: true },
-                },
-                menuItems: {
-                    where: { available: true },
-                    take: 12,
-                    orderBy: { createdAt: 'desc' },
-                    select: {
-                        id: true,
-                        name: true,
-                        description: true,
-                        pricePaise: true,
-                        isVeg: true,
-                        category: { select: { id: true, name: true } },
-                    },
-                },
-            },
+            select: detailSelect,
         });
     }
     catch (err) {
@@ -183,39 +184,7 @@ router.get('/public/:identifier', async (req, res) => {
             delete fallback.status;
             restaurant = await database_1.prisma.restaurant.findFirst({
                 where: fallback,
-                select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    subdomain: true,
-                    address: true,
-                    city: true,
-                    state: true,
-                    country: true,
-                    email: true,
-                    phone: true,
-                    cuisineTypes: true,
-                    paymentCollectionTiming: true,
-                    cashPaymentEnabled: true,
-                    categories: {
-                        where: { active: true },
-                        orderBy: { sortOrder: 'asc' },
-                        select: { id: true, name: true },
-                    },
-                    menuItems: {
-                        where: { available: true },
-                        take: 12,
-                        orderBy: { createdAt: 'desc' },
-                        select: {
-                            id: true,
-                            name: true,
-                            description: true,
-                            pricePaise: true,
-                            isVeg: true,
-                            category: { select: { id: true, name: true } },
-                        },
-                    },
-                },
+                select: detailSelect,
             });
         }
         else {
@@ -240,6 +209,17 @@ router.get('/current', restaurant_1.requireRestaurant, async (req, res) => {
     res.json(response);
 });
 router.get('/mine', auth_1.authenticate, async (req, res) => {
+    const mineSelect = pickFields([
+        'id',
+        'name',
+        'slug',
+        'subdomain',
+        'paymentCollectionTiming',
+        'cashPaymentEnabled',
+    ]);
+    if (hasRestaurantStatus) {
+        mineSelect.status = true;
+    }
     const restaurants = await database_1.prisma.restaurantUser.findMany({
         where: {
             userId: req.user.id,
@@ -247,15 +227,7 @@ router.get('/mine', auth_1.authenticate, async (req, res) => {
         },
         include: {
             restaurant: {
-                select: {
-                    id: true,
-                    name: true,
-                    slug: true,
-                    subdomain: true,
-                    ...(hasRestaurantStatus ? { status: true } : {}),
-                    paymentCollectionTiming: true,
-                    cashPaymentEnabled: true,
-                },
+                select: mineSelect,
             },
         },
     });
@@ -279,6 +251,22 @@ router.get('/mine', auth_1.authenticate, async (req, res) => {
 router.post('/', auth_1.authenticate, async (req, res) => {
     const payload = createRestaurantSchema.parse(req.body);
     const handles = await ensureUniqueRestaurantHandles(payload.name);
+    const createSelect = pickFields([
+        'id',
+        'name',
+        'slug',
+        'subdomain',
+        'address',
+        'email',
+        'phone',
+        'active',
+        'paymentCollectionTiming',
+        'cashPaymentEnabled',
+        'createdAt',
+        'updatedAt',
+    ]);
+    if (hasRestaurantStatus)
+        createSelect.status = true;
     const restaurant = await database_1.prisma.restaurant.create({
         data: {
             name: payload.name,
@@ -296,21 +284,7 @@ router.post('/', auth_1.authenticate, async (req, res) => {
             approvedAt: new Date(),
             approvedByUserId: req.user.id,
         },
-        select: {
-            id: true,
-            name: true,
-            slug: true,
-            subdomain: true,
-            address: true,
-            email: true,
-            phone: true,
-            active: true,
-            ...(hasRestaurantStatus ? { status: true } : {}),
-            paymentCollectionTiming: true,
-            cashPaymentEnabled: true,
-            createdAt: true,
-            updatedAt: true,
-        },
+        select: createSelect,
     });
     await database_1.prisma.restaurantUser.create({
         data: {
@@ -340,14 +314,15 @@ router.post('/', auth_1.authenticate, async (req, res) => {
     res.status(201).json(response);
 });
 router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
+    const policySelect = pickFields([
+        'id',
+        'name',
+        'paymentCollectionTiming',
+        'cashPaymentEnabled',
+    ]);
     const restaurant = await database_1.prisma.restaurant.findUnique({
         where: { id: req.restaurant.id },
-        select: {
-            id: true,
-            name: true,
-            paymentCollectionTiming: true,
-            cashPaymentEnabled: true,
-        },
+        select: policySelect,
     });
     return res.json({
         success: true,
@@ -356,18 +331,19 @@ router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.require
 });
 router.put('/settings/payment-policy', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
     const payload = updatePaymentPolicySchema.parse(req.body);
+    const policySelect = pickFields([
+        'id',
+        'name',
+        'paymentCollectionTiming',
+        'cashPaymentEnabled',
+    ]);
     const restaurant = await database_1.prisma.restaurant.update({
         where: { id: req.restaurant.id },
         data: {
             paymentCollectionTiming: payload.paymentCollectionTiming,
             cashPaymentEnabled: payload.cashPaymentEnabled,
         },
-        select: {
-            id: true,
-            name: true,
-            paymentCollectionTiming: true,
-            cashPaymentEnabled: true,
-        },
+        select: policySelect,
     });
     await database_1.prisma.auditLog.create({
         data: {

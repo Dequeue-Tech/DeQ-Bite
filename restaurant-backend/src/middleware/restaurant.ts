@@ -4,6 +4,22 @@ import { AppError } from '@/middleware/errorHandler';
 import { AuthenticatedRequest } from '@/types/api';
 import { Prisma } from '@prisma/client';
 
+// collect restaurant field names from generated client DMMF so we can safely
+// build select clauses at runtime. This lets us deploy new code before the
+// database/client are in sync without crashing due to missing fields.
+const restaurantFields: string[] =
+  ((prisma as any)._dmmf?.modelMap?.Restaurant?.fields || []).map((f: any) => f.name);
+
+function pickFields(fields: string[]) {
+  const out: any = {};
+  for (const f of fields) {
+    if (restaurantFields.includes(f)) {
+      out[f] = true;
+    }
+  }
+  return out;
+}
+
 const isLocalHost = (host?: string | null) => {
   if (!host) return false;
   return host.startsWith('localhost') || host.startsWith('127.0.0.1');
@@ -69,15 +85,9 @@ export const attachRestaurant = async (
       return next();
     }
 
-    let restaurant: {
-      id: string;
-      slug: string;
-      subdomain: string;
-      name: string;
-      active: boolean;
-      paymentCollectionTiming: any;
-      cashPaymentEnabled: boolean;
-    } | null;
+    // we use a relaxed `any` type here because the set of fields returned
+    // may vary depending on which columns are present in the deployed schema.
+    let restaurant: any | null;
 
     // figure out whether the generated client has the "status" field
     // PrismaClient does not expose `_dmmf` in the types, so cast to any to
@@ -97,18 +107,20 @@ export const attachRestaurant = async (
       ],
     };
 
+    const basicSelect = pickFields([
+      'id',
+      'slug',
+      'subdomain',
+      'name',
+      'active',
+      'paymentCollectionTiming',
+      'cashPaymentEnabled',
+    ]);
+
     try {
       restaurant = await prisma.restaurant.findFirst({
         where: baseFilter,
-        select: {
-          id: true,
-          slug: true,
-          subdomain: true,
-          name: true,
-          active: true,
-          paymentCollectionTiming: true,
-          cashPaymentEnabled: true,
-        },
+        select: basicSelect,
       });
     } catch (err: any) {
       // If the client schema doesn't know about "status" or other fields, fall back
@@ -124,15 +136,16 @@ export const attachRestaurant = async (
           const fallbackFilter = { ...baseFilter };
           delete (fallbackFilter as any).status;
 
+          const fallbackSelect = pickFields([
+            'id',
+            'name',
+            'active',
+            'paymentCollectionTiming',
+            'cashPaymentEnabled',
+          ]);
           const partialRestaurant = await prisma.restaurant.findFirst({
             where: fallbackFilter,
-            select: {
-              id: true,
-              name: true,
-              active: true,
-              paymentCollectionTiming: true,
-              cashPaymentEnabled: true,
-            },
+            select: fallbackSelect,
           });
 
           if (partialRestaurant) {

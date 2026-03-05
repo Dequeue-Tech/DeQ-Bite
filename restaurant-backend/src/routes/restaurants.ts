@@ -15,6 +15,20 @@ const router = Router();
 const hasRestaurantStatus =
   !!(prisma as any)._dmmf?.modelMap?.Restaurant?.fields?.some((f: any) => f.name === 'status');
 
+// determine which restaurant fields actually exist in the generated client
+const restaurantFields: string[] =
+  ((prisma as any)._dmmf?.modelMap?.Restaurant?.fields || []).map((f: any) => f.name);
+
+function pickFields(fields: string[]) {
+  const out: any = {};
+  for (const f of fields) {
+    if (restaurantFields.includes(f)) {
+      out[f] = true;
+    }
+  }
+  return out;
+}
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -74,7 +88,7 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
   // build the base filter for the search
   const baseFilter: Prisma.RestaurantWhereInput = {
     active: true,
-    status: 'APPROVED',
+    ...(hasRestaurantStatus ? { status: 'APPROVED' } : {}),
     ...(query ? { name: { contains: query, mode: 'insensitive' } } : {}),
     ...(cuisine ? { cuisineTypes: { has: cuisine } } : {}),
     ...(location
@@ -88,22 +102,24 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
       : {}),
   };
 
+  const searchSelect = pickFields([
+    'id',
+    'name',
+    'slug',
+    'subdomain',
+    'address',
+    'city',
+    'state',
+    'cuisineTypes',
+    'paymentCollectionTiming',
+    'cashPaymentEnabled',
+  ]);
+
   let restaurants;
   try {
     restaurants = await prisma.restaurant.findMany({
       where: baseFilter,
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        subdomain: true,
-        address: true,
-        city: true,
-        state: true,
-        cuisineTypes: true,
-        paymentCollectionTiming: true,
-        cashPaymentEnabled: true,
-      },
+      select: searchSelect,
       orderBy: { name: 'asc' },
       take: 50,
     });
@@ -118,18 +134,7 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
       delete (fallback as any).status;
       restaurants = await prisma.restaurant.findMany({
         where: fallback,
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          subdomain: true,
-          address: true,
-          city: true,
-          state: true,
-          cuisineTypes: true,
-          paymentCollectionTiming: true,
-          cashPaymentEnabled: true,
-        },
+        select: searchSelect,
         orderBy: { name: 'asc' },
         take: 50,
       });
@@ -158,47 +163,50 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
 
   const baseFilter: Prisma.RestaurantWhereInput = {
     active: true,
-    status: 'APPROVED',
+    ...(hasRestaurantStatus ? { status: 'APPROVED' } : {}),
     OR: [{ id: identifier }, { slug: identifier }, { subdomain: identifier }],
   };
 
   let restaurant;
+  const detailSelect = pickFields([
+    'id',
+    'name',
+    'slug',
+    'subdomain',
+    'address',
+    'city',
+    'state',
+    'country',
+    'email',
+    'phone',
+    'cuisineTypes',
+    'paymentCollectionTiming',
+    'cashPaymentEnabled',
+  ]);
+  // add nested selects manually (categories/menuItems)
+  detailSelect.categories = {
+    where: { active: true },
+    orderBy: { sortOrder: 'asc' },
+    select: { id: true, name: true },
+  };
+  detailSelect.menuItems = {
+    where: { available: true },
+    take: 12,
+    orderBy: { createdAt: 'desc' },
+    select: {
+      id: true,
+      name: true,
+      description: true,
+      pricePaise: true,
+      isVeg: true,
+      category: { select: { id: true, name: true } },
+    },
+  };
+
   try {
     restaurant = await prisma.restaurant.findFirst({
       where: baseFilter,
-      select: {
-        id: true,
-        name: true,
-        slug: true,
-        subdomain: true,
-        address: true,
-        city: true,
-        state: true,
-        country: true,
-        email: true,
-        phone: true,
-        cuisineTypes: true,
-        paymentCollectionTiming: true,
-        cashPaymentEnabled: true,
-        categories: {
-          where: { active: true },
-          orderBy: { sortOrder: 'asc' },
-          select: { id: true, name: true },
-        },
-        menuItems: {
-          where: { available: true },
-          take: 12,
-          orderBy: { createdAt: 'desc' },
-          select: {
-            id: true,
-            name: true,
-            description: true,
-            pricePaise: true,
-            isVeg: true,
-            category: { select: { id: true, name: true } },
-          },
-        },
-      },
+      select: detailSelect,
     });
   } catch (err: any) {
     const isStatusError =
@@ -212,39 +220,7 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
       delete (fallback as any).status;
       restaurant = await prisma.restaurant.findFirst({
         where: fallback,
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          subdomain: true,
-          address: true,
-          city: true,
-          state: true,
-          country: true,
-          email: true,
-          phone: true,
-          cuisineTypes: true,
-          paymentCollectionTiming: true,
-          cashPaymentEnabled: true,
-          categories: {
-            where: { active: true },
-            orderBy: { sortOrder: 'asc' },
-            select: { id: true, name: true },
-          },
-          menuItems: {
-            where: { available: true },
-            take: 12,
-            orderBy: { createdAt: 'desc' },
-            select: {
-              id: true,
-              name: true,
-              description: true,
-              pricePaise: true,
-              isVeg: true,
-              category: { select: { id: true, name: true } },
-            },
-          },
-        },
+        select: detailSelect,
       });
     } else {
       throw err;
@@ -275,6 +251,18 @@ router.get('/current', requireRestaurant, async (req: AuthenticatedRequest, res:
 
 // GET /api/restaurants/mine
 router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Response) => {
+  const mineSelect: any = pickFields([
+    'id',
+    'name',
+    'slug',
+    'subdomain',
+    'paymentCollectionTiming',
+    'cashPaymentEnabled',
+  ]);
+  if (hasRestaurantStatus) {
+    mineSelect.status = true;
+  }
+
   const restaurants = await prisma.restaurantUser.findMany({
     where: {
       userId: req.user!.id,
@@ -282,15 +270,7 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
     },
     include: {
       restaurant: {
-        select: {
-          id: true,
-          name: true,
-          slug: true,
-          subdomain: true,
-          ...(hasRestaurantStatus ? { status: true } : {}),
-          paymentCollectionTiming: true,
-          cashPaymentEnabled: true,
-        },
+        select: mineSelect,
       },
     },
   });
@@ -298,18 +278,7 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
   const response: ApiResponse = {
     success: true,
     data: {
-      restaurants: restaurants.map((entry: {
-        restaurant: {
-          id: string;
-          name: string;
-          slug: string;
-          subdomain: string;
-          status?: string;
-          paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
-          cashPaymentEnabled: boolean;
-        };
-        role: string;
-      }) => ({
+      restaurants: restaurants.map((entry: any) => ({
         id: entry.restaurant.id,
         name: entry.restaurant.name,
         slug: entry.restaurant.slug,
@@ -330,7 +299,23 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
   const payload = createRestaurantSchema.parse(req.body);
   const handles = await ensureUniqueRestaurantHandles(payload.name);
 
-  const restaurant = await prisma.restaurant.create({
+  const createSelect: any = pickFields([
+    'id',
+    'name',
+    'slug',
+    'subdomain',
+    'address',
+    'email',
+    'phone',
+    'active',
+    'paymentCollectionTiming',
+    'cashPaymentEnabled',
+    'createdAt',
+    'updatedAt',
+  ]);
+  if (hasRestaurantStatus) createSelect.status = true;
+
+  const restaurant: any = await prisma.restaurant.create({
     data: {
       name: payload.name,
       slug: handles.slug,
@@ -347,21 +332,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
       approvedAt: new Date(),
       approvedByUserId: req.user!.id,
     },
-    select: {
-      id: true,
-      name: true,
-      slug: true,
-      subdomain: true,
-      address: true,
-      email: true,
-      phone: true,
-      active: true,
-      ...(hasRestaurantStatus ? { status: true } : {}),
-      paymentCollectionTiming: true,
-      cashPaymentEnabled: true,
-      createdAt: true,
-      updatedAt: true,
-    },
+    select: createSelect,
   });
 
   await prisma.restaurantUser.create({
@@ -397,14 +368,15 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
 
 // GET /api/restaurants/settings/payment-policy
 router.get('/settings/payment-policy', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
-  const restaurant = await prisma.restaurant.findUnique({
+  const policySelect = pickFields([
+    'id',
+    'name',
+    'paymentCollectionTiming',
+    'cashPaymentEnabled',
+  ]);
+  const restaurant: any = await prisma.restaurant.findUnique({
     where: { id: req.restaurant!.id },
-    select: {
-      id: true,
-      name: true,
-      paymentCollectionTiming: true,
-      cashPaymentEnabled: true,
-    },
+    select: policySelect,
   });
 
   return res.json({
@@ -417,18 +389,19 @@ router.get('/settings/payment-policy', authenticate, requireRestaurant, authoriz
 router.put('/settings/payment-policy', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
   const payload = updatePaymentPolicySchema.parse(req.body);
 
-  const restaurant = await prisma.restaurant.update({
+  const policySelect = pickFields([
+    'id',
+    'name',
+    'paymentCollectionTiming',
+    'cashPaymentEnabled',
+  ]);
+  const restaurant: any = await prisma.restaurant.update({
     where: { id: req.restaurant!.id },
     data: {
       paymentCollectionTiming: payload.paymentCollectionTiming,
       cashPaymentEnabled: payload.cashPaymentEnabled,
     },
-    select: {
-      id: true,
-      name: true,
-      paymentCollectionTiming: true,
-      cashPaymentEnabled: true,
-    },
+    select: policySelect,
   });
 
   await prisma.auditLog.create({

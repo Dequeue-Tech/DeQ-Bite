@@ -4,7 +4,7 @@ import { Suspense, useState, useEffect } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { apiClient, MenuItem, Category } from '@/lib/api-client';
-import { ChefHat, ShoppingCart, Plus, Minus, Filter, Search } from 'lucide-react';
+import { ChefHat, ShoppingCart, Plus, Minus, Filter, Search, Menu as MenuIcon, X } from 'lucide-react';
 import { useCartStore, CartItem } from '@/store/cart';
 import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
@@ -31,6 +31,7 @@ function MenuPageContent() {
     isGlutenFree: false,
     spiceLevel: 'all',
   });
+  const [showCategoriesPanel, setShowCategoriesPanel] = useState(false);
 
   useEffect(() => {
     const slug = apiClient.getSelectedRestaurantSlug() || apiClient.getActiveRestaurantSlug();
@@ -246,9 +247,9 @@ function MenuPageContent() {
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+        <div className="space-y-6">
           {filteredItems.length === 0 ? (
-            <div className="col-span-full text-center py-8 sm:py-12">
+            <div className="text-center py-8 sm:py-12">
               <ChefHat className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
               <p className="text-gray-600 text-base sm:text-lg">No items found matching your criteria</p>
             </div>
@@ -274,55 +275,153 @@ function MenuPageContent() {
                       {item.isVeg && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Veg</span>}
                       {item.isVegan && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Vegan</span>}
                     </div>
-                  </div>
+                  )}
                   
-                  <div className="p-3 sm:p-4">
-                    <div className="flex justify-between items-start mb-2 gap-2">
-                      <h3 className="text-base sm:text-lg font-semibold text-gray-800 line-clamp-1">{item.name || 'Unknown Item'}</h3>
-                      <span className="text-base sm:text-lg font-bold text-orange-600 whitespace-nowrap">{formatInr(item.pricePaise)}</span>
-                    </div>
-                    
-                    <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm line-clamp-2">{item.description || ''}</p>
-                    
-                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mb-3 sm:mb-4">
-                      <span className="text-xs text-gray-500 uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
-                        {getSpiceLevelDisplay(item.spiceLevel)}
-                      </span>
+                  {/* Items grid for this category */}
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+                    {items.map(item => {
+                      const quantity = getCartItemQuantity(item.id);
+                      const hasImage = item.image && item.image.trim() !== '';
                       
-                      {/* Quantity controls instead of simple "Add to Cart" button */}
-                      <div className="flex items-center w-full sm:w-auto">
-                        {quantity === 0 ? (
-                          <button
-                            onClick={() => handleAddToCart(item)}
-                            className="w-full sm:w-auto bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm"
-                          >
-                            Add to Cart
-                          </button>
-                        ) : (
-                          <div className="flex items-center border border-gray-300 rounded-lg w-full sm:w-auto justify-center sm:justify-start">
-                            <button
-                              onClick={() => handleUpdateQuantity(item, quantity - 1)}
-                              className="p-2 text-gray-600 hover:bg-gray-100 flex-1 sm:flex-none"
-                            >
-                              <Minus className="h-4 w-4 mx-auto" />
-                            </button>
-                            <span className="px-3 py-1 font-medium min-w-[2rem] text-center">{quantity}</span>
-                            <button
-                              onClick={() => handleUpdateQuantity(item, quantity + 1)}
-                              className="p-2 text-gray-600 hover:bg-gray-100 flex-1 sm:flex-none"
-                            >
-                              <Plus className="h-4 w-4 mx-auto" />
-                            </button>
+                      return (
+                        <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden menu-item-card">
+                          <div className="p-3 sm:p-4">
+                            <div className="flex gap-3 sm:gap-4">
+                              {/* Left side - Text content */}
+                              <div className="flex-1 min-w-0">
+                                {/* Dietary tags */}
+                                <div className="flex gap-1 mb-2">
+                                  {item.isVeg && <span className="bg-green-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Veg</span>}
+                                  {item.isVegan && <span className="bg-green-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Vegan</span>}
+                                  {!item.isVeg && !item.isVegan && <span className="bg-red-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Non-Veg</span>}
+                                </div>
+                                
+                                <h3 className="text-sm sm:text-base font-semibold text-gray-800 line-clamp-1 mb-1">{item.name || 'Unknown Item'}</h3>
+                                <p className="text-gray-600 text-xs sm:text-sm line-clamp-2 mb-2">{item.description || ''}</p>
+                                
+                                <div className="flex items-center gap-2 mb-2">
+                                  <span className="text-sm sm:text-base font-bold text-orange-600">{formatInr(item.pricePaise)}</span>
+                                  <span className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide bg-gray-100 px-1.5 sm:px-2 py-0.5 rounded">
+                                    {getSpiceLevelDisplay(item.spiceLevel)}
+                                  </span>
+                                </div>
+                              </div>
+                              
+                              {/* Right side - Image and Add button */}
+                              <div className={`flex flex-col items-center ${hasImage ? 'gap-2' : 'gap-0 justify-end'}`}>
+                                {/* Small image if present */}
+                                {hasImage && (
+                                  <Image
+                                    src={item.image!}
+                                    alt={item.name || ''}
+                                    width={80}
+                                    height={80}
+                                    loading="lazy"
+                                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg"
+                                  />
+                                )}
+                                
+                                {/* Add button / Quantity controls */}
+                                {quantity === 0 ? (
+                                  <button
+                                    onClick={() => handleAddToCart(item)}
+                                    className="w-16 sm:w-20 bg-orange-600 text-white px-2 py-1.5 rounded-lg hover:bg-orange-700 transition-colors text-xs sm:text-sm font-medium"
+                                  >
+                                    Add
+                                  </button>
+                                ) : (
+                                  <div className="flex items-center border border-gray-300 rounded-lg w-16 sm:w-20 justify-center">
+                                    <button
+                                      onClick={() => handleUpdateQuantity(item, quantity - 1)}
+                                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
+                                    >
+                                      <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    </button>
+                                    <span className="px-1 sm:px-2 py-0.5 text-xs sm:text-sm font-medium min-w-[1rem] text-center">{quantity}</span>
+                                    <button
+                                      onClick={() => handleUpdateQuantity(item, quantity + 1)}
+                                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
+                                    >
+                                      <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
+                                    </button>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                           </div>
-                        )}
-                      </div>
-                    </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
-              );
-            })
+              ));
+            })()
           )}
         </div>
+      </div>
+
+      {/* Floating Categories Button - Glassy Finish */}
+      <div className="fixed bottom-20 right-4 z-50 md:hidden">
+        {/* Categories Panel - Expands upward */}
+        {showCategoriesPanel && (
+          <div className="absolute bottom-16 right-0 mb-2 w-48">
+            <div className="backdrop-blur-xl bg-white/80 border border-white/40 shadow-2xl rounded-2xl overflow-hidden">
+              <div className="p-3 border-b border-white/30">
+                <p className="text-sm font-semibold text-gray-800">Categories</p>
+              </div>
+              <div className="max-h-64 overflow-y-auto">
+                <button
+                  onClick={() => {
+                    setSelectedCategory('all');
+                    setShowCategoriesPanel(false);
+                  }}
+                  className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                    selectedCategory === 'all'
+                      ? 'bg-orange-500/20 text-orange-700 font-medium'
+                      : 'text-gray-700 hover:bg-white/50'
+                  }`}
+                >
+                  All Items
+                </button>
+                {categories.map((category) => (
+                  <button
+                    key={category.id}
+                    onClick={() => {
+                      setSelectedCategory(category.id);
+                      setShowCategoriesPanel(false);
+                    }}
+                    className={`w-full text-left px-4 py-2.5 text-sm transition-colors ${
+                      selectedCategory === category.id
+                        ? 'bg-orange-500/20 text-orange-700 font-medium'
+                        : 'text-gray-700 hover:bg-white/50'
+                    }`}
+                  >
+                    {category.name}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Hamburger Button - Glassy Circle */}
+        <button
+          onClick={() => setShowCategoriesPanel(!showCategoriesPanel)}
+          className={`w-14 h-14 rounded-full backdrop-blur-xl shadow-2xl flex items-center justify-center transition-all duration-300 ${
+            showCategoriesPanel
+              ? 'bg-orange-500/90 border-2 border-white/50 text-white rotate-90'
+              : 'bg-white/80 border-2 border-white/50 text-gray-700 hover:bg-white/90'
+          }`}
+          style={{
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.2), inset 0 2px 4px rgba(255, 255, 255, 0.3)',
+          }}
+        >
+          {showCategoriesPanel ? (
+            <X className="h-6 w-6" />
+          ) : (
+            <MenuIcon className="h-6 w-6" />
+          )}
+        </button>
       </div>
     </div>
   );

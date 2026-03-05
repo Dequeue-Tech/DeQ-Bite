@@ -94,25 +94,50 @@ export default function RestaurantLandingPage() {
   return (
     <div className="min-h-screen bg-gray-50 py-4 sm:py-8">
       <div className="max-w-5xl mx-auto px-3 sm:px-4">
-        <section className="rounded-2xl border border-orange-200 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50 p-4 sm:p-6 md:p-8 mb-4 sm:mb-6">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-5">
-            <div className="flex items-center gap-3 sm:gap-4">
-              <div className="h-14 w-14 sm:h-20 sm:w-20 rounded-xl sm:rounded-2xl bg-orange-600 text-white flex items-center justify-center text-xl sm:text-2xl font-bold shadow-sm flex-shrink-0">
-                {getInitials(restaurant.name)}
+        <section className="relative rounded-2xl border border-orange-200 overflow-hidden mb-4 sm:mb-6">
+          {/* Background Image */}
+          {restaurant.backgroundImage ? (
+            <div 
+              className="absolute inset-0 bg-cover bg-center"
+              style={{ 
+                backgroundImage: `url(${restaurant.backgroundImage})`,
+                filter: 'blur(2px) brightness(0.7)'
+              }}
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gradient-to-br from-orange-50 via-amber-50 to-yellow-50" />
+          )}
+          
+          {/* Content */}
+          <div className="relative z-10 p-4 sm:p-6 md:p-8">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 sm:gap-5">
+              <div className="flex items-center gap-3 sm:gap-4">
+                {/* Logo */}
+                {restaurant.logo ? (
+                  <img 
+                    src={restaurant.logo} 
+                    alt={restaurant.name}
+                    className="h-14 w-14 sm:h-20 sm:w-20 rounded-xl sm:rounded-2xl object-cover shadow-lg flex-shrink-0 bg-white"
+                  />
+                ) : (
+                  <div className="h-14 w-14 sm:h-20 sm:w-20 rounded-xl sm:rounded-2xl bg-orange-600 text-white flex items-center justify-center text-xl sm:text-2xl font-bold shadow-lg flex-shrink-0">
+                    {getInitials(restaurant.name)}
+                  </div>
+                )}
+                <div className="min-w-0 flex-1">
+                  <p className="text-xs sm:text-sm font-medium text-orange-200">Restaurant Landing</p>
+                  <h1 className="text-xl sm:text-3xl font-bold text-white truncate drop-shadow-lg">{restaurant.name}</h1>
+                  <p className="text-gray-200 mt-0.5 sm:mt-1 text-xs sm:text-sm truncate drop-shadow-md">{restaurant.address || 'Address not provided'}</p>
+                </div>
               </div>
-              <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm font-medium text-orange-700">Restaurant Landing</p>
-                <h1 className="text-xl sm:text-3xl font-bold text-gray-900 truncate">{restaurant.name}</h1>
-                <p className="text-gray-600 mt-0.5 sm:mt-1 text-xs sm:text-sm truncate">{restaurant.address || 'Address not provided'}</p>
-              </div>
+              <button
+                onClick={selectAndOpen}
+                className="inline-flex items-center justify-center bg-orange-600 text-white px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl hover:bg-orange-700 font-medium text-sm sm:text-base shadow-lg"
+              >
+                View Menu
+                <ArrowRight className="h-4 w-4 ml-2" />
+              </button>
             </div>
-            <button
-              onClick={selectAndOpen}
-              className="inline-flex items-center justify-center bg-orange-600 text-white px-4 sm:px-5 py-2.5 sm:py-3 rounded-xl hover:bg-orange-700 font-medium text-sm sm:text-base"
-            >
-              View Menu
-              <ArrowRight className="h-4 w-4 ml-2" />
-            </button>
           </div>
         </section>
 
@@ -175,21 +200,6 @@ export default function RestaurantLandingPage() {
             ))}
           </div>
         </section>
-
-        <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5 mb-4 sm:mb-6">
-          <h2 className="font-semibold text-gray-900 mb-2 text-sm sm:text-base">Quick Actions</h2>
-          <div className="flex flex-wrap gap-2 sm:gap-3">
-            <button
-              onClick={selectAndOpen}
-              className="bg-orange-600 text-white px-3 sm:px-4 py-2 rounded-lg hover:bg-orange-700 text-sm"
-            >
-              Open Menu
-            </button>
-            <Link href="/" className="border border-gray-300 px-3 sm:px-4 py-2 rounded-lg text-gray-700 hover:bg-gray-50 text-sm">
-              Back
-            </Link>
-          </div>
-        </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 sm:gap-6 pb-4 sm:pb-6">
           <div className="bg-white rounded-xl border border-gray-200 p-4 sm:p-5">

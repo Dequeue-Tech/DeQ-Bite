@@ -1,10 +1,10 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Link from 'next/link';
-import { ChefHat, ShoppingCart, Home, UtensilsCrossed, ClipboardList, User, Settings } from 'lucide-react';
+import { ChefHat, ShoppingCart, Home, UtensilsCrossed, ClipboardList, User, Settings, LogOut } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { apiClient } from '@/lib/api-client';
 
@@ -16,6 +16,7 @@ const Navbar = () => {
   const cartItemsCount = getTotalItems();
   const canAccessAdmin = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
   const canAccessKitchen = canAccessAdmin || user?.restaurantRole === 'STAFF';
+  const [showUserDropdown, setShowUserDropdown] = useState(false);
 
   useEffect(() => {
     if (isAuthenticated && user && typeof user.restaurantRole === 'undefined') {
@@ -25,7 +26,8 @@ const Navbar = () => {
 
   const handleLogout = () => {
     logout();
-    router.push('/');
+    setShowUserDropdown(false);
+    router.push('/auth/signin');
   };
 
   const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
@@ -135,7 +137,7 @@ const Navbar = () => {
               )}
             </div>
 
-            {/* Mobile: Profile icon */}
+            {/* Mobile: Profile icon with dropdown */}
             {isAuthenticated ? (
               <Link 
                 href={withRestaurant('/orders')} 
@@ -146,7 +148,7 @@ const Navbar = () => {
             ) : (
               <Link 
                 href="/auth/signin" 
-                className="md:hidden flex items-center p-2 text-orange-600 hover:text-orange-700 active:bg-orange-50 rounded-lg transition-colors"
+                className="md:hidden flex items-center p-2 text-orange-600 hover:text-orange-700 active:bg-gray-50 rounded-lg transition-colors"
               >
                 <User className="h-6 w-6" />
               </Link>

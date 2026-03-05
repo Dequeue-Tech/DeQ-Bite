@@ -8,6 +8,7 @@ import { errorHandler } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { attachRestaurant } from '@/middleware/restaurant';
 
+
 import authRoutes from '@/routes/auth';
 import paymentRoutes from '@/routes/payments';
 import invoiceRoutes from '@/routes/invoices';
@@ -43,14 +44,17 @@ app.use(cors({
       process.env.FRONTEND_URL?.replace(/\/$/, ''),
       'http://localhost:5174',
       'http://localhost:3000',
+      'http://localhost:3001',
       'https://de-q-restaurants-frontend.vercel.app',
     ].filter(Boolean);
 
+    // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
     if (allowedOrigins.includes(origin.replace(/\/$/, ''))) {
       callback(null, true);
     } else {
+      console.warn(`CORS blocked request from origin: ${origin}`);
       callback(new Error('Not allowed by CORS'));
     }
   },
@@ -116,6 +120,15 @@ tenantRouter.use('/restaurants', restaurantRoutes);
 tenantRouter.use('/offers', offerRoutes);
 
 app.use('/api/r/:restaurantSlug', tenantRouter);
+
+app.use('/api/restaurants/:restaurantId/payments', attachRestaurant, paymentRoutes);
+app.use('/api/restaurants/:restaurantId/invoices', attachRestaurant, invoiceRoutes);
+app.use('/api/restaurants/:restaurantId/pdf', attachRestaurant, pdfRoutes);
+app.use('/api/restaurants/:restaurantId/menu', attachRestaurant, menuRoutes);
+app.use('/api/restaurants/:restaurantId/categories', attachRestaurant, categoryRoutes);
+app.use('/api/restaurants/:restaurantId/tables', attachRestaurant, tableRoutes);
+app.use('/api/restaurants/:restaurantId/orders', attachRestaurant, orderRoutes);
+app.use('/api/restaurants/:restaurantId/coupons', attachRestaurant, couponRoutes);
 
 app.use('/invoices', express.static('public/invoices'));
 

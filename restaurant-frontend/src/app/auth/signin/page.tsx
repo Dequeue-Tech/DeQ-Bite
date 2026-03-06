@@ -30,9 +30,10 @@ export default function SignInPage() {
   };
 
   const testCredentials = [
-    { email: 'admin@restaurant.com', password: 'admin123', role: 'Admin' },
-    { email: 'customer@example.com', password: 'customer123', role: 'Customer' },
-    { email: 'jane@example.com', password: 'jane123', role: 'Customer' },
+    { email: 'owner@demo.com', password: 'owner123', role: 'Owner' },
+    { email: 'admin@demo.com', password: 'admin123', role: 'Admin' },
+    { email: 'staff@demo.com', password: 'staff123', role: 'Staff' },
+    { email: 'customer@demo.com', password: 'customer123', role: 'Customer' },
   ];
 
   const fillTestCredentials = (email: string, password: string) => {

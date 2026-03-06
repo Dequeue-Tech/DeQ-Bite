@@ -22,6 +22,8 @@ const tables_1 = __importDefault(require("./routes/tables"));
 const orders_1 = __importDefault(require("./routes/orders"));
 const coupons_1 = __importDefault(require("./routes/coupons"));
 const restaurants_1 = __importDefault(require("./routes/restaurants"));
+const offers_1 = __importDefault(require("./routes/offers"));
+const platform_1 = __importDefault(require("./routes/platform"));
 dotenv_1.default.config();
 if (process.env.NODE_ENV === 'production') {
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
@@ -40,6 +42,7 @@ app.use((0, cors_1.default)({
             process.env.FRONTEND_URL?.replace(/\/$/, ''),
             'http://localhost:5174',
             'http://localhost:3000',
+            'http://localhost:3001',
             'https://de-q-restaurants-frontend.vercel.app',
         ].filter(Boolean);
         if (!origin)
@@ -48,12 +51,13 @@ app.use((0, cors_1.default)({
             callback(null, true);
         }
         else {
+            console.warn(`CORS blocked request from origin: ${origin}`);
             callback(new Error('Not allowed by CORS'));
         }
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
 }));
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
@@ -89,15 +93,28 @@ app.get('/', (_req, res) => {
     });
 });
 app.use('/api/auth', auth_1.default);
-app.use('/api/payments', payments_1.default);
-app.use('/api/invoices', invoices_1.default);
-app.use('/api/pdf', pdf_1.default);
-app.use('/api/menu', menu_1.default);
-app.use('/api/categories', categories_1.default);
-app.use('/api/tables', tables_1.default);
-app.use('/api/orders', orders_1.default);
-app.use('/api/coupons', coupons_1.default);
 app.use('/api/restaurants', restaurants_1.default);
+app.use('/api/platform', platform_1.default);
+const tenantRouter = express_1.default.Router({ mergeParams: true });
+tenantRouter.use('/payments', payments_1.default);
+tenantRouter.use('/invoices', invoices_1.default);
+tenantRouter.use('/pdf', pdf_1.default);
+tenantRouter.use('/menu', menu_1.default);
+tenantRouter.use('/categories', categories_1.default);
+tenantRouter.use('/tables', tables_1.default);
+tenantRouter.use('/orders', orders_1.default);
+tenantRouter.use('/coupons', coupons_1.default);
+tenantRouter.use('/restaurants', restaurants_1.default);
+tenantRouter.use('/offers', offers_1.default);
+app.use('/api/r/:restaurantSlug', tenantRouter);
+app.use('/api/restaurants/:restaurantId/payments', restaurant_1.attachRestaurant, payments_1.default);
+app.use('/api/restaurants/:restaurantId/invoices', restaurant_1.attachRestaurant, invoices_1.default);
+app.use('/api/restaurants/:restaurantId/pdf', restaurant_1.attachRestaurant, pdf_1.default);
+app.use('/api/restaurants/:restaurantId/menu', restaurant_1.attachRestaurant, menu_1.default);
+app.use('/api/restaurants/:restaurantId/categories', restaurant_1.attachRestaurant, categories_1.default);
+app.use('/api/restaurants/:restaurantId/tables', restaurant_1.attachRestaurant, tables_1.default);
+app.use('/api/restaurants/:restaurantId/orders', restaurant_1.attachRestaurant, orders_1.default);
+app.use('/api/restaurants/:restaurantId/coupons', restaurant_1.attachRestaurant, coupons_1.default);
 app.use('/invoices', express_1.default.static('public/invoices'));
 app.use((req, res) => {
     res.status(404).json({

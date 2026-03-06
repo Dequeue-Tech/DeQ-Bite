@@ -3,6 +3,7 @@
 import { useRouter } from 'next/navigation';
 import { ShoppingCart, Plus, Minus, Trash2 } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
+import { apiClient } from '@/lib/api-client';
 import { formatInr } from '@/lib/currency';
 
 export default function CartPage() {
@@ -10,7 +11,9 @@ export default function CartPage() {
   const { items: cartItems, updateQuantity, removeItem, getTotalPricePaise, activeOrderId } = useCartStore();
 
   const proceedToCheckout = () => {
-    router.push(activeOrderId ? `/checkout?orderId=${activeOrderId}` : '/checkout');
+    const base = '/checkout';
+    const target = activeOrderId ? `${base}?orderId=${activeOrderId}` : base;
+    router.push(target);
   };
 
   if (cartItems.length === 0) {
@@ -21,7 +24,7 @@ export default function CartPage() {
           <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">Your cart is empty</h2>
           <p className="text-gray-600 mb-6 sm:mb-8 text-sm sm:text-base">Start adding some delicious items to your cart!</p>
           <button
-            onClick={() => router.push('/menu')}
+            onClick={() => router.push(apiClient.buildRestaurantPath('/menu'))}
             className="bg-orange-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 transition-colors text-sm sm:text-base"
           >
             Browse Menu
@@ -142,7 +145,7 @@ export default function CartPage() {
               </button>
               
               <button
-                onClick={() => router.push('/menu')}
+                onClick={() => router.push(apiClient.buildRestaurantPath('/menu'))}
                 className="w-full mt-2 sm:mt-3 border border-gray-300 text-gray-700 py-2.5 sm:py-3 rounded-lg hover:bg-gray-50 transition-colors text-sm sm:text-base"
               >
                 Continue Shopping

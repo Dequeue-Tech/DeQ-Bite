@@ -30,28 +30,33 @@ const Navbar = () => {
     router.push('/auth/signin');
   };
 
-  const selectedRestaurantSubdomain = apiClient.getSelectedRestaurantSubdomain();
+  const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
+  const activeRestaurantSlug = apiClient.getActiveRestaurantSlug();
+  const withRestaurant = (path: string) => {
+    if (!activeRestaurantSlug) return path;
+    return `/r/${activeRestaurantSlug}${path.startsWith('/') ? path : `/${path}`}`;
+  };
 
   // Desktop navigation links
   const desktopNavLinks = [
     { name: 'Home', href: '/' },
-    { name: 'Menu', href: '/menu' },
+    { name: 'Menu', href: withRestaurant('/menu') },
     ...(isAuthenticated ? [
-      { name: 'Orders', href: '/orders' },
-      { name: 'Onboard', href: '/onboarding/restaurant' },
-      ...(canAccessAdmin ? [{ name: 'Admin', href: '/admin' }] : []),
-      ...(canAccessKitchen ? [{ name: 'Kitchen', href: '/kitchen' }] : []),
+      { name: 'Orders', href: withRestaurant('/orders') },
+      ...(canAccessAdmin ? [{name: 'Central Admin', href: withRestaurant('/central-admin')}]:[]),
+      ...(canAccessAdmin ? [{ name: 'Admin', href: withRestaurant('/admin') }] : []),
+      ...(canAccessKitchen ? [{ name: 'Kitchen', href: withRestaurant('/kitchen') }] : []),
     ] : []),
   ];
 
   // Mobile bottom navigation links (max 4 items, profile is in top nav)
   const mobileNavLinks = [
     { name: 'Home', href: '/', icon: Home },
-    { name: 'Menu', href: '/menu', icon: UtensilsCrossed },
+    { name: 'Menu', href: withRestaurant('/menu'), icon: UtensilsCrossed },
     ...(isAuthenticated ? [
-      { name: 'Orders', href: '/orders', icon: ClipboardList },
+      { name: 'Orders', href: withRestaurant('/orders'), icon: ClipboardList },
     ] : []),
-    { name: 'Cart', href: '/cart', icon: ShoppingCart, badge: cartItemsCount },
+    { name: 'Cart', href: withRestaurant('/cart'), icon: ShoppingCart, badge: cartItemsCount },
   ].slice(0, 4); // Max 4 items since profile is in top nav
 
   const isActive = (href: string) => pathname === href;
@@ -67,9 +72,9 @@ const Navbar = () => {
               <Link href="/" className="flex items-center min-w-0">
                 <ChefHat className="h-7 w-7 sm:h-8 sm:w-8 text-orange-600 mr-1.5 sm:mr-2 flex-shrink-0" />
                 <span className="text-lg sm:text-xl font-bold text-gray-800 truncate">Restaurant</span>
-                {selectedRestaurantSubdomain && (
+                {selectedRestaurantSlug && (
                   <span className="hidden sm:inline ml-1.5 sm:ml-2 text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-orange-100 text-orange-700 truncate max-w-[80px] sm:max-w-[120px]">
-                    @{selectedRestaurantSubdomain}
+                    @{selectedRestaurantSlug}
                   </span>
                 )}
               </Link>
@@ -93,7 +98,7 @@ const Navbar = () => {
 
               {/* Cart icon for authenticated users */}
               {isAuthenticated && (
-                <Link href="/cart" className="relative p-2 -m-2">
+                <Link href={withRestaurant('/cart')} className="relative p-2 -m-2">
                   <ShoppingCart className="h-5 w-5 lg:h-6 lg:w-6 text-gray-600 hover:text-orange-600 transition-colors" />
                   {cartItemsCount > 0 && (
                     <span className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center text-[10px] sm:text-xs">
@@ -134,32 +139,12 @@ const Navbar = () => {
 
             {/* Mobile: Profile icon with dropdown */}
             {isAuthenticated ? (
-              <div className="md:hidden relative flex items-center">
-                <button
-                  onClick={() => setShowUserDropdown(!showUserDropdown)}
-                  className="flex items-center justify-center p-2 text-gray-600 hover:text-orange-600 active:bg-gray-100 rounded-lg transition-colors"
-                  style={{ marginTop: '2px' }}
-                >
-                  <User className="h-6 w-6" />
-                </button>
-                
-                {/* User dropdown */}
-                {showUserDropdown && (
-                  <div className="absolute right-0 top-full mt-2 w-48 bg-white rounded-lg shadow-xl border border-gray-200 py-2 z-50">
-                    <div className="px-4 py-2 border-b border-gray-100">
-                      <p className="text-sm font-medium text-gray-800">{user?.name}</p>
-                      <p className="text-xs text-gray-500">{user?.email}</p>
-                    </div>
-                    <button
-                      onClick={handleLogout}
-                      className="w-full flex items-center gap-2 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                    >
-                      <LogOut className="h-4 w-4" />
-                      Logout
-                    </button>
-                  </div>
-                )}
-              </div>
+              <Link 
+                href={withRestaurant('/orders')} 
+                className="md:hidden flex items-center p-2 text-gray-600 hover:text-orange-600 active:bg-gray-100 rounded-lg transition-colors"
+              >
+                <User className="h-6 w-6" />
+              </Link>
             ) : (
               <Link 
                 href="/auth/signin" 

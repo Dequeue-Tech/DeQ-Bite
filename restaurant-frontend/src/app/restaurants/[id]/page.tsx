@@ -9,7 +9,7 @@ import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
 
 export default function RestaurantLandingPage() {
-  const { id } = useParams<{ id: string }>();
+  const { id, slug } = useParams<{ id?: string; slug?: string }>();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
   const [restaurant, setRestaurant] = useState<any>(null);
@@ -17,10 +17,11 @@ export default function RestaurantLandingPage() {
 
   useEffect(() => {
     const run = async () => {
-      if (!id) return;
+      const identifier = (id || slug || '').toString();
+      if (!identifier) return;
       try {
         setLoading(true);
-        const details = await apiClient.getRestaurantPublicDetails(id.toLowerCase());
+        const details = await apiClient.getRestaurantPublicDetails(identifier.toLowerCase());
         setRestaurant(details);
       } catch (error: any) {
         toast.error(error?.message || 'Failed to load restaurant');
@@ -33,10 +34,11 @@ export default function RestaurantLandingPage() {
   }, [id]);
 
   const selectAndOpen = () => {
-    if (!restaurant?.subdomain) return;
-    apiClient.setSelectedRestaurantSubdomain(restaurant.subdomain);
+    const slugValue = restaurant?.slug || restaurant?.subdomain || restaurant?.id;
+    if (!slugValue) return;
+    apiClient.setSelectedRestaurantSlug(slugValue);
     toast.success(`${restaurant.name} selected`);
-    router.push('/menu');
+    router.push(`/r/${slugValue}/menu`);
   };
 
   const getInitials = (name: string) =>

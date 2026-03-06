@@ -1,7 +1,24 @@
-import { Response, NextFunction } from 'express';
+import { Response, NextFunction, Request } from 'express';
 import { prisma } from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { AuthenticatedRequest } from '@/types/api';
+import { Prisma } from '@prisma/client';
+
+// collect restaurant field names from generated client DMMF so we can safely
+// build select clauses at runtime. This lets us deploy new code before the
+// database/client are in sync without crashing due to missing fields.
+const restaurantFields: string[] =
+  ((prisma as any)._dmmf?.modelMap?.Restaurant?.fields || []).map((f: any) => f.name);
+
+function pickFields(fields: string[]) {
+  const out: any = {};
+  for (const f of fields) {
+    if (restaurantFields.includes(f)) {
+      out[f] = true;
+    }
+  }
+  return out;
+}
 
 const isLocalHost = (host?: string | null) => {
   if (!host) return false;
@@ -27,21 +44,17 @@ const extractSubdomain = (host?: string | null): string | null => {
   return null;
 };
 
-const mapRestaurantContext = (restaurant: {
-  id: string;
-  slug: string;
-  subdomain: string;
-  name: string;
-  paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL';
-  cashPaymentEnabled: boolean;
-}) => ({
-  id: restaurant.id,
-  slug: restaurant.slug,
-  subdomain: restaurant.subdomain,
-  name: restaurant.name,
-  paymentCollectionTiming: restaurant.paymentCollectionTiming,
-  cashPaymentEnabled: restaurant.cashPaymentEnabled,
-});
+const extractSlugFromPath = (req: Request): string | null => {
+  const params = req.params as Record<string, string | undefined>;
+  const paramSlug = params?.['restaurantSlug'] || params?.['slug'];
+  if (paramSlug) return paramSlug.toLowerCase();
+
+  const url = req.originalUrl || req.url || '';
+  const match = /\/r\/([^\/?#]+)(\/|$)/i.exec(url);
+  if (match && match[1]) return match[1].toLowerCase();
+
+  return null;
+};
 
 export const attachRestaurant = async (
   req: AuthenticatedRequest,
@@ -49,64 +62,121 @@ export const attachRestaurant = async (
   next: NextFunction
 ): Promise<void> => {
   try {
-    const routeRestaurantId = typeof req.params?.['restaurantId'] === 'string'
-      ? req.params['restaurantId'].trim()
-      : '';
-
-    if (routeRestaurantId) {
-      const restaurantById = await prisma.restaurant.findUnique({
-        where: { id: routeRestaurantId },
-        select: {
-          id: true,
-          slug: true,
-          subdomain: true,
-          name: true,
-          active: true,
-          paymentCollectionTiming: true,
-          cashPaymentEnabled: true,
-        },
-      });
-
-      if (!restaurantById || !restaurantById.active) {
-        return next(new AppError('Restaurant not found or inactive', 404));
-      }
-
-      req.restaurant = mapRestaurantContext(restaurantById);
+    if (req.restaurant) {
       return next();
     }
-
+    const headerSlug = req.get('x-restaurant-slug') || req.headers['x-restaurant-slug'];
     const headerSubdomain = req.get('x-restaurant-subdomain') || req.headers['x-restaurant-subdomain'];
     const host = req.get('host');
-    let subdomain: string | null = null;
+    let restaurantIdentifier: string | null = null;
 
-    if (typeof headerSubdomain === 'string' && headerSubdomain.trim()) {
-      subdomain = headerSubdomain.trim().toLowerCase();
+    const pathSlug = extractSlugFromPath(req);
+    if (pathSlug) {
+      restaurantIdentifier = pathSlug;
+    } else if (typeof headerSlug === 'string' && headerSlug.trim()) {
+      restaurantIdentifier = headerSlug.trim().toLowerCase();
+    } else if (typeof headerSubdomain === 'string' && headerSubdomain.trim()) {
+      restaurantIdentifier = headerSubdomain.trim().toLowerCase();
     } else if (!isLocalHost(host)) {
-      subdomain = extractSubdomain(host);
+      restaurantIdentifier = extractSubdomain(host);
     }
 
-    if (!subdomain) {
+    if (!restaurantIdentifier) {
       return next();
     }
 
-    const restaurant = await prisma.restaurant.findUnique({
-      where: { subdomain },
-      select: {
-        id: true,
-        slug: true,
-        subdomain: true,
-        name: true,
-        active: true,
-        paymentCollectionTiming: true,
-        cashPaymentEnabled: true,
-      },
-    });
+    // we use a relaxed `any` type here because the set of fields returned
+    // may vary depending on which columns are present in the deployed schema.
+    let restaurant: any | null;
 
-    if (!restaurant || !restaurant.active) {
-      return next(new AppError('Restaurant not found or inactive', 404));
+    // figure out whether the generated client has the "status" field
+    // PrismaClient does not expose `_dmmf` in the types, so cast to any to
+    // detect whether the schema has a `status` field. This allows us to avoid
+    // referencing it if the deployed client is out of date.
+    const hasStatus =
+      !!(prisma as any)._dmmf?.modelMap?.Restaurant?.fields?.some((f: any) => f.name === 'status');
+
+    // build the primary filter once so we can modify if needed
+    const baseFilter: Prisma.RestaurantWhereInput = {
+      active: true,
+      ...(hasStatus ? { status: 'APPROVED' } : {}),
+      OR: [
+        { id: restaurantIdentifier },
+        { slug: restaurantIdentifier },
+        { subdomain: restaurantIdentifier },
+      ],
+    };
+
+    const basicSelect = pickFields([
+      'id',
+      'slug',
+      'subdomain',
+      'name',
+      'active',
+      'paymentCollectionTiming',
+      'cashPaymentEnabled',
+    ]);
+
+    try {
+      restaurant = await prisma.restaurant.findFirst({
+        where: baseFilter,
+        select: basicSelect,
+      });
+    } catch (err: any) {
+      // If the client schema doesn't know about "status" or other fields, fall back
+      const isSchemaMismatch =
+        err.code === 'P2009' ||
+        (err.message &&
+          (err.message.includes('does not exist') || err.message.includes('Unknown argument `status`')));
+
+      if (isSchemaMismatch) {
+        console.warn('Database/client schema mismatch detected, trying alternative query:', err.message);
+        try {
+          // remove the status clause for the fallback query
+          const fallbackFilter = { ...baseFilter };
+          delete (fallbackFilter as any).status;
+
+          const fallbackSelect = pickFields([
+            'id',
+            'name',
+            'active',
+            'paymentCollectionTiming',
+            'cashPaymentEnabled',
+          ]);
+          const partialRestaurant = await prisma.restaurant.findFirst({
+            where: fallbackFilter,
+            select: fallbackSelect,
+          });
+
+          if (partialRestaurant) {
+            restaurant = {
+              ...partialRestaurant,
+              slug: restaurantIdentifier!,
+              subdomain: restaurantIdentifier!,
+            };
+          } else {
+            restaurant = null;
+          }
+        } catch (fallbackErr: any) {
+          console.warn('Fallback query also failed:', fallbackErr?.message || fallbackErr);
+          restaurant = null;
+        }
+      } else {
+        throw err; // Re-throw if it's a different error
+      }
     }
 
-    req.restaurant = mapRestaurantContext(restaurant);
+    if (!restaurant) return next();
+
+    req.restaurant = {
+      id: restaurant.id,
+      slug: restaurant.slug,
+      subdomain: restaurant.subdomain,
+      name: restaurant.name,
+      paymentCollectionTiming: restaurant.paymentCollectionTiming,
+      cashPaymentEnabled: restaurant.cashPaymentEnabled,
+    };
+
     return next();
   } catch (error) {
     return next(error);

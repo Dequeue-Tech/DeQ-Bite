@@ -38,7 +38,7 @@ async function testOrderCreation() {
     
     console.log('Sending order data:', JSON.stringify(orderData, null, 2));
     
-    const orderResponse = await fetch('http://localhost:5000/api/orders', {
+    const orderResponse = await fetch('http://localhost:5000/api/r/demo/orders', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${token}`,

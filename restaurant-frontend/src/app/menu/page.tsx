@@ -22,7 +22,7 @@ function MenuPageContent() {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedSubdomain, setSelectedSubdomain] = useState<string | null>(null);
+  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -34,7 +34,11 @@ function MenuPageContent() {
   const [showCategoriesPanel, setShowCategoriesPanel] = useState(false);
 
   useEffect(() => {
-    setSelectedSubdomain(apiClient.getSelectedRestaurantSubdomain());
+    const slug = apiClient.getSelectedRestaurantSlug() || apiClient.getActiveRestaurantSlug();
+    if (slug) {
+      apiClient.setSelectedRestaurantSlug(slug);
+    }
+    setSelectedSlug(slug);
     setActiveOrderId(searchParams.get('orderId'));
     fetchMenuData();
   }, [searchParams, setActiveOrderId]);
@@ -207,8 +211,8 @@ function MenuPageContent() {
       <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
         <div className="mb-4 sm:mb-8">
           <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-2 sm:mb-4">Our Menu</h2>
-          {selectedSubdomain ? (
-            <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Restaurant context: @{selectedSubdomain}</p>
+          {selectedSlug ? (
+            <p className="text-xs sm:text-sm text-gray-600 mb-1 sm:mb-2">Restaurant context: @{selectedSlug}</p>
           ) : (
             <p className="text-xs sm:text-sm text-orange-700 mb-1 sm:mb-2">No restaurant selected. Go to Home and select a restaurant first.</p>
           )}
@@ -250,108 +254,80 @@ function MenuPageContent() {
               <p className="text-gray-600 text-base sm:text-lg">No items found matching your criteria</p>
             </div>
           ) : (
-            (() => {
-              // Group items by category when showing all
-              const showAllCategories = selectedCategory === 'all';
-              const itemsByCategory = showAllCategories
-                ? filteredItems.reduce((acc, item) => {
-                    const catName = categories.find(c => c.id === item.categoryId)?.name || 'Other';
-                    if (!acc[catName]) acc[catName] = [];
-                    acc[catName].push(item);
-                    return acc;
-                  }, {} as Record<string, MenuItem[]>)
-                : { 'All': filteredItems };
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+              {filteredItems.map((item) => {
+                const quantity = getCartItemQuantity(item.id);
 
-              return Object.entries(itemsByCategory).map(([categoryName, items]) => (
-                <div key={categoryName}>
-                  {/* Category separator - only show when viewing all categories */}
-                  {showAllCategories && (
-                    <div className="flex items-center gap-4 mb-4">
-                      <h2 className="text-lg sm:text-xl font-bold text-gray-800 whitespace-nowrap">{categoryName}</h2>
-                      <div className="flex-1 h-px bg-gray-300"></div>
-                      <span className="text-sm text-gray-500">{items.length} items</span>
+                return (
+                  <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden menu-item-card">
+                    <div className="relative">
+                      {item.image && (
+                        <Image
+                          src={item.image}
+                          alt={item.name || ''}
+                          width={300}
+                          height={200}
+                          className="w-full h-40 sm:h-48 object-cover"
+                        />
+                      )}
+
+                      <div className="absolute top-2 left-2 flex space-x-1">
+                        {item.isVeg && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Veg</span>}
+                        {item.isVegan && <span className="bg-green-600 text-white text-xs px-2 py-1 rounded">Vegan</span>}
+                      </div>
                     </div>
-                  )}
-                  
-                  {/* Items grid for this category */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                    {items.map(item => {
-                      const quantity = getCartItemQuantity(item.id);
-                      const hasImage = item.image && item.image.trim() !== '';
-                      
-                      return (
-                        <div key={item.id} className="bg-white rounded-lg shadow-md overflow-hidden menu-item-card">
-                          <div className="p-3 sm:p-4">
-                            <div className="flex gap-3 sm:gap-4">
-                              {/* Left side - Text content */}
-                              <div className="flex-1 min-w-0">
-                                {/* Dietary tags */}
-                                <div className="flex gap-1 mb-2">
-                                  {item.isVeg && <span className="bg-green-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Veg</span>}
-                                  {item.isVegan && <span className="bg-green-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Vegan</span>}
-                                  {!item.isVeg && !item.isVegan && <span className="bg-red-600 text-white text-[10px] sm:text-xs px-1.5 sm:px-2 py-0.5 rounded">Non-Veg</span>}
-                                </div>
-                                
-                                <h3 className="text-sm sm:text-base font-semibold text-gray-800 line-clamp-1 mb-1">{item.name || 'Unknown Item'}</h3>
-                                <p className="text-gray-600 text-xs sm:text-sm line-clamp-2 mb-2">{item.description || ''}</p>
-                                
-                                <div className="flex items-center gap-2 mb-2">
-                                  <span className="text-sm sm:text-base font-bold text-orange-600">{formatInr(item.pricePaise)}</span>
-                                  <span className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide bg-gray-100 px-1.5 sm:px-2 py-0.5 rounded">
-                                    {getSpiceLevelDisplay(item.spiceLevel)}
-                                  </span>
-                                </div>
-                              </div>
-                              
-                              {/* Right side - Image and Add button */}
-                              <div className={`flex flex-col items-center ${hasImage ? 'gap-2' : 'gap-0 justify-end'}`}>
-                                {/* Small image if present */}
-                                {hasImage && (
-                                  <Image
-                                    src={item.image!}
-                                    alt={item.name || ''}
-                                    width={80}
-                                    height={80}
-                                    loading="lazy"
-                                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg"
-                                  />
-                                )}
-                                
-                                {/* Add button / Quantity controls */}
-                                {quantity === 0 ? (
-                                  <button
-                                    onClick={() => handleAddToCart(item)}
-                                    className="w-16 sm:w-20 bg-orange-600 text-white px-2 py-1.5 rounded-lg hover:bg-orange-700 transition-colors text-xs sm:text-sm font-medium"
-                                  >
-                                    Add
-                                  </button>
-                                ) : (
-                                  <div className="flex items-center border border-gray-300 rounded-lg w-16 sm:w-20 justify-center">
-                                    <button
-                                      onClick={() => handleUpdateQuantity(item, quantity - 1)}
-                                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
-                                    >
-                                      <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    </button>
-                                    <span className="px-1 sm:px-2 py-0.5 text-xs sm:text-sm font-medium min-w-[1rem] text-center">{quantity}</span>
-                                    <button
-                                      onClick={() => handleUpdateQuantity(item, quantity + 1)}
-                                      className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
-                                    >
-                                      <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                    </button>
-                                  </div>
-                                )}
-                              </div>
+
+                    <div className="p-3 sm:p-4">
+                      <div className="flex justify-between items-start mb-2 gap-2">
+                        <h3 className="text-base sm:text-lg font-semibold text-gray-800 line-clamp-1">
+                          {item.name || 'Unknown Item'}
+                        </h3>
+                        <span className="text-base sm:text-lg font-bold text-orange-600 whitespace-nowrap">
+                          {formatInr(item.pricePaise)}
+                        </span>
+                      </div>
+
+                      <p className="text-gray-600 mb-3 sm:mb-4 text-xs sm:text-sm line-clamp-2">
+                        {item.description || ''}
+                      </p>
+
+                      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-0 mb-3 sm:mb-4">
+                        <span className="text-xs text-gray-500 uppercase tracking-wide bg-gray-100 px-2 py-1 rounded">
+                          {getSpiceLevelDisplay(item.spiceLevel)}
+                        </span>
+
+                        <div className="flex items-center w-full sm:w-auto">
+                          {quantity === 0 ? (
+                            <button
+                              onClick={() => handleAddToCart(item)}
+                              className="w-full sm:w-auto bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700 transition-colors text-sm"
+                            >
+                              Add to Cart
+                            </button>
+                          ) : (
+                            <div className="flex items-center border border-gray-300 rounded-lg w-full sm:w-auto justify-center sm:justify-start">
+                              <button
+                                onClick={() => handleUpdateQuantity(item, quantity - 1)}
+                                className="p-2 text-gray-600 hover:bg-gray-100 flex-1 sm:flex-none"
+                              >
+                                <Minus className="h-4 w-4 mx-auto" />
+                              </button>
+                              <span className="px-3 py-1 font-medium min-w-[2rem] text-center">{quantity}</span>
+                              <button
+                                onClick={() => handleUpdateQuantity(item, quantity + 1)}
+                                className="p-2 text-gray-600 hover:bg-gray-100 flex-1 sm:flex-none"
+                              >
+                                <Plus className="h-4 w-4 mx-auto" />
+                              </button>
                             </div>
-                          </div>
+                          )}
                         </div>
-                      );
-                    })}
+                      </div>
+                    </div>
                   </div>
-                </div>
-              ));
-            })()
+                );
+              })}
+            </div>
           )}
         </div>
       </div>

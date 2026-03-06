@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '@/utils/logger';
 
-const createPrismaClient = () => {
+const createPrismaClient = (): PrismaClient => {
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'production' 
       ? ['error', 'warn'] 
@@ -62,3 +62,4 @@ export const disconnectDatabase = async () => {
 };
 
 export { prisma };
+

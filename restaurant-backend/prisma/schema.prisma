@@ -1,216 +1,317 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
   directUrl = env("DIRECT_DATABASE_URL")
 }
 
 model User {
-  id        String   @id @default(cuid())
-  email     String   @unique
-  phone     String?  @unique
-  name      String
-  password  String
-  role      UserRole @default(CUSTOMER)
-  verified  Boolean  @default(false)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  orders    Order[]
+  id              String           @id @default(cuid())
+  email           String           @unique
+  phone           String?          @unique
+  name            String
+  password        String
+  role            UserRole         @default(CUSTOMER)
+  verified        Boolean          @default(false)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  orders          Order[]
   restaurantUsers RestaurantUser[]
-  
+
   @@map("users")
 }
 
 model Restaurant {
-  id          String   @id @default(cuid())
-  name        String
-  slug        String   @unique
-  subdomain   String   @unique
-  email       String?
-  phone       String?
-  address     String?
-  logo        String? 
-  backgroundImage String?  
-  active      Boolean  @default(true)
+  id                      String                  @id @default(cuid())
+  name                    String
+  slug                    String                  @unique
+  subdomain               String                  @unique
+  status                  OnboardingStatus        @default(PENDING_APPROVAL)
+  suspendedReason         String?
+  email                   String?
+  phone                   String?
+  address                 String?
+  city                    String?
+  state                   String?
+  country                 String?
+  cuisine                 String?
+  cuisineTypes            String[]                @default([])
+  logoUrl                 String?
+  bannerUrl               String?
+  gstNumber               String?
+  gstLegalName            String?
+  bankAccountName         String?
+  bankAccountNumber       String?
+  bankIfsc                String?
+  bankName                String?
+  commissionRate          Int                     @default(0)
+  commissionRateBps       Int                     @default(0)
+  approvedAt              DateTime?
+  approvedByUserId        String?
+  onboardingStatus        OnboardingStatus        @default(PENDING_APPROVAL)
+  active                  Boolean                 @default(true)
   paymentCollectionTiming PaymentCollectionTiming @default(AFTER_MEAL)
-  cashPaymentEnabled Boolean @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-
-  categories  Category[]
-  menuItems   MenuItem[]
-  tables      Table[]
-  orders      Order[]
-  coupons     Coupon[]
-  users       RestaurantUser[]
+  cashPaymentEnabled      Boolean                 @default(true)
+  acceptedPaymentMethods  String[]
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  categories              Category[]
+  coupons                 Coupon[]
+  menuItems               MenuItem[]
+  offers                  Offer[]
+  orders                  Order[]
+  users                   RestaurantUser[]
+  tables                  Table[]
+  earnings                Earning[]              @relation("earnings")
 
   @@map("restaurants")
 }
 
 model RestaurantUser {
-  id            String   @id @default(cuid())
-  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  restaurantId  String
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userId        String
-  role          RestaurantRole @default(ADMIN)
-  active        Boolean   @default(true)
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id           String         @id @default(cuid())
+  restaurantId String
+  userId       String
+  role         RestaurantRole @default(ADMIN)
+  active       Boolean        @default(true)
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  restaurant   Restaurant     @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([restaurantId, userId])
   @@map("restaurant_users")
 }
 
 model Category {
-  id          String     @id @default(cuid())
-  name        String
-  description String?
-  image       String?
-  active      Boolean    @default(true)
-  sortOrder   Int        @default(0)
-  createdAt   DateTime   @default(now())
-  updatedAt   DateTime   @updatedAt
-  menuItems   MenuItem[]
-  restaurant  Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  name         String
+  description  String?
+  image        String?
+  active       Boolean    @default(true)
+  sortOrder    Int        @default(0)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
   restaurantId String
-  
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItems    MenuItem[]
+
   @@unique([restaurantId, name])
   @@map("categories")
 }
 
 model MenuItem {
-  id          String      @id @default(cuid())
-  name        String
-  description String?
-  pricePaise  Int
-  image       String?
-  category    Category    @relation(fields: [categoryId], references: [id])
-  categoryId  String
-  available   Boolean     @default(true)
-  preparationTime Int     @default(15) // in minutes
-  ingredients String[]    @default([])
-  allergens   String[]    @default([])
-  isVeg       Boolean     @default(true)
-  isVegan     Boolean     @default(false)
-  isGlutenFree Boolean    @default(false)
-  spiceLevel  SpiceLevel  @default(MILD)
-  createdAt   DateTime    @default(now())
-  updatedAt   DateTime    @updatedAt
-  orderItems  OrderItem[]
-  restaurant  Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  restaurantId String
-  
+  id              String      @id @default(cuid())
+  name            String
+  description     String?
+  image           String?
+  categoryId      String
+  available       Boolean     @default(true)
+  preparationTime Int         @default(15)
+  ingredients     String[]    @default([])
+  allergens       String[]    @default([])
+  isVeg           Boolean     @default(true)
+  isVegan         Boolean     @default(false)
+  isGlutenFree    Boolean     @default(false)
+  spiceLevel      SpiceLevel  @default(MILD)
+  createdAt       DateTime    @default(now())
+  updatedAt       DateTime    @updatedAt
+  pricePaise      Int
+  restaurantId    String
+  category        Category    @relation(fields: [categoryId], references: [id])
+  restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orderItems      OrderItem[]
+
   @@map("menu_items")
 }
 
 model Table {
-  id       String  @id @default(cuid())
-  number   Int
-  capacity Int
-  location String? // e.g., "Window side", "Garden area"
-  active   Boolean @default(true)
-  orders   Order[]
-  restaurant  Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  id           String     @id @default(cuid())
+  number       Int
+  capacity     Int
+  location     String?
+  active       Boolean    @default(true)
   restaurantId String
-  
+  orders       Order[]
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
   @@unique([restaurantId, number])
   @@map("tables")
 }
 
 model Order {
-  id            String      @id @default(cuid())
-  user          User        @relation(fields: [userId], references: [id])
-  userId        String
-  table         Table       @relation(fields: [tableId], references: [id])
-  tableId       String
-  status        OrderStatus @default(PENDING)
-  items         OrderItem[]
-  subtotalPaise Int
-  taxPaise      Int
-  discountPaise Int         @default(0)
-  totalPaise    Int
-  paymentId     String?     // Payment order/reference ID
-  paymentTransactionId String? // Payment transaction ID (gateway payment id)
-  paymentProvider PaymentProvider @default(RAZORPAY)
-  paymentStatus PaymentStatus @default(PENDING)
+  id                      String                  @id @default(cuid())
+  userId                  String
+  tableId                 String
+  status                  OrderStatus             @default(PENDING)
+  paymentId               String?
+  paymentStatus           PaymentStatus           @default(PENDING)
+  specialInstructions     String?
+  estimatedTime           Int?
+  createdAt               DateTime                @default(now())
+  updatedAt               DateTime                @updatedAt
+  couponId                String?
+  discountPaise           Int                     @default(0)
   paymentCollectionTiming PaymentCollectionTiming @default(AFTER_MEAL)
-  specialInstructions String?
-  estimatedTime Int?        // in minutes
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  invoice       Invoice?
-  coupon        Coupon?     @relation(fields: [couponId], references: [id])
-  couponId      String?
-  restaurant    Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  restaurantId  String
-  
+  paymentProvider         PaymentProvider         @default(RAZORPAY)
+  paymentTransactionId    String?
+  paidAmountPaise         Int                     @default(0)
+  dueAmountPaise          Int                     @default(0)
+  restaurantId            String
+  subtotalPaise           Int
+  taxPaise                Int
+  totalPaise              Int
+  invoice                 Invoice?
+  items                   OrderItem[]
+  coupon                  Coupon?                 @relation(fields: [couponId], references: [id])
+  restaurant              Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  table                   Table                   @relation(fields: [tableId], references: [id])
+  user                    User                    @relation(fields: [userId], references: [id])
+  payments                Payment[]
+
   @@map("orders")
 }
 
 model OrderItem {
   id         String   @id @default(cuid())
-  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
   orderId    String
-  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
   menuItemId String
   quantity   Int
-  pricePaise Int      // Price at time of order (in paise)
-  notes      String?  // Special requests for this item
-  
+  notes      String?
+  pricePaise Int
+  menuItem   MenuItem @relation(fields: [menuItemId], references: [id])
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
   @@map("order_items")
 }
 
 model Invoice {
-  id            String        @id @default(cuid())
-  order         Order         @relation(fields: [orderId], references: [id])
-  orderId       String        @unique
-  invoiceNumber String        @unique
-  issuedAt      DateTime      @default(now())
+  id            String          @id @default(cuid())
+  orderId       String          @unique
+  invoiceNumber String          @unique
+  issuedAt      DateTime        @default(now())
   sentVia       InvoiceMethod[]
-  emailSent     Boolean       @default(false)
-  smsSent       Boolean       @default(false)
-  pdfPath       String?       // Path to generated PDF (deprecated)
-  pdfData       Bytes?        // PDF data stored as binary in database
-  pdfName       String?       // Name of the PDF file
-  
+  emailSent     Boolean         @default(false)
+  smsSent       Boolean         @default(false)
+  pdfPath       String?
+  pdfData       Bytes?
+  pdfName       String?
+  order         Order           @relation(fields: [orderId], references: [id])
+
   @@map("invoices")
 }
 
 model Coupon {
-  id            String      @id @default(cuid())
-  code          String
-  description   String?
-  type          CouponType
-  value         Int
+  id               String     @id @default(cuid())
+  code             String
+  description      String?
+  type             CouponType
+  value            Int
   maxDiscountPaise Int?
-  minOrderPaise Int?
-  usageLimit    Int?
-  usageCount    Int         @default(0)
-  startsAt      DateTime?
-  endsAt        DateTime?
-  active        Boolean     @default(true)
-  createdAt     DateTime    @default(now())
-  updatedAt     DateTime    @updatedAt
-  restaurant    Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
-  restaurantId  String
-  orders        Order[]
+  minOrderPaise    Int?
+  usageLimit       Int?
+  usageCount       Int        @default(0)
+  startsAt         DateTime?
+  endsAt           DateTime?
+  active           Boolean    @default(true)
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  restaurantId     String
+  restaurant       Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  orders           Order[]
 
   @@unique([restaurantId, code])
   @@map("coupons")
 }
 
+model Offer {
+  id                   String     @id @default(cuid())
+  restaurantId         String
+  title                String?
+  name                 String?
+  code                 String?
+  description          String?
+  type                 OfferType?
+  discountType         String?
+  value                Float
+  minimumOrderValue    Int?
+  minOrderPaise        Int?
+  maximumDiscount      Int?
+  maxDiscountPaise     Int?
+  startDate            DateTime?
+  startsAt             DateTime?
+  endDate              DateTime?
+  endsAt               DateTime?
+  maxUses              Int?
+  currentUses          Int        @default(0)
+  isActive             Boolean    @default(true)
+  active               Boolean    @default(true)
+  applicableItems      String[]   @default([])
+  applicableCategories String[]   @default([])
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+  restaurant           Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("offers")
+}
+
+model Payment {
+  id                String       @id @default(cuid())
+  orderId           String
+  userId            String
+  restaurantId      String
+  method            String
+  provider          String
+  amountPaise       Int
+  status            PaymentStatus
+  providerOrderId   String?
+  providerPaymentId String?
+  providerSignature String?
+  notes             String?
+  createdAt         DateTime     @default(now())
+  updatedAt         DateTime     @updatedAt
+  order             Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@map("payments")
+}
+
+model Earning {
+  id                      String     @id @default(cuid())
+  restaurantId            String
+  orderId                 String     @unique
+  grossAmountPaise        Int
+  platformCommissionPaise Int
+  restaurantEarningPaise  Int
+  settled                 Boolean    @default(false)
+  createdAt               DateTime   @default(now())
+  updatedAt               DateTime   @updatedAt
+  restaurant              Restaurant @relation("earnings", fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@map("earnings")
+}
+
+model AuditLog {
+  id            String   @id @default(cuid())
+  actorUserId   String
+  restaurantId  String?
+  action        String
+  entityType    String
+  entityId      String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@map("audit_logs")
+}
+
 enum UserRole {
   CUSTOMER
-  OWNER
   ADMIN
   STAFF
+  CENTRAL_ADMIN
+  OWNER
+  KITCHEN_STAFF
 }
 
 enum RestaurantRole {
@@ -252,6 +353,7 @@ enum PaymentStatus {
   COMPLETED
   FAILED
   REFUNDED
+  PARTIALLY_PAID
 }
 
 enum SpiceLevel {
@@ -265,4 +367,17 @@ enum SpiceLevel {
 enum InvoiceMethod {
   EMAIL
   SMS
+}
+
+enum OfferType {
+  PERCENTAGE
+  FIXED_AMOUNT
+  BUY_X_GET_Y
+  FREE_DELIVERY
+}
+
+enum OnboardingStatus {
+  PENDING_APPROVAL
+  APPROVED
+  SUSPENDED
 }

@@ -8,7 +8,7 @@ export default function HomePage() {
 
   useEffect(() => {
     // Redirect to demo restaurant page
-    router.replace('/restaurants/demo');
+    router.replace('/r/demo/');
   }, [router]);
 
   // Return loading state while redirecting

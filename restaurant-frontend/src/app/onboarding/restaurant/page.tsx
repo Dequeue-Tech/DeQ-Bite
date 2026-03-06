@@ -34,9 +34,12 @@ export default function RestaurantOnboardingPage() {
     try {
       setLoading(true);
       const restaurant = await apiClient.createRestaurant(form);
-      apiClient.setSelectedRestaurantSubdomain(restaurant.subdomain);
+      const slugValue = restaurant.slug || restaurant.subdomain || restaurant.id;
+      if (slugValue) {
+        apiClient.setSelectedRestaurantSlug(slugValue);
+      }
       toast.success('Restaurant onboarded successfully');
-      router.push('/admin');
+      router.push(`/r/${slugValue || ''}/admin`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to onboard restaurant');
     } finally {

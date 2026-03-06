@@ -166,6 +166,11 @@ export const useAuthStore = create<AuthState>()(
         token: state.token,
         isAuthenticated: state.isAuthenticated,
       }),
+      onRehydrateStorage: () => (state) => {
+        if (!state?.token) return;
+        if (typeof window === 'undefined') return;
+        localStorage.setItem('auth_token', state.token);
+      },
     }
   )
 );

@@ -4,15 +4,15 @@
   "description": "Restaurant backend API server with secure payment processing",
   "main": "./dist/server.js",
   "scripts": {
-    "dev": "tsx watch src/server.ts",
-    "build": "prisma generate && tsc && tsc-alias",
-    "start": "node ./dist/server.js",
-    "postbuild": "mkdir dist\\public 2>nul & robocopy public dist\\public /E 2>nul & exit 0",
-    "lint": "eslint src/**/*.ts",
-    "db:migrate": "prisma migrate dev",
-    "db:studio": "prisma studio",
-    "db:seed": "tsx prisma/seed.ts",
-    "db:reset": "prisma migrate reset --force && npm run db:seed"
+  "dev": "tsx watch src/server.ts",
+  "build": "prisma generate && tsc && tsc-alias",
+  "start": "node ./dist/server.js",
+  "postbuild": "mkdir -p dist/public && cp -r public/* dist/public/",
+  "lint": "eslint src/**/*.ts",
+  "db:migrate": "prisma migrate dev",
+  "db:studio": "prisma studio",
+  "db:seed": "tsx prisma/seed.ts",
+  "db:reset": "prisma migrate reset --force && npm run db:seed"
   },
   "dependencies": {
     "@prisma/client": "^6.16.2",

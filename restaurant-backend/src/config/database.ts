@@ -1,7 +1,7 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '@/utils/logger';
 
-const createPrismaClient = (): PrismaClient => {
+const createPrismaClient = () => {
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'production' 
       ? ['error', 'warn'] 

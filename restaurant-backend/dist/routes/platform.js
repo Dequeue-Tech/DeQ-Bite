@@ -27,11 +27,9 @@ router.use((0, auth_1.authorize)('OWNER'));
 router.get('/restaurants', async (req, res) => {
     const status = req.query['status'];
     const restaurants = await database_1.prisma.restaurant.findMany({
-        where: {
-            ...(status && ['PENDING_APPROVAL', 'APPROVED', 'SUSPENDED'].includes(status)
-                ? { status: status }
-                : {}),
-        },
+        where: status && ['PENDING_APPROVAL', 'APPROVED', 'SUSPENDED'].includes(status)
+            ? { status }
+            : undefined,
         select: {
             id: true,
             name: true,

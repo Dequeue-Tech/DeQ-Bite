@@ -13,6 +13,15 @@ function pickFields(fields) {
     }
     return out;
 }
+const FALLBACK_SELECT = {
+    id: true,
+    slug: true,
+    subdomain: true,
+    name: true,
+    active: true,
+    paymentCollectionTiming: true,
+    cashPaymentEnabled: true,
+};
 const isLocalHost = (host) => {
     if (!host)
         return false;
@@ -91,10 +100,11 @@ const attachRestaurant = async (req, _res, next) => {
             'paymentCollectionTiming',
             'cashPaymentEnabled',
         ]);
+        const selectToUse = Object.keys(basicSelect).length > 0 ? basicSelect : FALLBACK_SELECT;
         try {
             restaurant = await database_1.prisma.restaurant.findFirst({
                 where: baseFilter,
-                select: basicSelect,
+                select: selectToUse,
             });
         }
         catch (err) {
@@ -113,9 +123,10 @@ const attachRestaurant = async (req, _res, next) => {
                         'paymentCollectionTiming',
                         'cashPaymentEnabled',
                     ]);
+                    const fallbackSelectToUse = Object.keys(fallbackSelect).length > 0 ? fallbackSelect : FALLBACK_SELECT;
                     const partialRestaurant = await database_1.prisma.restaurant.findFirst({
                         where: fallbackFilter,
-                        select: fallbackSelect,
+                        select: fallbackSelectToUse,
                     });
                     if (partialRestaurant) {
                         restaurant = {

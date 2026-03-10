@@ -138,40 +138,67 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
         const initialPaymentStatus = selectedProvider === 'CASH' && paymentCollectionTiming === 'BEFORE_MEAL'
             ? 'PROCESSING'
             : 'PENDING';
-        const order = await database_1.prisma.$transaction(async (tx) => {
-            if (appliedCouponId) {
-                await tx.coupon.update({
+        const order = appliedCouponId
+            ? (await database_1.prisma.$transaction([
+                database_1.prisma.coupon.update({
                     where: { id: appliedCouponId },
                     data: { usageCount: { increment: 1 } },
-                });
-            }
-            return tx.order.create({
-                data: {
-                    userId,
-                    tableId,
-                    restaurantId: req.restaurant.id,
-                    subtotalPaise,
-                    taxPaise,
-                    discountPaise,
-                    totalPaise,
-                    paymentProvider: selectedProvider,
-                    paymentStatus: initialPaymentStatus,
-                    paidAmountPaise: 0,
-                    dueAmountPaise: totalPaise,
-                    paymentCollectionTiming,
-                    specialInstructions: specialInstructions || '',
-                    couponId: appliedCouponId,
-                    status,
-                    items: {
-                        create: orderItemsData,
+                }),
+                database_1.prisma.order.create({
+                    data: {
+                        userId,
+                        tableId,
+                        restaurantId: req.restaurant.id,
+                        subtotalPaise,
+                        taxPaise,
+                        discountPaise,
+                        totalPaise,
+                        paymentProvider: selectedProvider,
+                        paymentStatus: initialPaymentStatus,
+                        paidAmountPaise: 0,
+                        dueAmountPaise: totalPaise,
+                        paymentCollectionTiming,
+                        specialInstructions: specialInstructions || '',
+                        couponId: appliedCouponId,
+                        status,
+                        items: {
+                            create: orderItemsData,
+                        },
                     },
-                },
-                include: {
-                    items: { include: { menuItem: true } },
-                    table: true,
-                },
-            });
-        });
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                    },
+                }),
+            ]))[1]
+            : (await database_1.prisma.$transaction([
+                database_1.prisma.order.create({
+                    data: {
+                        userId,
+                        tableId,
+                        restaurantId: req.restaurant.id,
+                        subtotalPaise,
+                        taxPaise,
+                        discountPaise,
+                        totalPaise,
+                        paymentProvider: selectedProvider,
+                        paymentStatus: initialPaymentStatus,
+                        paidAmountPaise: 0,
+                        dueAmountPaise: totalPaise,
+                        paymentCollectionTiming,
+                        specialInstructions: specialInstructions || '',
+                        couponId: appliedCouponId,
+                        status,
+                        items: {
+                            create: orderItemsData,
+                        },
+                    },
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                    },
+                }),
+            ]))[0];
         logger_1.logger.info('New order created and awaiting confirmation', {
             orderId: order.id,
             restaurantId: order.restaurantId,
@@ -248,13 +275,16 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                 notes: item.notes || '',
             });
         }
+        const existingPaidAmount = existingOrder.paidAmountPaise ?? 0;
         const updatedSubtotal = existingOrder.subtotalPaise + addedSubtotalPaise;
         const updatedDiscount = calculateDiscountFromCoupon(existingOrder.coupon, updatedSubtotal);
         const taxablePaise = Math.max(updatedSubtotal - updatedDiscount, 0);
         const updatedTax = Math.round(taxablePaise * TAX_RATE);
         const updatedTotal = taxablePaise + updatedTax;
-        const updatedOrder = await database_1.prisma.$transaction(async (tx) => {
-            await tx.orderItem.createMany({
+        const updatedDue = Math.max(updatedTotal - existingPaidAmount, 0);
+        const updatedPaymentStatus = updatedDue === 0 ? 'COMPLETED' : existingPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+        const [, updatedOrder] = await database_1.prisma.$transaction([
+            database_1.prisma.orderItem.createMany({
                 data: additionalItems.map((item) => ({
                     orderId: existingOrder.id,
                     menuItemId: item.menuItemId,
@@ -262,14 +292,8 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                     pricePaise: item.pricePaise,
                     notes: item.notes,
                 })),
-            });
-            const updatedDue = Math.max(updatedTotal - existingOrder.paidAmountPaise, 0);
-            const updatedPaymentStatus = updatedDue === 0
-                ? 'COMPLETED'
-                : existingOrder.paidAmountPaise > 0
-                    ? 'PARTIALLY_PAID'
-                    : 'PENDING';
-            return tx.order.update({
+            }),
+            database_1.prisma.order.update({
                 where: { id: existingOrder.id },
                 data: {
                     subtotalPaise: updatedSubtotal,
@@ -285,8 +309,8 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                     items: { include: { menuItem: true } },
                     table: true,
                 },
-            });
-        });
+            }),
+        ]);
         return res.status(200).json({
             success: true,
             data: updatedOrder,
@@ -326,40 +350,53 @@ router.post('/:id/apply-coupon', restaurant_1.requireRestaurant, async (req, res
         if (existingOrder.paymentStatus === 'COMPLETED') {
             return res.status(400).json({ success: false, error: 'Cannot apply coupon on a paid order' });
         }
+        const existingPaidAmount = existingOrder.paidAmountPaise ?? 0;
         const couponResult = await applyCoupon(req.restaurant.id, couponCode, existingOrder.subtotalPaise);
         const newDiscount = couponResult.discountPaise;
         const taxablePaise = Math.max(existingOrder.subtotalPaise - newDiscount, 0);
         const newTax = Math.round(taxablePaise * TAX_RATE);
         const newTotal = taxablePaise + newTax;
-        const updatedOrder = await database_1.prisma.$transaction(async (tx) => {
-            if (existingOrder.couponId !== couponResult.couponId) {
-                await tx.coupon.update({
+        const updatedDue = Math.max(newTotal - existingPaidAmount, 0);
+        const updatedPaymentStatus = updatedDue === 0 ? 'COMPLETED' : existingPaidAmount > 0 ? 'PARTIALLY_PAID' : 'PENDING';
+        const updatedOrder = existingOrder.couponId !== couponResult.couponId
+            ? (await database_1.prisma.$transaction([
+                database_1.prisma.coupon.update({
                     where: { id: couponResult.couponId },
                     data: { usageCount: { increment: 1 } },
-                });
-            }
-            const updatedDue = Math.max(newTotal - existingOrder.paidAmountPaise, 0);
-            const updatedPaymentStatus = updatedDue === 0
-                ? 'COMPLETED'
-                : existingOrder.paidAmountPaise > 0
-                    ? 'PARTIALLY_PAID'
-                    : 'PENDING';
-            return tx.order.update({
-                where: { id: existingOrder.id },
-                data: {
-                    couponId: couponResult.couponId,
-                    discountPaise: newDiscount,
-                    taxPaise: newTax,
-                    totalPaise: newTotal,
-                    dueAmountPaise: updatedDue,
-                    paymentStatus: updatedPaymentStatus,
-                },
-                include: {
-                    items: { include: { menuItem: true } },
-                    table: true,
-                },
-            });
-        });
+                }),
+                database_1.prisma.order.update({
+                    where: { id: existingOrder.id },
+                    data: {
+                        couponId: couponResult.couponId,
+                        discountPaise: newDiscount,
+                        taxPaise: newTax,
+                        totalPaise: newTotal,
+                        dueAmountPaise: updatedDue,
+                        paymentStatus: updatedPaymentStatus,
+                    },
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                    },
+                }),
+            ]))[1]
+            : (await database_1.prisma.$transaction([
+                database_1.prisma.order.update({
+                    where: { id: existingOrder.id },
+                    data: {
+                        couponId: couponResult.couponId,
+                        discountPaise: newDiscount,
+                        taxPaise: newTax,
+                        totalPaise: newTotal,
+                        dueAmountPaise: updatedDue,
+                        paymentStatus: updatedPaymentStatus,
+                    },
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                    },
+                }),
+            ]))[0];
         return res.json({
             success: true,
             data: updatedOrder,

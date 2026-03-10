@@ -11,7 +11,7 @@ const restaurantFields: string[] =
   ((prisma as any)._dmmf?.modelMap?.Restaurant?.fields || []).map((f: any) => f.name);
 
 function pickFields(fields: string[]) {
-  const out: any = {};
+  const out: Record<string, boolean> = {};
   for (const f of fields) {
     if (restaurantFields.includes(f)) {
       out[f] = true;
@@ -19,6 +19,18 @@ function pickFields(fields: string[]) {
   }
   return out;
 }
+
+// Fallback select when DMMF is unavailable (e.g. Prisma extensions). Prisma requires
+// at least one field in select; empty select causes "select must not be empty" error.
+const FALLBACK_SELECT = {
+  id: true,
+  slug: true,
+  subdomain: true,
+  name: true,
+  active: true,
+  paymentCollectionTiming: true,
+  cashPaymentEnabled: true,
+} as const;
 
 const isLocalHost = (host?: string | null) => {
   if (!host) return false;
@@ -116,11 +128,12 @@ export const attachRestaurant = async (
       'paymentCollectionTiming',
       'cashPaymentEnabled',
     ]);
+    const selectToUse = Object.keys(basicSelect).length > 0 ? basicSelect : FALLBACK_SELECT;
 
     try {
       restaurant = await prisma.restaurant.findFirst({
         where: baseFilter,
-        select: basicSelect,
+        select: selectToUse,
       });
     } catch (err: any) {
       // If the client schema doesn't know about "status" or other fields, fall back
@@ -143,9 +156,11 @@ export const attachRestaurant = async (
             'paymentCollectionTiming',
             'cashPaymentEnabled',
           ]);
+          const fallbackSelectToUse =
+            Object.keys(fallbackSelect).length > 0 ? fallbackSelect : FALLBACK_SELECT;
           const partialRestaurant = await prisma.restaurant.findFirst({
             where: fallbackFilter,
-            select: fallbackSelect,
+            select: fallbackSelectToUse,
           });
 
           if (partialRestaurant) {

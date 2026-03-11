@@ -649,8 +649,8 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
   const shouldAutoConfirm =
     computed.dueAmountPaise === 0 && order.status === 'PENDING';
 
-  const updatedOrder = await prisma.$transaction(async (tx) => {
-    const updated = await tx.order.update({
+  const [updatedOrder] = await prisma.$transaction([
+    prisma.order.update({
       where: { id: order.id },
       data: {
         paymentStatus: payload.paymentStatus as any,
@@ -659,9 +659,8 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
         status: shouldAutoConfirm ? 'CONFIRMED' : order.status,
         updatedAt: new Date(),
       },
-    });
-
-    await tx.auditLog.create({
+    }),
+    prisma.auditLog.create({
       data: {
         actorUserId: req.user!.id,
         restaurantId: order.restaurantId,
@@ -674,10 +673,8 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
           dueAmountPaise: computed.dueAmountPaise,
         },
       },
-    });
-
-    return updated;
-  });
+    }),
+  ]);
 
   if (payload.paymentStatus === 'COMPLETED') {
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);

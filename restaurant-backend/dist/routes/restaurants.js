@@ -9,13 +9,21 @@ const restaurant_1 = require("../middleware/restaurant");
 const router = (0, express_1.Router)();
 const hasRestaurantStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
-function buildSelect(fields) {
+function pickFields(fields) {
     const out = {};
-    for (const f of fields) {
-        if (restaurantFields.includes(f)) {
+    if (restaurantFields.length === 0) {
+        for (const f of fields)
             out[f] = true;
-        }
+        return out;
     }
+    for (const f of fields) {
+        if (restaurantFields.includes(f))
+            out[f] = true;
+    }
+    return out;
+}
+function buildSelect(fields) {
+    const out = pickFields(fields);
     return Object.keys(out).length > 0 ? out : undefined;
 }
 const slugify = (value) => value
@@ -150,7 +158,7 @@ router.get('/public/:identifier', async (req, res) => {
         'cuisineTypes',
         'paymentCollectionTiming',
         'cashPaymentEnabled',
-    ]);
+    ]) || {};
     detailSelect.categories = {
         where: { active: true },
         orderBy: { sortOrder: 'asc' },

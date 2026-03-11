@@ -28,6 +28,11 @@ const cashConfirmSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
     amountPaise: zod_1.z.number().int().positive().optional(),
 });
+const updatePaymentStatusSchema = zod_1.z.object({
+    orderId: zod_1.z.string().min(1, 'Order ID is required'),
+    paymentStatus: zod_1.z.enum(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED', 'PARTIALLY_PAID']),
+    paidAmountPaise: zod_1.z.number().int().nonnegative().optional(),
+});
 const computeDueAndStatus = (totalPaise, paidAmountPaise) => {
     const boundedPaid = Math.max(0, Math.min(paidAmountPaise, totalPaise));
     const dueAmountPaise = Math.max(totalPaise - boundedPaid, 0);
@@ -525,6 +530,77 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
         data: {
             order: updatedOrder,
         },
+    });
+}));
+router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const payload = updatePaymentStatusSchema.parse(req.body);
+    const order = await database_1.prisma.order.findFirst({
+        where: {
+            id: payload.orderId,
+            restaurantId: req.restaurant.id,
+        },
+    });
+    if (!order) {
+        throw new errorHandler_1.AppError('Order not found', 404);
+    }
+    const totalPaise = order.totalPaise;
+    let paidAmountPaise = order.paidAmountPaise;
+    if (payload.paymentStatus === 'COMPLETED') {
+        paidAmountPaise = totalPaise;
+    }
+    else if (payload.paymentStatus === 'PARTIALLY_PAID') {
+        if (typeof payload.paidAmountPaise !== 'number') {
+            throw new errorHandler_1.AppError('paidAmountPaise is required for PARTIALLY_PAID', 400);
+        }
+        if (payload.paidAmountPaise <= 0 || payload.paidAmountPaise >= totalPaise) {
+            throw new errorHandler_1.AppError('paidAmountPaise must be between 1 and total-1 for PARTIALLY_PAID', 400);
+        }
+        paidAmountPaise = payload.paidAmountPaise;
+    }
+    else if (payload.paymentStatus === 'REFUNDED') {
+        paidAmountPaise = 0;
+    }
+    else if (typeof payload.paidAmountPaise === 'number') {
+        paidAmountPaise = Math.max(0, Math.min(payload.paidAmountPaise, totalPaise));
+    }
+    else if (payload.paymentStatus === 'FAILED') {
+        paidAmountPaise = 0;
+    }
+    const computed = computeDueAndStatus(totalPaise, paidAmountPaise);
+    const shouldAutoConfirm = computed.dueAmountPaise === 0 && order.status === 'PENDING';
+    const [updatedOrder] = await database_1.prisma.$transaction([
+        database_1.prisma.order.update({
+            where: { id: order.id },
+            data: {
+                paymentStatus: payload.paymentStatus,
+                paidAmountPaise: computed.paidAmountPaise,
+                dueAmountPaise: computed.dueAmountPaise,
+                status: shouldAutoConfirm ? 'CONFIRMED' : order.status,
+                updatedAt: new Date(),
+            },
+        }),
+        database_1.prisma.auditLog.create({
+            data: {
+                actorUserId: req.user.id,
+                restaurantId: order.restaurantId,
+                action: 'PAYMENT_STATUS_UPDATED',
+                entityType: 'order',
+                entityId: order.id,
+                metadata: {
+                    paymentStatus: payload.paymentStatus,
+                    paidAmountPaise: computed.paidAmountPaise,
+                    dueAmountPaise: computed.dueAmountPaise,
+                },
+            },
+        }),
+    ]);
+    if (payload.paymentStatus === 'COMPLETED') {
+        await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+    }
+    return res.json({
+        success: true,
+        message: 'Payment status updated',
+        data: { order: updatedOrder },
     });
 }));
 exports.default = router;

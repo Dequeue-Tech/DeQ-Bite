@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc && tsc-alias",
+    "postinstall": "prisma generate",
     "start": "node ./dist/server.js",
     "postbuild": "mkdir -p dist/public && if [ -d public ]; then cp -r public/* dist/public/ || true; fi",
     "lint": "eslint src/**/*.ts",

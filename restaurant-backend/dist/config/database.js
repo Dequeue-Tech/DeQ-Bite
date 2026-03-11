@@ -9,6 +9,17 @@ const createPrismaClient = () => {
             ? ['error', 'warn']
             : ['query', 'info', 'warn', 'error'],
     });
+    const databaseUrl = process.env.DATABASE_URL || '';
+    if (databaseUrl.startsWith('prisma+')) {
+        try {
+            const { withAccelerate } = require('@prisma/extension-accelerate');
+            return client.$extends(withAccelerate());
+        }
+        catch (error) {
+            logger_1.logger.warn('Prisma Accelerate requested but @prisma/extension-accelerate is not installed. Falling back to regular Prisma client.');
+            return client;
+        }
+    }
     return client;
 };
 let prisma;

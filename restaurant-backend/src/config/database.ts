@@ -1,14 +1,28 @@
 import { PrismaClient } from '@prisma/client';
 import { logger } from '@/utils/logger';
 
-const createPrismaClient = (): PrismaClient => {
+const createPrismaClient = () => {
   const client = new PrismaClient({
     log: process.env.NODE_ENV === 'production' 
       ? ['error', 'warn'] 
       : ['query', 'info', 'warn', 'error'],
   });
 
-  // Keep a single PrismaClient type across environments to avoid union type issues.
+  // Check if using Prisma Accelerate (prisma+postgres:// or prisma+mysql://)
+  const databaseUrl = process.env.DATABASE_URL || '';
+  if (databaseUrl.startsWith('prisma+')) {
+    try {
+      // Load accelerate extension only when explicitly needed.
+      // This prevents startup failure if the package isn't installed.
+      // eslint-disable-next-line @typescript-eslint/no-var-requires
+      const { withAccelerate } = require('@prisma/extension-accelerate');
+      return client.$extends(withAccelerate());
+    } catch (error) {
+      logger.warn('Prisma Accelerate requested but @prisma/extension-accelerate is not installed. Falling back to regular Prisma client.');
+      return client;
+    }
+  }
+  
   return client;
 };
 
@@ -48,3 +62,4 @@ export const disconnectDatabase = async () => {
 };
 
 export { prisma };
+

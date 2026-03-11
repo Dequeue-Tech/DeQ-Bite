@@ -71,7 +71,7 @@ exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, r
     const favoriteMenuItems = await database_1.prisma.menuItem.findMany({
         where: {
             id: {
-                in: favoriteItems.map(item => item.menuItemId),
+                in: favoriteItems.map((item) => item.menuItemId),
             },
         },
         include: {
@@ -118,7 +118,7 @@ exports.getUserWithCompleteData = (0, errorHandler_1.asyncHandler)(async (req, r
             statistics: {
                 ordersByStatus: userStats,
                 totalSpent: userStats.reduce((sum, stat) => sum + (stat._sum.totalPaise || 0), 0),
-                completedOrders: userStats.find(s => s.paymentStatus === 'COMPLETED')?._count.id || 0,
+                completedOrders: userStats.find((s) => s.paymentStatus === 'COMPLETED')?._count.id || 0,
             },
             preferences: {
                 favoriteItems: favoriteMenuItems.map((item, index) => ({
@@ -158,9 +158,9 @@ exports.getMenuWithCompleteData = (0, errorHandler_1.asyncHandler)(async (_req, 
         },
         orderBy: { sortOrder: 'asc' },
     });
-    const enhancedMenuData = menuData.map(category => ({
+    const enhancedMenuData = menuData.map((category) => ({
         ...category,
-        menuItems: category.menuItems.map(item => {
+        menuItems: category.menuItems.map((item) => {
             const totalOrdered = item.orderItems.reduce((sum, orderItem) => {
                 return orderItem.order.paymentStatus === 'COMPLETED' ? sum + orderItem.quantity : sum;
             }, 0);
@@ -192,7 +192,7 @@ exports.getMenuWithCompleteData = (0, errorHandler_1.asyncHandler)(async (_req, 
             summary: {
                 totalCategories: menuData.length,
                 totalItems: menuData.reduce((sum, cat) => sum + cat.menuItems.length, 0),
-                availableItems: menuData.reduce((sum, cat) => sum + cat.menuItems.filter(item => item.available).length, 0),
+                availableItems: menuData.reduce((sum, cat) => sum + cat.menuItems.filter((item) => item.available).length, 0),
             },
         },
     };

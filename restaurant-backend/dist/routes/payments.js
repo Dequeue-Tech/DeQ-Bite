@@ -266,8 +266,8 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
     const amountPaidNow = order.dueAmountPaise || Math.max(order.totalPaise - order.paidAmountPaise, 0);
     const nextPaid = order.paidAmountPaise + amountPaidNow;
     const computed = computeDueAndStatus(order.totalPaise, nextPaid);
-    const updatedOrder = await database_1.prisma.$transaction(async (tx) => {
-        const updated = await tx.order.update({
+    const [, , updatedOrder] = await database_1.prisma.$transaction([
+        database_1.prisma.order.update({
             where: { id: order.id },
             data: {
                 paymentStatus: computed.paymentStatus,
@@ -295,8 +295,8 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                     },
                 },
             },
-        });
-        await tx.payment.create({
+        }),
+        database_1.prisma.payment.create({
             data: {
                 orderId: order.id,
                 userId: order.userId,
@@ -309,8 +309,8 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                 providerPaymentId: razorpay_payment_id,
                 providerSignature: razorpay_signature,
             },
-        });
-        await tx.auditLog.create({
+        }),
+        database_1.prisma.auditLog.create({
             data: {
                 actorUserId: req.user.id,
                 restaurantId: order.restaurantId,
@@ -324,9 +324,8 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                     providerPaymentId: razorpay_payment_id,
                 },
             },
-        });
-        return updated;
-    });
+        }),
+    ]);
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
     const response = {
         success: true,
@@ -361,8 +360,8 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
     const refund = await provider.refund(order.paymentTransactionId, refundAmountPaise, reason || 'Customer requested refund');
     const nextPaid = Math.max(order.paidAmountPaise - refundAmountPaise, 0);
     const computed = computeDueAndStatus(order.totalPaise, nextPaid);
-    await database_1.prisma.$transaction(async (tx) => {
-        await tx.order.update({
+    await database_1.prisma.$transaction([
+        database_1.prisma.order.update({
             where: { id: orderId },
             data: {
                 paymentStatus: nextPaid === 0 ? 'REFUNDED' : computed.paymentStatus,
@@ -371,8 +370,8 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                 status: nextPaid === 0 ? 'CANCELLED' : order.status,
                 updatedAt: new Date(),
             },
-        });
-        await tx.payment.create({
+        }),
+        database_1.prisma.payment.create({
             data: {
                 orderId: order.id,
                 userId: order.userId,
@@ -384,8 +383,8 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                 providerPaymentId: refund.id,
                 notes: reason || 'Refund',
             },
-        });
-        await tx.auditLog.create({
+        }),
+        database_1.prisma.auditLog.create({
             data: {
                 actorUserId: req.user.id,
                 restaurantId: order.restaurantId,
@@ -398,8 +397,8 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                     reason,
                 },
             },
-        });
-    });
+        }),
+    ]);
     logger_1.logger.info('Payment refunded successfully', {
         orderId,
         refundId: refund.id,
@@ -480,8 +479,8 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
     const amountToAdd = Math.min(payload.amountPaise ?? order.dueAmountPaise, order.dueAmountPaise);
     const nextPaid = order.paidAmountPaise + amountToAdd;
     const computed = computeDueAndStatus(order.totalPaise, nextPaid);
-    const updatedOrder = await database_1.prisma.$transaction(async (tx) => {
-        const updated = await tx.order.update({
+    const [, , updatedOrder] = await database_1.prisma.$transaction([
+        database_1.prisma.order.update({
             where: { id: order.id },
             data: {
                 paymentStatus: computed.paymentStatus,
@@ -491,8 +490,8 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
                 paymentTransactionId: computed.dueAmountPaise === 0 ? `cash-${Date.now()}` : order.paymentTransactionId,
                 updatedAt: new Date(),
             },
-        });
-        await tx.payment.create({
+        }),
+        database_1.prisma.payment.create({
             data: {
                 orderId: order.id,
                 userId: order.userId,
@@ -503,8 +502,8 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
                 status: computed.paymentStatus,
                 notes: 'Cash payment confirmed by restaurant admin',
             },
-        });
-        await tx.auditLog.create({
+        }),
+        database_1.prisma.auditLog.create({
             data: {
                 actorUserId: req.user.id,
                 restaurantId: order.restaurantId,
@@ -517,9 +516,8 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
                     dueAmountPaise: computed.dueAmountPaise,
                 },
             },
-        });
-        return updated;
-    });
+        }),
+    ]);
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
     return res.json({
         success: true,

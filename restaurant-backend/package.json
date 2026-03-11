@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server.ts",
     "build": "prisma generate && tsc && tsc-alias",
     "start": "node ./dist/server.js",
-    "postbuild": "mkdir dist\\public 2>nul & robocopy public dist\\public /E 2>nul & exit 0",
+    "postbuild": "mkdir -p dist/public && if [ -d public ]; then cp -r public/* dist/public/ || true; fi",
     "lint": "eslint src/**/*.ts",
     "db:migrate": "prisma migrate dev",
     "db:studio": "prisma studio",

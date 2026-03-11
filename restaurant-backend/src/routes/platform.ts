@@ -34,11 +34,9 @@ router.get('/restaurants', async (req: AuthenticatedRequest, res: Response) => {
   const status = req.query['status'] as string | undefined;
 
   const restaurants = await prisma.restaurant.findMany({
-    where: {
-      ...(status && ['PENDING_APPROVAL', 'APPROVED', 'SUSPENDED'].includes(status)
-        ? { status: status as any }
-        : {}),
-    },
+    where: status && ['PENDING_APPROVAL', 'APPROVED', 'SUSPENDED'].includes(status)
+      ? ({ status } as any)
+      : undefined,
     select: {
       id: true,
       name: true,
@@ -57,7 +55,7 @@ router.get('/restaurants', async (req: AuthenticatedRequest, res: Response) => {
           orders: true,
         },
       },
-    },
+    } as any,
     orderBy: {
       createdAt: 'desc',
     },
@@ -98,7 +96,7 @@ router.patch('/restaurants/:id/status', async (req: AuthenticatedRequest, res: R
     },
   });
 
-  await prisma.auditLog.create({
+  await (prisma as any).auditLog.create({
     data: {
       actorUserId: req.user!.id,
       restaurantId,
@@ -137,7 +135,7 @@ router.patch('/restaurants/:id/commission', async (req: AuthenticatedRequest, re
     },
   });
 
-  await prisma.auditLog.create({
+  await (prisma as any).auditLog.create({
     data: {
       actorUserId: req.user!.id,
       restaurantId,
@@ -191,7 +189,7 @@ router.patch('/restaurants/:id/details', async (req: AuthenticatedRequest, res: 
     },
   });
 
-  await prisma.auditLog.create({
+  await (prisma as any).auditLog.create({
     data: {
       actorUserId: req.user!.id,
       restaurantId,
@@ -251,20 +249,21 @@ router.get('/orders', async (req: AuthenticatedRequest, res: Response) => {
 // GET /api/platform/earnings
 router.get('/earnings', async (_req: AuthenticatedRequest, res: Response) => {
   const [totals, pendingSettlements, byRestaurant] = await Promise.all([
-    prisma.earning.aggregate({
+    (prisma as any).earning.aggregate({
       _sum: {
         grossAmountPaise: true,
         platformCommissionPaise: true,
         restaurantEarningPaise: true,
       },
     }),
-    prisma.earning.aggregate({
+    (prisma as any).earning.aggregate({
       where: { settled: false },
       _sum: {
         restaurantEarningPaise: true,
       },
     }),
-    prisma.earning.groupBy({
+    // Cast to any to avoid overly strict groupBy overload typing issues across Prisma versions
+    (prisma as any).earning.groupBy({
       by: ['restaurantId'],
       _sum: {
         grossAmountPaise: true,

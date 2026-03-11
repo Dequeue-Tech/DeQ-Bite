@@ -5,6 +5,7 @@ import { Prisma } from '@prisma/client';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
+import { safeCreateAuditLog } from '@/utils/audit';
 
 const router = Router();
 
@@ -352,17 +353,15 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId: restaurant.id,
-      action: 'RESTAURANT_CREATED',
-      entityType: 'restaurant',
-      entityId: restaurant.id,
-      metadata: {
-        slug: restaurant.slug,
-        subdomain: restaurant.subdomain,
-      },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId: restaurant.id,
+    action: 'RESTAURANT_CREATED',
+    entityType: 'restaurant',
+    entityId: restaurant.id,
+    metadata: {
+      slug: restaurant.slug,
+      subdomain: restaurant.subdomain,
     },
   });
 
@@ -413,15 +412,13 @@ router.put('/settings/payment-policy', authenticate, requireRestaurant, authoriz
     select: policySelect,
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId: req.restaurant!.id,
-      action: 'PAYMENT_POLICY_UPDATED',
-      entityType: 'restaurant',
-      entityId: req.restaurant!.id,
-      metadata: payload,
-    },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId: req.restaurant!.id,
+    action: 'PAYMENT_POLICY_UPDATED',
+    entityType: 'restaurant',
+    entityId: req.restaurant!.id,
+    metadata: payload,
   });
 
   return res.json({
@@ -527,17 +524,15 @@ router.post('/users', authenticate, requireRestaurant, authorizeRestaurantRole('
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId: req.restaurant!.id,
-      action: 'RESTAURANT_USER_UPSERT',
-      entityType: 'restaurant_user',
-      entityId: membership.id,
-      metadata: {
-        userId: membership.userId,
-        role: membership.role,
-      },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId: req.restaurant!.id,
+    action: 'RESTAURANT_USER_UPSERT',
+    entityType: 'restaurant_user',
+    entityId: membership.id,
+    metadata: {
+      userId: membership.userId,
+      role: membership.role,
     },
   });
 

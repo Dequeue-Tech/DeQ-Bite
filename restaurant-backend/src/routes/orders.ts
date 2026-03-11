@@ -4,6 +4,7 @@ import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
 import { logger } from '@/utils/logger';
+import { emitRestaurantEvent } from '@/utils/realtime';
 
 const router = Router();
 const TAX_RATE = 0.08;
@@ -33,6 +34,18 @@ const calculateDiscountFromCoupon = (coupon: any, subtotalPaise: number) => {
 
   return Math.min(discountPaise, subtotalPaise);
 };
+
+const buildOrderEventPayload = (order: any) => ({
+  id: order.id,
+  status: order.status,
+  paymentStatus: order.paymentStatus,
+  paymentProvider: order.paymentProvider,
+  paidAmountPaise: order.paidAmountPaise,
+  dueAmountPaise: order.dueAmountPaise,
+  totalPaise: order.totalPaise,
+  updatedAt: order.updatedAt,
+  createdAt: order.createdAt,
+});
 
 const applyCoupon = async (restaurantId: string, code: string, subtotalPaise: number) => {
   const normalizedCode = normalizeCouponCode(code);
@@ -238,6 +251,11 @@ router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
       paymentCollectionTiming,
     });
 
+    emitRestaurantEvent(order.restaurantId, {
+      type: 'order.created',
+      payload: buildOrderEventPayload(order),
+    });
+
     return res.status(201).json({
       success: true,
       data: order,
@@ -360,6 +378,11 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
       }),
     ]);
 
+    emitRestaurantEvent(updatedOrder.restaurantId, {
+      type: 'order.updated',
+      payload: buildOrderEventPayload(updatedOrder),
+    });
+
     return res.status(200).json({
       success: true,
       data: updatedOrder,
@@ -454,6 +477,11 @@ router.post('/:id/apply-coupon', requireRestaurant, async (req: AuthenticatedReq
             },
           }),
         ]))[0];
+
+    emitRestaurantEvent(updatedOrder.restaurantId, {
+      type: 'order.updated',
+      payload: buildOrderEventPayload(updatedOrder),
+    });
 
     return res.json({
       success: true,
@@ -589,6 +617,11 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
       },
     });
 
+    emitRestaurantEvent(order.restaurantId, {
+      type: 'order.updated',
+      payload: buildOrderEventPayload(order),
+    });
+
     return res.json({ success: true, data: order, message: 'Order status updated' });
   } catch (error) {
     return res.status(500).json({ success: false, error: 'Failed to update order status' });
@@ -632,6 +665,23 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
         status: 'CANCELLED',
         paymentStatus: 'FAILED',
       },
+      select: {
+        id: true,
+        restaurantId: true,
+        status: true,
+        paymentStatus: true,
+        paymentProvider: true,
+        paidAmountPaise: true,
+        dueAmountPaise: true,
+        totalPaise: true,
+        updatedAt: true,
+        createdAt: true,
+      },
+    });
+
+    emitRestaurantEvent(cancelled.restaurantId, {
+      type: 'order.updated',
+      payload: buildOrderEventPayload(cancelled),
     });
 
     return res.json({ success: true, data: cancelled, message: 'Order cancelled' });

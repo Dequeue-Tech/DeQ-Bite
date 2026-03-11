@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { prisma } from '@/config/database';
 import { authenticate, authorize } from '@/middleware/auth';
 import { AuthenticatedRequest } from '@/types/api';
+import { safeCreateAuditLog } from '@/utils/audit';
 
 const router = Router();
 
@@ -96,15 +97,13 @@ router.patch('/restaurants/:id/status', async (req: AuthenticatedRequest, res: R
     },
   });
 
-  await (prisma as any).auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId,
-      action: `PLATFORM_RESTAURANT_${payload.status}`,
-      entityType: 'restaurant',
-      entityId: restaurantId,
-      metadata: payload,
-    },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId,
+    action: `PLATFORM_RESTAURANT_${payload.status}`,
+    entityType: 'restaurant',
+    entityId: restaurantId,
+    metadata: payload,
   });
 
   return res.json({
@@ -135,15 +134,13 @@ router.patch('/restaurants/:id/commission', async (req: AuthenticatedRequest, re
     },
   });
 
-  await (prisma as any).auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId,
-      action: 'PLATFORM_COMMISSION_UPDATED',
-      entityType: 'restaurant',
-      entityId: restaurantId,
-      metadata: payload,
-    },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId,
+    action: 'PLATFORM_COMMISSION_UPDATED',
+    entityType: 'restaurant',
+    entityId: restaurantId,
+    metadata: payload,
   });
 
   return res.json({
@@ -189,15 +186,13 @@ router.patch('/restaurants/:id/details', async (req: AuthenticatedRequest, res: 
     },
   });
 
-  await (prisma as any).auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId,
-      action: 'PLATFORM_RESTAURANT_DETAILS_UPDATED',
-      entityType: 'restaurant',
-      entityId: restaurantId,
-      metadata: payload,
-    },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId,
+    action: 'PLATFORM_RESTAURANT_DETAILS_UPDATED',
+    entityType: 'restaurant',
+    entityId: restaurantId,
+    metadata: payload,
   });
 
   return res.json({

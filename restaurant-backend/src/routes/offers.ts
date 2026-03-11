@@ -4,6 +4,7 @@ import { prisma } from '@/config/database';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
+import { safeCreateAuditLog } from '@/utils/audit';
 
 const router = Router();
 
@@ -59,17 +60,15 @@ router.post('/', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId: req.restaurant!.id,
-      action: 'OFFER_CREATED',
-      entityType: 'offer',
-      entityId: offer.id,
-      metadata: {
-        name: offer.name,
-        code: offer.code,
-      },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId: req.restaurant!.id,
+    action: 'OFFER_CREATED',
+    entityType: 'offer',
+    entityId: offer.id,
+    metadata: {
+      name: offer.name,
+      code: offer.code,
     },
   });
 
@@ -111,15 +110,13 @@ router.put('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('OWN
     },
   });
 
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId: req.restaurant!.id,
-      action: 'OFFER_UPDATED',
-      entityType: 'offer',
-      entityId: offer.id,
-      metadata: payload,
-    },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId: req.restaurant!.id,
+    action: 'OFFER_UPDATED',
+    entityType: 'offer',
+    entityId: offer.id,
+    metadata: payload,
   });
 
   return res.json({ success: true, data: { offer }, message: 'Offer updated' });
@@ -145,14 +142,12 @@ router.delete('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('
 
   await prisma.offer.delete({ where: { id } });
 
-  await prisma.auditLog.create({
-    data: {
-      actorUserId: req.user!.id,
-      restaurantId: req.restaurant!.id,
-      action: 'OFFER_DELETED',
-      entityType: 'offer',
-      entityId: id,
-    },
+  await safeCreateAuditLog({
+    actorUserId: req.user!.id,
+    restaurantId: req.restaurant!.id,
+    action: 'OFFER_DELETED',
+    entityType: 'offer',
+    entityId: id,
   });
 
   return res.json({ success: true, message: 'Offer deleted' });

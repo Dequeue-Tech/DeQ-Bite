@@ -30,6 +30,7 @@ export default function OrdersPage() {
   const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
   const [sendingInvoice, setSendingInvoice] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -40,7 +41,42 @@ export default function OrdersPage() {
   }, [isAuthenticated, user]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user || typeof window === 'undefined') return;
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource(apiClient.getEventStreamUrl(token));
+    } catch {
+      source = null;
+    }
+
+    if (!source) return;
+
+    const onOrderUpdated = () => {
+      fetchOrders();
+    };
+
+    source.addEventListener('order.created', onOrderUpdated);
+    source.addEventListener('order.updated', onOrderUpdated);
+
+    source.onerror = () => {
+      // Browser will retry automatically; no-op
+    };
+
+    return () => {
+      source?.close();
+    };
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
     if (typeof window === 'undefined') return;
+    if (!('Notification' in window)) {
+      setNotificationPermission('unsupported');
+    } else {
+      setNotificationPermission(Notification.permission);
+    }
     try {
       const stored = localStorage.getItem('order_notifications');
       if (stored) {
@@ -81,6 +117,19 @@ export default function OrdersPage() {
               });
             }
           });
+
+          if (newNotifs.length && 'Notification' in window && Notification.permission === 'granted') {
+            newNotifs.slice(0, 3).forEach((note) => {
+              try {
+                new Notification('Order Update', {
+                  body: note.message,
+                  tag: note.id,
+                });
+              } catch {
+                // ignore notification errors
+              }
+            });
+          }
 
           const merged = [...newNotifs, ...notifications].slice(0, 20);
           setNotifications(merged);
@@ -163,6 +212,20 @@ export default function OrdersPage() {
 
   const formatDate = (dateString: string) => new Date(dateString).toLocaleString();
 
+  const requestNotificationPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      toast.error('Browser notifications are not supported');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') {
+      toast.success('Browser notifications enabled');
+    } else if (permission === 'denied') {
+      toast.error('Notifications blocked. Enable them in browser settings.');
+    }
+  };
+
   const handleApplyCouponToOrder = async (orderId: string) => {
     const couponCode = (couponByOrder[orderId] || '').trim();
     if (!couponCode) {
@@ -204,17 +267,30 @@ export default function OrdersPage() {
         <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
           <div className="flex items-center justify-between mb-2">
             <h2 className="text-sm sm:text-base font-semibold text-gray-900">Notifications</h2>
-            <button
-              onClick={() => {
-                setNotifications([]);
-                if (typeof window !== 'undefined') {
-                  localStorage.removeItem('order_notifications');
-                }
-              }}
-              className="text-xs text-gray-500 hover:text-gray-700"
-            >
-              Clear
-            </button>
+            <div className="flex items-center gap-2">
+              {notificationPermission === 'default' && (
+                <button
+                  onClick={requestNotificationPermission}
+                  className="text-xs text-orange-600 hover:text-orange-700"
+                >
+                  Enable Browser Alerts
+                </button>
+              )}
+              {notificationPermission === 'denied' && (
+                <span className="text-[10px] sm:text-xs text-gray-500">Notifications blocked</span>
+              )}
+              <button
+                onClick={() => {
+                  setNotifications([]);
+                  if (typeof window !== 'undefined') {
+                    localStorage.removeItem('order_notifications');
+                  }
+                }}
+                className="text-xs text-gray-500 hover:text-gray-700"
+              >
+                Clear
+              </button>
+            </div>
           </div>
           {notifications.length === 0 ? (
             <p className="text-xs sm:text-sm text-gray-500">No updates yet. We will notify you as your order progresses.</p>

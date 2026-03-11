@@ -36,6 +36,7 @@ export default function AdminPage() {
   const [userRole, setUserRole] = useState<'OWNER' | 'ADMIN' | 'STAFF'>('STAFF');
   const [paymentPolicy, setPaymentPolicy] = useState<{ paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL'; cashPaymentEnabled: boolean } | null>(null);
   const [menuForm, setMenuForm] = useState<MenuForm>({ name: '', description: '', priceInr: '', categoryId: '' });
+  const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
 
   const hasAdminAccess = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
 
@@ -51,6 +52,45 @@ export default function AdminPage() {
     }
     loadData();
   }, [user?.restaurantRole, hasAdminAccess, router]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    if (!('Notification' in window)) {
+      setNotificationPermission('unsupported');
+    } else {
+      setNotificationPermission(Notification.permission);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasAdminAccess || typeof window === 'undefined') return;
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource(apiClient.getEventStreamUrl(token));
+    } catch {
+      source = null;
+    }
+
+    if (!source) return;
+
+    const onOrderUpdated = () => {
+      loadData();
+    };
+
+    source.addEventListener('order.created', onOrderUpdated);
+    source.addEventListener('order.updated', onOrderUpdated);
+
+    source.onerror = () => {
+      // Browser will retry automatically; no-op
+    };
+
+    return () => {
+      source?.close();
+    };
+  }, [hasAdminAccess]);
 
   const loadData = async () => {
     try {
@@ -69,6 +109,46 @@ export default function AdminPage() {
       setOrders(orders.data || []);
       setCashOrders((orders.data || []).filter((o) => o.paymentProvider === 'CASH' && o.paymentStatus !== 'COMPLETED' && o.status !== 'CANCELLED'));
       setPaymentPolicy(policy || null);
+
+      if (typeof window !== 'undefined') {
+        const nextOrders = orders.data || [];
+        const snapshotRaw = localStorage.getItem('admin_order_snapshot');
+        const isInitialSnapshot = !snapshotRaw;
+        const snapshot: Record<string, { status: string; paymentStatus: string }> = snapshotRaw ? JSON.parse(snapshotRaw) : {};
+        const newMessages: string[] = [];
+
+        nextOrders.forEach((order) => {
+          const prev = snapshot[order.id];
+          if (!prev && !isInitialSnapshot) {
+            newMessages.push(`New order #${order.id.slice(0, 8).toUpperCase()} awaiting confirmation`);
+          }
+          if (prev && prev.status !== order.status) {
+            newMessages.push(`Order #${order.id.slice(0, 8).toUpperCase()} moved to ${order.status}`);
+          }
+          if (prev && prev.paymentStatus !== order.paymentStatus) {
+            newMessages.push(`Payment for order #${order.id.slice(0, 8).toUpperCase()} is ${order.paymentStatus}`);
+          }
+        });
+
+        if (newMessages.length) {
+          newMessages.slice(0, 3).forEach((msg) => toast(msg));
+          if ('Notification' in window && Notification.permission === 'granted') {
+            newMessages.slice(0, 3).forEach((msg) => {
+              try {
+                new Notification('Admin Order Update', { body: msg });
+              } catch {
+                // ignore notification errors
+              }
+            });
+          }
+        }
+
+        const nextSnapshot: Record<string, { status: string; paymentStatus: string }> = {};
+        nextOrders.forEach((order) => {
+          nextSnapshot[order.id] = { status: order.status, paymentStatus: order.paymentStatus };
+        });
+        localStorage.setItem('admin_order_snapshot', JSON.stringify(nextSnapshot));
+      }
 
       if (!menuForm.categoryId && (categoriesRes.data || [])[0]) {
         setMenuForm((prev) => ({ ...prev, categoryId: (categoriesRes.data || [])[0].id }));
@@ -149,15 +229,40 @@ export default function AdminPage() {
       toast.error('Select a payment status');
       return;
     }
-    const amountRaw = paymentAmountDraft[orderId];
-    const amountPaise = amountRaw ? Math.round(Number(amountRaw) * 100) : undefined;
+    const order = orders.find((o) => o.id === orderId);
+    if (!order) {
+      toast.error('Order not found');
+      return;
+    }
+
+    const amountRaw = (paymentAmountDraft[orderId] || '').trim();
+    let amountPaise: number | undefined;
+    if (amountRaw) {
+      const amountInr = Number(amountRaw);
+      if (!Number.isFinite(amountInr) || amountInr <= 0) {
+        toast.error('Enter a valid paid amount in INR');
+        return;
+      }
+      amountPaise = Math.round(amountInr * 100);
+    }
 
     try {
       setUpdatingPaymentOrderId(orderId);
+      if (status === 'PARTIALLY_PAID') {
+        if (typeof amountPaise !== 'number') {
+          toast.error('Paid amount is required for PARTIALLY_PAID');
+          return;
+        }
+        if (amountPaise >= order.totalPaise) {
+          toast.error('Paid amount must be less than the order total');
+          return;
+        }
+      }
+
       await apiClient.updatePaymentStatus({
         orderId,
         paymentStatus: status,
-        ...(status === 'PARTIALLY_PAID' && typeof amountPaise === 'number' ? { paidAmountPaise: amountPaise } : {}),
+        ...(status === 'PARTIALLY_PAID' ? { paidAmountPaise: amountPaise } : {}),
       });
       toast.success('Payment status updated');
       await loadData();
@@ -170,6 +275,20 @@ export default function AdminPage() {
 
   const salesMax = useMemo(() => Math.max(1, ...salesByDay.map((d) => d.value)), [salesByDay]);
   const statusMax = useMemo(() => Math.max(1, ...Object.values(ordersByStatus)), [ordersByStatus]);
+
+  const requestNotificationPermission = async () => {
+    if (typeof window === 'undefined' || !('Notification' in window)) {
+      toast.error('Browser notifications are not supported');
+      return;
+    }
+    const permission = await Notification.requestPermission();
+    setNotificationPermission(permission);
+    if (permission === 'granted') {
+      toast.success('Admin notifications enabled');
+    } else if (permission === 'denied') {
+      toast.error('Notifications blocked. Enable them in browser settings.');
+    }
+  };
 
   const createMenuItem = async () => {
     if (!menuForm.name || !menuForm.priceInr || !menuForm.categoryId) {
@@ -273,9 +392,19 @@ export default function AdminPage() {
     <div className="min-h-screen bg-gray-50 py-4 sm:py-6">
       <div className="max-w-7xl mx-auto px-3 sm:px-4">
         <div className="mb-4 sm:mb-6">
-          <div className="flex items-center gap-2">
-            <ChefHat className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Restaurant Admin</h1>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <div className="flex items-center gap-2">
+              <ChefHat className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Restaurant Admin</h1>
+            </div>
+            {notificationPermission === 'default' && (
+              <button
+                onClick={requestNotificationPermission}
+                className="text-xs sm:text-sm text-orange-600 hover:text-orange-700"
+              >
+                Enable Admin Alerts
+              </button>
+            )}
           </div>
           <p className="text-xs sm:text-sm text-gray-600 mt-1">Manage menu, users, and payments.</p>
         </div>

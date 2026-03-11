@@ -31,6 +31,36 @@ export default function KitchenPage() {
     fetchOrders();
   }, [user?.restaurantRole, hasKitchenAccess, router]);
 
+  useEffect(() => {
+    if (!hasKitchenAccess || typeof window === 'undefined') return;
+    const token = localStorage.getItem('auth_token');
+    if (!token) return;
+
+    let source: EventSource | null = null;
+    try {
+      source = new EventSource(apiClient.getEventStreamUrl(token));
+    } catch {
+      source = null;
+    }
+
+    if (!source) return;
+
+    const onOrderUpdated = () => {
+      fetchOrders();
+    };
+
+    source.addEventListener('order.created', onOrderUpdated);
+    source.addEventListener('order.updated', onOrderUpdated);
+
+    source.onerror = () => {
+      // Browser will retry automatically; no-op
+    };
+
+    return () => {
+      source?.close();
+    };
+  }, [hasKitchenAccess]);
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
@@ -38,6 +68,34 @@ export default function KitchenPage() {
       if (response.success) {
         const active = (response.data || []).filter((order) => !['COMPLETED', 'CANCELLED'].includes(order.status));
         setOrders(active);
+
+        if (typeof window !== 'undefined') {
+          const nextOrders = active;
+          const snapshotRaw = localStorage.getItem('kitchen_order_snapshot');
+          const isInitialSnapshot = !snapshotRaw;
+          const snapshot: Record<string, { status: string }> = snapshotRaw ? JSON.parse(snapshotRaw) : {};
+          const newMessages: string[] = [];
+
+          nextOrders.forEach((order) => {
+            const prev = snapshot[order.id];
+            if (!prev && !isInitialSnapshot) {
+              newMessages.push(`New order #${order.id.slice(0, 8).toUpperCase()} awaiting confirmation`);
+            }
+            if (prev && prev.status !== order.status) {
+              newMessages.push(`Order #${order.id.slice(0, 8).toUpperCase()} moved to ${order.status}`);
+            }
+          });
+
+          if (newMessages.length) {
+            newMessages.slice(0, 3).forEach((msg) => toast(msg));
+          }
+
+          const nextSnapshot: Record<string, { status: string }> = {};
+          nextOrders.forEach((order) => {
+            nextSnapshot[order.id] = { status: order.status };
+          });
+          localStorage.setItem('kitchen_order_snapshot', JSON.stringify(nextSnapshot));
+        }
       }
     } catch (error: any) {
       toast.error(error?.message || 'Failed to fetch kitchen orders');

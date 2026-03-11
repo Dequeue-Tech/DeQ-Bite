@@ -21,6 +21,7 @@ import couponRoutes from '@/routes/coupons';
 import restaurantRoutes from '@/routes/restaurants';
 import offerRoutes from '@/routes/offers';
 import platformRoutes from '@/routes/platform';
+import realtimeRoutes from '@/routes/realtime';
 
 dotenv.config();
 
@@ -118,6 +119,7 @@ tenantRouter.use('/orders', orderRoutes);
 tenantRouter.use('/coupons', couponRoutes);
 tenantRouter.use('/restaurants', restaurantRoutes);
 tenantRouter.use('/offers', offerRoutes);
+tenantRouter.use('/', realtimeRoutes);
 
 app.use('/api/r/:restaurantSlug', tenantRouter);
 

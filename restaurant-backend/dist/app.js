@@ -43,6 +43,7 @@ app.use((0, cors_1.default)({
             'http://localhost:5174',
             'http://localhost:3000',
             'http://localhost:3001',
+            'https://bite.dequeue.co.in',
             'https://de-q-restaurants-frontend.vercel.app',
         ].filter(Boolean);
         if (!origin)

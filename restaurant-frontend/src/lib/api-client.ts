@@ -302,6 +302,11 @@ class ApiClient {
     return this.getRestaurantSlug();
   }
 
+  buildTenantApiUrl(path: string): string {
+    const cleanPath = path.startsWith('/') ? path : `/${path}`;
+    return `${this.getBaseURL()}/api${this.buildTenantEndpoint(cleanPath)}`;
+  }
+
   buildRestaurantPath(path: string): string {
     const slug = this.getRestaurantSlug();
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
@@ -314,6 +319,13 @@ class ApiClient {
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     if (!slug) return cleanPath;
     return `/r/${slug}${cleanPath}`;
+  }
+
+  getEventStreamUrl(token: string): string {
+    const base = this.buildTenantApiUrl('/events');
+    const hasQuery = base.includes('?');
+    const connector = hasQuery ? '&' : '?';
+    return `${base}${connector}token=${encodeURIComponent(token)}`;
   }
 
   // Authentication methods

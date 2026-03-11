@@ -12,12 +12,26 @@ const restaurantFields: string[] =
 
 function pickFields(fields: string[]) {
   const out: any = {};
+  if (restaurantFields.length === 0) {
+    // _dmmf not exposed: fall back to explicit selects to avoid "select all"
+    for (const f of fields) out[f] = true;
+    return out;
+  }
   for (const f of fields) {
-    if (restaurantFields.includes(f)) {
-      out[f] = true;
-    }
+    if (restaurantFields.includes(f)) out[f] = true;
   }
   return out;
+}
+
+/**
+ * Build a select object from an array of field names; returns `undefined`
+ * when no fields are available. Passing `undefined` to Prisma causes the
+ * select clause to be omitted, which avoids the "select must not be empty"
+ * validation error that we saw in production when the client schema was stale.
+ */
+function buildSelect(fields: string[]) {
+  const sel = pickFields(fields);
+  return Object.keys(sel).length > 0 ? sel : undefined;
 }
 
 const isLocalHost = (host?: string | null) => {
@@ -107,7 +121,7 @@ export const attachRestaurant = async (
       ],
     };
 
-    const basicSelect = pickFields([
+    const basicSelect = buildSelect([
       'id',
       'slug',
       'subdomain',
@@ -120,7 +134,7 @@ export const attachRestaurant = async (
     try {
       restaurant = await prisma.restaurant.findFirst({
         where: baseFilter,
-        select: basicSelect,
+        ...(basicSelect ? { select: basicSelect } : {}),
       });
     } catch (err: any) {
       // If the client schema doesn't know about "status" or other fields, fall back
@@ -136,7 +150,7 @@ export const attachRestaurant = async (
           const fallbackFilter = { ...baseFilter };
           delete (fallbackFilter as any).status;
 
-          const fallbackSelect = pickFields([
+          const fallbackSelect = buildSelect([
             'id',
             'name',
             'active',
@@ -145,7 +159,7 @@ export const attachRestaurant = async (
           ]);
           const partialRestaurant = await prisma.restaurant.findFirst({
             where: fallbackFilter,
-            select: fallbackSelect,
+            ...(fallbackSelect ? { select: fallbackSelect } : {}),
           });
 
           if (partialRestaurant) {

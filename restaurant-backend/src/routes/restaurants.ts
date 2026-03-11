@@ -21,12 +21,21 @@ const restaurantFields: string[] =
 
 function pickFields(fields: string[]) {
   const out: any = {};
+  if (restaurantFields.length === 0) {
+    // _dmmf not exposed: fall back to explicit selects to avoid "select all"
+    for (const f of fields) out[f] = true;
+    return out;
+  }
   for (const f of fields) {
-    if (restaurantFields.includes(f)) {
-      out[f] = true;
-    }
+    if (restaurantFields.includes(f)) out[f] = true;
   }
   return out;
+}
+
+// build a select object or return undefined when the list is empty
+function buildSelect(fields: string[]) {
+  const out = pickFields(fields);
+  return Object.keys(out).length > 0 ? out : undefined;
 }
 
 const slugify = (value: string) =>
@@ -102,7 +111,7 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
       : {}),
   };
 
-  const searchSelect = pickFields([
+  const searchSelect = buildSelect([
     'id',
     'name',
     'slug',
@@ -168,7 +177,7 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
   };
 
   let restaurant;
-  const detailSelect = pickFields([
+  const detailSelect = buildSelect([
     'id',
     'name',
     'slug',
@@ -182,7 +191,7 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
     'cuisineTypes',
     'paymentCollectionTiming',
     'cashPaymentEnabled',
-  ]);
+  ]) || {};
   // add nested selects manually (categories/menuItems)
   detailSelect.categories = {
     where: { active: true },
@@ -251,7 +260,7 @@ router.get('/current', requireRestaurant, async (req: AuthenticatedRequest, res:
 
 // GET /api/restaurants/mine
 router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Response) => {
-  const mineSelect: any = pickFields([
+  const mineSelect: any = buildSelect([
     'id',
     'name',
     'slug',
@@ -299,7 +308,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
   const payload = createRestaurantSchema.parse(req.body);
   const handles = await ensureUniqueRestaurantHandles(payload.name);
 
-  const createSelect: any = pickFields([
+  const createSelect: any = buildSelect([
     'id',
     'name',
     'slug',
@@ -368,7 +377,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
 
 // GET /api/restaurants/settings/payment-policy
 router.get('/settings/payment-policy', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
-  const policySelect = pickFields([
+  const policySelect = buildSelect([
     'id',
     'name',
     'paymentCollectionTiming',
@@ -389,7 +398,7 @@ router.get('/settings/payment-policy', authenticate, requireRestaurant, authoriz
 router.put('/settings/payment-policy', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
   const payload = updatePaymentPolicySchema.parse(req.body);
 
-  const policySelect = pickFields([
+  const policySelect = buildSelect([
     'id',
     'name',
     'paymentCollectionTiming',

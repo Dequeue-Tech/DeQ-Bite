@@ -29,6 +29,7 @@ export default function OrdersPage() {
   const [applyingCouponOrderId, setApplyingCouponOrderId] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
   const [sendingInvoice, setSendingInvoice] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -38,12 +39,59 @@ export default function OrdersPage() {
     }
   }, [isAuthenticated, user]);
 
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      const stored = localStorage.getItem('order_notifications');
+      if (stored) {
+        setNotifications(JSON.parse(stored));
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const fetchOrders = async () => {
     try {
       setLoading(true);
       const response = await apiClient.getOrders();
       if (response.success) {
-        setOrders(response.data || []);
+        const nextOrders = response.data || [];
+        setOrders(nextOrders);
+
+        if (typeof window !== 'undefined') {
+          const snapshotRaw = localStorage.getItem('order_status_snapshot');
+          const snapshot: Record<string, { status: string; paymentStatus: string }> = snapshotRaw ? JSON.parse(snapshotRaw) : {};
+          const newNotifs: Array<{ id: string; message: string; time: string }> = [];
+
+          nextOrders.forEach((order) => {
+            const prev = snapshot[order.id];
+            if (prev && prev.status !== order.status) {
+              newNotifs.push({
+                id: `${order.id}-status-${Date.now()}`,
+                message: `Order #${order.id.slice(0, 8).toUpperCase()} moved to ${order.status}`,
+                time: new Date().toLocaleTimeString(),
+              });
+            }
+            if (prev && prev.paymentStatus !== order.paymentStatus) {
+              newNotifs.push({
+                id: `${order.id}-payment-${Date.now()}`,
+                message: `Payment for order #${order.id.slice(0, 8).toUpperCase()} is ${order.paymentStatus}`,
+                time: new Date().toLocaleTimeString(),
+              });
+            }
+          });
+
+          const merged = [...newNotifs, ...notifications].slice(0, 20);
+          setNotifications(merged);
+          localStorage.setItem('order_notifications', JSON.stringify(merged));
+
+          const nextSnapshot: Record<string, { status: string; paymentStatus: string }> = {};
+          nextOrders.forEach((order) => {
+            nextSnapshot[order.id] = { status: order.status, paymentStatus: order.paymentStatus };
+          });
+          localStorage.setItem('order_status_snapshot', JSON.stringify(nextSnapshot));
+        }
       }
     } catch {
       toast.error('Failed to fetch orders');
@@ -151,6 +199,35 @@ export default function OrdersPage() {
             <RefreshCw className={`h-4 w-4 sm:h-5 sm:w-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
             Refresh
           </button>
+        </div>
+
+        <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <h2 className="text-sm sm:text-base font-semibold text-gray-900">Notifications</h2>
+            <button
+              onClick={() => {
+                setNotifications([]);
+                if (typeof window !== 'undefined') {
+                  localStorage.removeItem('order_notifications');
+                }
+              }}
+              className="text-xs text-gray-500 hover:text-gray-700"
+            >
+              Clear
+            </button>
+          </div>
+          {notifications.length === 0 ? (
+            <p className="text-xs sm:text-sm text-gray-500">No updates yet. We will notify you as your order progresses.</p>
+          ) : (
+            <div className="space-y-2">
+              {notifications.map((note) => (
+                <div key={note.id} className="text-xs sm:text-sm text-gray-700 flex items-center justify-between">
+                  <span className="truncate">{note.message}</span>
+                  <span className="text-[10px] sm:text-xs text-gray-500 ml-3 whitespace-nowrap">{note.time}</span>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {loading ? (

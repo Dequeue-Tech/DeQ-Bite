@@ -72,6 +72,21 @@ export default function KitchenPage() {
     }
   };
 
+  const cancelOrder = async (order: Order) => {
+    try {
+      setUpdatingOrderId(order.id);
+      const response = await apiClient.updateOrderStatus(order.id, 'CANCELLED');
+      if (response.success) {
+        toast.success('Order cancelled');
+        await fetchOrders();
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to cancel order');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
   if (!hasKitchenAccess && typeof user?.restaurantRole !== 'undefined') {
     return null;
   }
@@ -96,7 +111,42 @@ export default function KitchenPage() {
         {loading ? (
           <p className="text-gray-600 text-sm">Loading kitchen queue...</p>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+          <div className="space-y-4">
+            <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+              <h2 className="font-semibold text-gray-900 text-sm sm:text-base mb-3">Pending confirmations</h2>
+              {(groupedOrders['PENDING'] || []).length === 0 ? (
+                <p className="text-xs sm:text-sm text-gray-500">No orders waiting for confirmation.</p>
+              ) : (
+                <div className="space-y-2">
+                  {(groupedOrders['PENDING'] || []).map((order) => (
+                    <div key={order.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm">#{order.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} - Table {order.table?.number}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => advanceStatus(order)}
+                          disabled={updatingOrderId === order.id}
+                          className="text-xs px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                        >
+                          Confirm
+                        </button>
+                        <button
+                          onClick={() => cancelOrder(order)}
+                          disabled={updatingOrderId === order.id}
+                          className="text-xs px-3 py-1.5 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
             {['PENDING', 'CONFIRMED', 'PREPARING', 'READY'].map((status) => (
               <div key={status} className="bg-white rounded-xl border border-gray-200">
                 <div className="p-2.5 sm:p-3 border-b border-gray-200">
@@ -118,18 +168,28 @@ export default function KitchenPage() {
                           </p>
                         ))}
                       </div>
-                      <button
-                        onClick={() => advanceStatus(order)}
-                        disabled={updatingOrderId === order.id}
-                        className="mt-2 sm:mt-3 w-full bg-orange-600 text-white py-1.5 sm:py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60 text-xs sm:text-sm"
-                      >
-                        {updatingOrderId === order.id ? 'Updating...' : 'Next Stage'}
-                      </button>
+                      <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2">
+                        <button
+                          onClick={() => advanceStatus(order)}
+                          disabled={updatingOrderId === order.id}
+                          className="w-full bg-orange-600 text-white py-1.5 sm:py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60 text-xs sm:text-sm"
+                        >
+                          {updatingOrderId === order.id ? 'Updating...' : 'Next Stage'}
+                        </button>
+                        <button
+                          onClick={() => cancelOrder(order)}
+                          disabled={updatingOrderId === order.id}
+                          className="w-full bg-red-50 text-red-700 border border-red-200 py-1.5 sm:py-2 rounded-lg hover:bg-red-100 disabled:opacity-60 text-xs sm:text-sm"
+                        >
+                          Cancel
+                        </button>
+                      </div>
                     </div>
                   ))}
                 </div>
               </div>
             ))}
+            </div>
           </div>
         )}
       </div>

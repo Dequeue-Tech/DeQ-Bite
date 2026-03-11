@@ -13,6 +13,10 @@ function pickFields(fields) {
     }
     return out;
 }
+function buildSelect(fields) {
+    const sel = pickFields(fields);
+    return Object.keys(sel).length > 0 ? sel : undefined;
+}
 const isLocalHost = (host) => {
     if (!host)
         return false;
@@ -82,7 +86,7 @@ const attachRestaurant = async (req, _res, next) => {
                 { subdomain: restaurantIdentifier },
             ],
         };
-        const basicSelect = pickFields([
+        const basicSelect = buildSelect([
             'id',
             'slug',
             'subdomain',
@@ -94,7 +98,7 @@ const attachRestaurant = async (req, _res, next) => {
         try {
             restaurant = await database_1.prisma.restaurant.findFirst({
                 where: baseFilter,
-                select: basicSelect,
+                ...(basicSelect ? { select: basicSelect } : {}),
             });
         }
         catch (err) {
@@ -106,7 +110,7 @@ const attachRestaurant = async (req, _res, next) => {
                 try {
                     const fallbackFilter = { ...baseFilter };
                     delete fallbackFilter.status;
-                    const fallbackSelect = pickFields([
+                    const fallbackSelect = buildSelect([
                         'id',
                         'name',
                         'active',
@@ -115,7 +119,7 @@ const attachRestaurant = async (req, _res, next) => {
                     ]);
                     const partialRestaurant = await database_1.prisma.restaurant.findFirst({
                         where: fallbackFilter,
-                        select: fallbackSelect,
+                        ...(fallbackSelect ? { select: fallbackSelect } : {}),
                     });
                     if (partialRestaurant) {
                         restaurant = {

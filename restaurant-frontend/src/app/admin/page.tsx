@@ -18,14 +18,20 @@ type MenuForm = {
 export default function AdminPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'menu' | 'users' | 'payments'>('menu');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'users' | 'orders' | 'payments'>('dashboard');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [restaurantUsers, setRestaurantUsers] = useState<RestaurantUserEntry[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
   const [cashOrders, setCashOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [confirmingCashOrderId, setConfirmingCashOrderId] = useState<string | null>(null);
+  const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [updatingPaymentOrderId, setUpdatingPaymentOrderId] = useState<string | null>(null);
+  const [orderStatusDraft, setOrderStatusDraft] = useState<Record<string, Order['status']>>({});
+  const [paymentStatusDraft, setPaymentStatusDraft] = useState<Record<string, Order['paymentStatus']>>({});
+  const [paymentAmountDraft, setPaymentAmountDraft] = useState<Record<string, string>>({});
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState<'OWNER' | 'ADMIN' | 'STAFF'>('STAFF');
   const [paymentPolicy, setPaymentPolicy] = useState<{ paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL'; cashPaymentEnabled: boolean } | null>(null);
@@ -60,6 +66,7 @@ export default function AdminPage() {
       setMenuItems(menuRes.data || []);
       setCategories(categoriesRes.data || []);
       setRestaurantUsers(users);
+      setOrders(orders.data || []);
       setCashOrders((orders.data || []).filter((o) => o.paymentProvider === 'CASH' && o.paymentStatus !== 'COMPLETED' && o.status !== 'CANCELLED'));
       setPaymentPolicy(policy || null);
 
@@ -74,6 +81,95 @@ export default function AdminPage() {
   };
 
   const availableCount = useMemo(() => menuItems.filter((item) => item.available).length, [menuItems]);
+  const pendingOrders = useMemo(() => orders.filter((order) => order.status === 'PENDING'), [orders]);
+  const activeOrders = useMemo(() => orders.filter((order) => !['COMPLETED', 'CANCELLED'].includes(order.status)), [orders]);
+
+  const ordersByStatus = useMemo(() => {
+    return orders.reduce((acc, order) => {
+      acc[order.status] = (acc[order.status] || 0) + 1;
+      return acc;
+    }, {} as Record<Order['status'], number>);
+  }, [orders]);
+
+  const completedOrders = useMemo(() => orders.filter((order) => order.paymentStatus === 'COMPLETED'), [orders]);
+  const totalRevenuePaise = useMemo(() => completedOrders.reduce((sum, order) => sum + order.totalPaise, 0), [completedOrders]);
+  const avgOrderValuePaise = useMemo(() => (completedOrders.length ? Math.round(totalRevenuePaise / completedOrders.length) : 0), [completedOrders.length, totalRevenuePaise]);
+
+  const salesByDay = useMemo(() => {
+    const days: Array<{ label: string; value: number }> = [];
+    const now = new Date();
+    for (let i = 6; i >= 0; i -= 1) {
+      const date = new Date(now);
+      date.setDate(now.getDate() - i);
+      const label = date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+      const total = completedOrders
+        .filter((order) => {
+          const created = new Date(order.createdAt);
+          return created.toDateString() === date.toDateString();
+        })
+        .reduce((sum, order) => sum + order.totalPaise, 0);
+      days.push({ label, value: total });
+    }
+    return days;
+  }, [completedOrders]);
+
+  const topDishes = useMemo(() => {
+    const map = new Map<string, { name: string; qty: number; revenue: number }>();
+    completedOrders.forEach((order) => {
+      order.items.forEach((item) => {
+        const key = item.menuItem?.id || item.menuItemId;
+        const entry = map.get(key) || { name: item.menuItem?.name || 'Item', qty: 0, revenue: 0 };
+        entry.qty += item.quantity;
+        entry.revenue += item.pricePaise * item.quantity;
+        map.set(key, entry);
+      });
+    });
+    return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
+  }, [completedOrders]);
+
+  const updateOrderStatus = async (orderId: string, status: Order['status']) => {
+    try {
+      setUpdatingOrderId(orderId);
+      const response = await apiClient.updateOrderStatus(orderId, status);
+      if (!response.success) {
+        throw new Error(response.error || 'Failed to update order status');
+      }
+      toast.success(`Order updated to ${status}`);
+      await loadData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update order status');
+    } finally {
+      setUpdatingOrderId(null);
+    }
+  };
+
+  const updatePaymentStatus = async (orderId: string) => {
+    const status = paymentStatusDraft[orderId];
+    if (!status) {
+      toast.error('Select a payment status');
+      return;
+    }
+    const amountRaw = paymentAmountDraft[orderId];
+    const amountPaise = amountRaw ? Math.round(Number(amountRaw) * 100) : undefined;
+
+    try {
+      setUpdatingPaymentOrderId(orderId);
+      await apiClient.updatePaymentStatus({
+        orderId,
+        paymentStatus: status,
+        ...(status === 'PARTIALLY_PAID' && typeof amountPaise === 'number' ? { paidAmountPaise: amountPaise } : {}),
+      });
+      toast.success('Payment status updated');
+      await loadData();
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update payment status');
+    } finally {
+      setUpdatingPaymentOrderId(null);
+    }
+  };
+
+  const salesMax = useMemo(() => Math.max(1, ...salesByDay.map((d) => d.value)), [salesByDay]);
+  const statusMax = useMemo(() => Math.max(1, ...Object.values(ordersByStatus)), [ordersByStatus]);
 
   const createMenuItem = async () => {
     if (!menuForm.name || !menuForm.priceInr || !menuForm.categoryId) {
@@ -185,10 +281,232 @@ export default function AdminPage() {
         </div>
 
         <div className="flex flex-wrap gap-2 mb-4 sm:mb-6">
+          <button onClick={() => setActiveTab('dashboard')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'dashboard' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Dashboard</button>
+          <button onClick={() => setActiveTab('orders')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'orders' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Orders</button>
           <button onClick={() => setActiveTab('menu')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'menu' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Menu</button>
           <button onClick={() => setActiveTab('users')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'users' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Users</button>
           <button onClick={() => setActiveTab('payments')} className={`px-3 sm:px-4 py-2 rounded-lg text-sm sm:text-base ${activeTab === 'payments' ? 'bg-orange-600 text-white' : 'bg-white border border-gray-300 text-gray-700'}`}>Payments</button>
         </div>
+
+        {activeTab === 'dashboard' && (
+          <div className="space-y-4 sm:space-y-6">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <p className="text-xs sm:text-sm text-gray-500">Total revenue</p>
+                <p className="text-xl sm:text-2xl font-semibold text-gray-900 mt-1">{formatInr(totalRevenuePaise)}</p>
+                <p className="text-xs text-gray-500 mt-1">Completed payments</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <p className="text-xs sm:text-sm text-gray-500">Orders</p>
+                <p className="text-xl sm:text-2xl font-semibold text-gray-900 mt-1">{orders.length}</p>
+                <p className="text-xs text-gray-500 mt-1">{activeOrders.length} active</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <p className="text-xs sm:text-sm text-gray-500">Avg order value</p>
+                <p className="text-xl sm:text-2xl font-semibold text-gray-900 mt-1">{formatInr(avgOrderValuePaise)}</p>
+                <p className="text-xs text-gray-500 mt-1">Paid orders only</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <p className="text-xs sm:text-sm text-gray-500">Pending confirmations</p>
+                <p className="text-xl sm:text-2xl font-semibold text-gray-900 mt-1">{pendingOrders.length}</p>
+                <p className="text-xs text-gray-500 mt-1">Requires staff/admin action</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">
+              <div className="lg:col-span-2 bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="font-semibold text-gray-900 text-sm sm:text-base">Sales (last 7 days)</h2>
+                  <span className="text-xs text-gray-500">₹ in paid orders</span>
+                </div>
+                <div className="grid grid-cols-7 gap-2 items-end h-32 sm:h-40">
+                  {salesByDay.map((day) => (
+                    <div key={day.label} className="flex flex-col items-center justify-end h-full">
+                      <div
+                        className="w-full rounded-md bg-orange-500/80"
+                        style={{ height: `${Math.max(8, Math.round((day.value / salesMax) * 100))}%` }}
+                      />
+                      <span className="text-[10px] sm:text-xs text-gray-500 mt-1">{day.label}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <h2 className="font-semibold text-gray-900 text-sm sm:text-base mb-3">Orders by status</h2>
+                <div className="space-y-2">
+                  {(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED'] as Order['status'][]).map((status) => (
+                    <div key={status} className="flex items-center gap-2">
+                      <span className="text-xs text-gray-600 w-20">{status}</span>
+                      <div className="flex-1 h-2 rounded-full bg-gray-100">
+                        <div
+                          className="h-2 rounded-full bg-orange-500"
+                          style={{ width: `${Math.max(6, Math.round(((ordersByStatus[status] || 0) / statusMax) * 100))}%` }}
+                        />
+                      </div>
+                      <span className="text-xs text-gray-500 w-6 text-right">{ordersByStatus[status] || 0}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <h2 className="font-semibold text-gray-900 text-sm sm:text-base mb-3">Top dishes (by revenue)</h2>
+                {topDishes.length === 0 ? (
+                  <p className="text-xs sm:text-sm text-gray-500">No completed orders yet.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {topDishes.map((dish, idx) => (
+                      <div key={`${dish.name}-${idx}`} className="flex items-center justify-between text-xs sm:text-sm">
+                        <div className="min-w-0">
+                          <p className="text-gray-900 font-medium truncate">{dish.name}</p>
+                          <p className="text-gray-500">{dish.qty} sold</p>
+                        </div>
+                        <span className="text-gray-900 font-semibold">{formatInr(dish.revenue)}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+                <h2 className="font-semibold text-gray-900 text-sm sm:text-base mb-3">Pending confirmations</h2>
+                {pendingOrders.length === 0 ? (
+                  <p className="text-xs sm:text-sm text-gray-500">No orders waiting for confirmation.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {pendingOrders.slice(0, 5).map((order) => (
+                      <div key={order.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="font-semibold text-gray-900 text-sm">#{order.id.slice(0, 8).toUpperCase()}</p>
+                          <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} | {formatInr(order.totalPaise)}</p>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'CONFIRMED')}
+                            disabled={updatingOrderId === order.id}
+                            className="text-xs px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
+                          >
+                            Confirm
+                          </button>
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'CANCELLED')}
+                            disabled={updatingOrderId === order.id}
+                            className="text-xs px-3 py-1.5 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-60"
+                          >
+                            Cancel
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {activeTab === 'orders' && (
+          <div className="space-y-4 sm:space-y-6">
+            <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+              <h2 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">Orders needing action</h2>
+              {pendingOrders.length === 0 ? (
+                <p className="text-xs sm:text-sm text-gray-500">No pending orders right now.</p>
+              ) : (
+                <div className="space-y-2 sm:space-y-3">
+                  {pendingOrders.map((order) => (
+                    <div key={order.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm sm:text-base">#{order.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} | {formatInr(order.totalPaise)}</p>
+                      </div>
+                      <div className="flex gap-2">
+                        <button onClick={() => updateOrderStatus(order.id, 'CONFIRMED')} disabled={updatingOrderId === order.id} className="text-xs px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60">Confirm</button>
+                        <button onClick={() => updateOrderStatus(order.id, 'CANCELLED')} disabled={updatingOrderId === order.id} className="text-xs px-3 py-1.5 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-60">Cancel</button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
+              <h2 className="font-semibold text-gray-900 mb-3 sm:mb-4 text-sm sm:text-base">All restaurant orders</h2>
+              <div className="space-y-2 sm:space-y-3">
+                {orders.map((order) => (
+                  <div key={order.id} className="border border-gray-200 rounded-lg p-3 sm:p-4">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                      <div className="min-w-0">
+                        <p className="font-semibold text-gray-900 text-sm sm:text-base">#{order.id.slice(0, 8).toUpperCase()}</p>
+                        <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} | {formatInr(order.totalPaise)} | {order.status}</p>
+                      </div>
+                      <div className="flex flex-wrap gap-2 text-xs">
+                        <select
+                          value={orderStatusDraft[order.id] || order.status}
+                          onChange={(e) => setOrderStatusDraft((prev) => ({ ...prev, [order.id]: e.target.value as Order['status'] }))}
+                          className="border border-gray-300 rounded px-2 py-1"
+                        >
+                          {(['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED', 'CANCELLED'] as Order['status'][]).map((status) => (
+                            <option key={status} value={status}>{status}</option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => updateOrderStatus(order.id, orderStatusDraft[order.id] || order.status)}
+                          disabled={updatingOrderId === order.id}
+                          className="px-2.5 py-1 rounded bg-orange-600 text-white hover:bg-orange-700 disabled:opacity-60"
+                        >
+                          {updatingOrderId === order.id ? 'Updating...' : 'Update Status'}
+                        </button>
+                        <button
+                          onClick={() => updateOrderStatus(order.id, 'CANCELLED')}
+                          disabled={updatingOrderId === order.id}
+                          className="px-2.5 py-1 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-60"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-1 sm:grid-cols-4 gap-2 text-xs sm:text-sm text-gray-600">
+                      <div>Payment: <span className="font-medium text-gray-800">{order.paymentStatus}</span></div>
+                      <div>Paid: {formatInr(order.paidAmountPaise || 0)}</div>
+                      <div>Due: {formatInr(order.dueAmountPaise || 0)}</div>
+                      <div>Provider: {order.paymentProvider || 'NA'}</div>
+                    </div>
+
+                    <div className="mt-3 flex flex-col sm:flex-row gap-2 items-start sm:items-center">
+                      <select
+                        value={paymentStatusDraft[order.id] || order.paymentStatus}
+                        onChange={(e) => setPaymentStatusDraft((prev) => ({ ...prev, [order.id]: e.target.value as Order['paymentStatus'] }))}
+                        className="border border-gray-300 rounded px-2 py-1 text-xs sm:text-sm"
+                      >
+                        {(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED', 'PARTIALLY_PAID'] as Order['paymentStatus'][]).map((status) => (
+                          <option key={status} value={status}>{status}</option>
+                        ))}
+                      </select>
+                      <input
+                        value={paymentAmountDraft[order.id] || ''}
+                        onChange={(e) => setPaymentAmountDraft((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                        placeholder="Paid amount (INR)"
+                        className="border border-gray-300 rounded px-2 py-1 text-xs sm:text-sm w-40"
+                      />
+                      <button
+                        onClick={() => updatePaymentStatus(order.id)}
+                        disabled={updatingPaymentOrderId === order.id}
+                        className="px-3 py-1.5 rounded bg-blue-600 text-white hover:bg-blue-700 disabled:opacity-60 text-xs sm:text-sm"
+                      >
+                        {updatingPaymentOrderId === order.id ? 'Updating...' : 'Update Payment'}
+                      </button>
+                      <span className="text-xs text-gray-500">Use paid amount for PARTIALLY_PAID only.</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
 
         {activeTab === 'menu' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-6">

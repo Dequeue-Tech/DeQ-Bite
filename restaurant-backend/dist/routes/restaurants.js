@@ -9,14 +9,14 @@ const restaurant_1 = require("../middleware/restaurant");
 const router = (0, express_1.Router)();
 const hasRestaurantStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
-function pickFields(fields) {
+function buildSelect(fields) {
     const out = {};
     for (const f of fields) {
         if (restaurantFields.includes(f)) {
             out[f] = true;
         }
     }
-    return out;
+    return Object.keys(out).length > 0 ? out : undefined;
 }
 const slugify = (value) => value
     .toLowerCase()
@@ -78,7 +78,7 @@ router.get('/public/search', async (req, res) => {
             }
             : {}),
     };
-    const searchSelect = pickFields([
+    const searchSelect = buildSelect([
         'id',
         'name',
         'slug',
@@ -136,7 +136,7 @@ router.get('/public/:identifier', async (req, res) => {
         OR: [{ id: identifier }, { slug: identifier }, { subdomain: identifier }],
     };
     let restaurant;
-    const detailSelect = pickFields([
+    const detailSelect = buildSelect([
         'id',
         'name',
         'slug',
@@ -209,7 +209,7 @@ router.get('/current', restaurant_1.requireRestaurant, async (req, res) => {
     res.json(response);
 });
 router.get('/mine', auth_1.authenticate, async (req, res) => {
-    const mineSelect = pickFields([
+    const mineSelect = buildSelect([
         'id',
         'name',
         'slug',
@@ -251,7 +251,7 @@ router.get('/mine', auth_1.authenticate, async (req, res) => {
 router.post('/', auth_1.authenticate, async (req, res) => {
     const payload = createRestaurantSchema.parse(req.body);
     const handles = await ensureUniqueRestaurantHandles(payload.name);
-    const createSelect = pickFields([
+    const createSelect = buildSelect([
         'id',
         'name',
         'slug',
@@ -314,7 +314,7 @@ router.post('/', auth_1.authenticate, async (req, res) => {
     res.status(201).json(response);
 });
 router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
-    const policySelect = pickFields([
+    const policySelect = buildSelect([
         'id',
         'name',
         'paymentCollectionTiming',
@@ -331,7 +331,7 @@ router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.require
 });
 router.put('/settings/payment-policy', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
     const payload = updatePaymentPolicySchema.parse(req.body);
-    const policySelect = pickFields([
+    const policySelect = buildSelect([
         'id',
         'name',
         'paymentCollectionTiming',

@@ -760,6 +760,18 @@ class ApiClient {
     throw new Error(response.data.error || 'Failed to confirm cash payment');
   }
 
+  async updatePaymentStatus(payload: {
+    orderId: string;
+    paymentStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REFUNDED' | 'PARTIALLY_PAID';
+    paidAmountPaise?: number;
+  }): Promise<Order> {
+    const response = await this.api.put<ApiResponse<{ order: Order }>>(this.buildTenantEndpoint('/payments/status'), payload);
+    if (response.data.success) {
+      return response.data.data?.order as Order;
+    }
+    throw new Error(response.data.error || 'Failed to update payment status');
+  }
+
   // Offer methods
   async getOffers(): Promise<Offer[]> {
     const response = await this.api.get<ApiResponse<{ offers: Offer[] }>>(this.buildTenantEndpoint('/offers'));

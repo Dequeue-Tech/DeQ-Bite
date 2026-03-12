@@ -20,6 +20,9 @@ export default function RestaurantLandingPage() {
       const identifier = (id || slug || '').toString();
       if (!identifier) return;
       try {
+        localStorage.setItem('selectedRestaurantSlug', identifier);
+      } catch {}
+      try {
         setLoading(true);
         const details = await apiClient.getRestaurantPublicDetails(identifier.toLowerCase());
         setRestaurant(details);

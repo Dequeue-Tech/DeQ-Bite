@@ -1,4 +1,48 @@
 const path = require('path');
+const Module = require('module');
+
+// ─── Fix: ensure node_modules next to this file's package root is on the
+// search path BEFORE any require() call. Vercel serverless functions run
+// from /var/task/<repoRoot> but node_modules lives at
+// /var/task/<repoRoot>/restaurant-backend/node_modules (monorepo) OR at
+// /var/task/node_modules when Root Directory is set correctly.
+// We add ALL candidate node_modules dirs so it works in both layouts.
+const apiDir = path.resolve(__dirname);           // …/api
+const backendRoot = path.resolve(apiDir, '..');   // …/restaurant-backend
+const repoRoot = path.resolve(backendRoot, '..'); // …/ (repo root)
+
+const nmCandidates = [
+  path.join(backendRoot, 'node_modules'),
+  path.join(repoRoot, 'node_modules'),
+  '/var/task/node_modules',
+  '/var/task/restaurant-backend/node_modules',
+];
+
+for (const nm of nmCandidates) {
+  if (!Module.globalPaths.includes(nm)) {
+    Module.globalPaths.push(nm);
+  }
+}
+
+// Also patch NODE_PATH so child requires inherit the same paths
+const existingNodePath = process.env.NODE_PATH || '';
+const extraPaths = nmCandidates.join(path.delimiter);
+process.env.NODE_PATH = existingNodePath
+  ? `${existingNodePath}${path.delimiter}${extraPaths}`
+  : extraPaths;
+Module._initPaths(); // re-initialise module search paths
+
+const rootDir = backendRoot;
+
+const appPaths = [
+  path.join(rootDir, 'dist', 'app'),
+  path.join(rootDir, 'dist', 'src', 'app'),
+];
+
+const dbPaths = [
+  path.join(rootDir, 'dist', 'config', 'database'),
+  path.join(rootDir, 'dist', 'src', 'config', 'database'),
+];
 
 function requireFirst(paths) {
   const notFoundErrors = [];
@@ -16,24 +60,6 @@ function requireFirst(paths) {
     `Unable to load any module from: ${paths.join(', ')}\n${notFoundErrors.join('\n')}`
   );
 }
-
-// Try multiple path strategies to handle different deployment environments
-const apiDir = __dirname;
-const rootDir = path.join(apiDir, '..');
-
-const appPaths = [
-  path.join(rootDir, 'dist', 'app'),
-  path.join(rootDir, 'dist', 'src', 'app'),
-  '../dist/app',
-  '../dist/src/app',
-];
-
-const dbPaths = [
-  path.join(rootDir, 'dist', 'config', 'database'),
-  path.join(rootDir, 'dist', 'src', 'config', 'database'),
-  '../dist/config/database',
-  '../dist/src/config/database',
-];
 
 let app;
 let connectDatabase;

@@ -35,19 +35,52 @@ const dbPaths = [
   '../dist/src/config/database',
 ];
 
-const appModule = requireFirst(appPaths);
-const dbModule = requireFirst(dbPaths);
+let app;
+let connectDatabase;
+let initError;
 
-const app = appModule.default || appModule;
-const connectDatabase = dbModule.connectDatabase;
+try {
+  const appModule = requireFirst(appPaths);
+  const dbModule = requireFirst(dbPaths);
+  app = appModule.default || appModule;
+  connectDatabase = dbModule.connectDatabase;
+} catch (err) {
+  initError = err;
+  console.error('FATAL: Failed to load app modules:', err.message);
+}
 
 let dbConnectionPromise;
 
 module.exports = async (req, res) => {
-  if (!dbConnectionPromise) {
-    dbConnectionPromise = connectDatabase();
+  // If module loading failed, return a clear 500 with the error
+  if (initError) {
+    console.error('Module load error on request:', initError.message);
+    res.status(500).json({
+      error: 'Server initialisation failed',
+      detail: initError.message,
+    });
+    return;
   }
 
-  await dbConnectionPromise;
+  // Connect to DB once per cold start
+  if (!dbConnectionPromise) {
+    dbConnectionPromise = connectDatabase().catch((err) => {
+      // Reset so next request retries
+      dbConnectionPromise = null;
+      throw err;
+    });
+  }
+
+  try {
+    await dbConnectionPromise;
+  } catch (dbErr) {
+    console.error('Database connection failed:', dbErr.message);
+    res.status(503).json({
+      error: 'Database connection failed',
+      detail: dbErr.message,
+    });
+    return;
+  }
+
   return app(req, res);
 };

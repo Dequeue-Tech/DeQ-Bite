@@ -34,12 +34,12 @@ const Navbar = () => {
   const activeRestaurantSlug = apiClient.getActiveRestaurantSlug();
   const withRestaurant = (path: string) => {
     if (!activeRestaurantSlug) return path;
-    return `/r/${activeRestaurantSlug}${path.startsWith('/') ? path : `/${path}`}`;
+    return `/${activeRestaurantSlug}${path.startsWith('/') ? path : `/${path}`}`;
   };
 
   // Desktop navigation links
   const desktopNavLinks = [
-    { name: 'Home', href: '/' },
+    { name: 'Home', href: `/${selectedRestaurantSlug}` },
     { name: 'Menu', href: withRestaurant('/menu') },
     ...(isAuthenticated ? [
       { name: 'Orders', href: withRestaurant('/orders') },
@@ -51,7 +51,7 @@ const Navbar = () => {
 
   // Mobile bottom navigation links (max 4 items, profile is in top nav)
   const mobileNavLinks = [
-    { name: 'Home', href: '/', icon: Home },
+    { name: 'Home', href: `/${selectedRestaurantSlug}`, icon: Home },
     { name: 'Menu', href: withRestaurant('/menu'), icon: UtensilsCrossed },
     ...(isAuthenticated ? [
       { name: 'Orders', href: withRestaurant('/orders'), icon: ClipboardList },

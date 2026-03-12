@@ -20,6 +20,9 @@ export default function RestaurantLandingPage() {
       const identifier = (id || slug || '').toString();
       if (!identifier) return;
       try {
+        localStorage.setItem('selectedRestaurantSlug', identifier);
+      } catch {}
+      try {
         setLoading(true);
         const details = await apiClient.getRestaurantPublicDetails(identifier.toLowerCase());
         setRestaurant(details);
@@ -36,9 +39,9 @@ export default function RestaurantLandingPage() {
   const selectAndOpen = () => {
     const slugValue = restaurant?.slug || restaurant?.subdomain || restaurant?.id;
     if (!slugValue) return;
-    apiClient.setSelectedRestaurantSlug(slugValue);
-    toast.success(`${restaurant.name} selected`);
-    router.push(`/r/${slugValue}/menu`);
+    // apiClient.setSelectedRestaurantSlug(slugValue);
+    // toast.success(`${restaurant.name} selected`);
+    router.push(`/${slugValue}/menu`);
   };
 
   const getInitials = (name: string) =>

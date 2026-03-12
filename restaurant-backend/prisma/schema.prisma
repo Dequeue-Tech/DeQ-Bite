@@ -41,6 +41,7 @@ model Restaurant {
   cuisineTypes            String[]                @default([])
   logoUrl                 String?
   bannerUrl               String?
+  googleReviewUrl         String?
   gstNumber               String?
   gstLegalName            String?
   bankAccountName         String?
@@ -60,6 +61,7 @@ model Restaurant {
   updatedAt               DateTime                @updatedAt
   categories              Category[]
   coupons                 Coupon[]
+  popularDishes           PopularDish[]
   menuItems               MenuItem[]
   offers                  Offer[]
   orders                  Order[]
@@ -123,8 +125,24 @@ model MenuItem {
   category        Category    @relation(fields: [categoryId], references: [id])
   restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orderItems      OrderItem[]
+  popularDishes   PopularDish[]
 
   @@map("menu_items")
+}
+
+model PopularDish {
+  id           String     @id @default(cuid())
+  restaurantId String
+  menuItemId   String
+  rank         Int        @default(0)
+  active       Boolean    @default(true)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItem     MenuItem  @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, menuItemId])
+  @@map("popular_dishes")
 }
 
 model Table {

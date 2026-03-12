@@ -1,23 +1,42 @@
-'use client';
+import SearchableRestaurantList, { RestaurantListItem } from './SearchableRestaurantList';
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+async function getRestaurants(): Promise<RestaurantListItem[]> {
+  const apiBase = process.env.NEXT_PUBLIC_API_URL;
+  const response = await fetch(`${apiBase}/restaurants/public/search`, {
+    cache: 'no-store',
+  });
 
-export default function HomePage() {
-  const router = useRouter();
+  if (!response.ok) {
+    return [];
+  }
 
-  useEffect(() => {
-    // Redirect to demo restaurant page
-    router.replace('/r/demo/');
-  }, [router]);
+  const payload = (await response.json()) as {
+    success?: boolean;
+    data?: {
+      restaurants?: Array<
+        Omit<RestaurantListItem, 'slug' | 'logoUrl'> & {
+          slug?: string;
+          subdomain?: string;
+          logoUrl?: string | null;
+        }
+      >;
+    };
+  };
 
-  // Return loading state while redirecting
-  return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-      <div className="text-center">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-orange-600 mx-auto mb-4"></div>
-        <p className="text-gray-600">Loading...</p>
-      </div>
-    </div>
-  );
+  const restaurants = payload.data?.restaurants ?? [];
+
+  return restaurants.map((restaurant) => ({
+    id: restaurant.id,
+    name: restaurant.name,
+    slug: restaurant.slug || restaurant.subdomain || restaurant.id,
+    address: restaurant.address ?? null,
+    logoUrl: restaurant.logoUrl ?? null,
+  }));
+}
+
+export default async function HomePage() {
+  const restaurants = await getRestaurants();
+
+  // Pass the server-fetched data to the interactive client component
+  return <SearchableRestaurantList initialRestaurants={restaurants} />;
 }

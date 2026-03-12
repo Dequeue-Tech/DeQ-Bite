@@ -12,6 +12,8 @@ const statusFlow = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COM
 export default function KitchenPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
+  const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
+  const homeHref = selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/';
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
@@ -25,11 +27,11 @@ export default function KitchenPage() {
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;
     if (!hasKitchenAccess) {
-      router.push('/');
+      router.push(homeHref);
       return;
     }
     fetchOrders();
-  }, [user?.restaurantRole, hasKitchenAccess, router]);
+  }, [user?.restaurantRole, hasKitchenAccess, router, homeHref]);
 
   useEffect(() => {
     if (!hasKitchenAccess || typeof window === 'undefined') return;

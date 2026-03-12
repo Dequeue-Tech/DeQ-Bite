@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
+import { apiClient } from '@/lib/api-client';
 import Link from 'next/link';
 import { ChefHat, Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react';
 
@@ -38,7 +39,8 @@ export default function SignUpPage() {
         phone: formData.phone || undefined,
         password: formData.password,
       });
-      router.push('/');
+      const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
+      router.push(selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/');
     } catch (err) {
       // Error is handled by the store
     } finally {

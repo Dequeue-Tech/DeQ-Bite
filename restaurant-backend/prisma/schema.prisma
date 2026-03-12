@@ -41,6 +41,7 @@ model Restaurant {
   cuisineTypes            String[]                @default([])
   logoUrl                 String?
   bannerUrl               String?
+  googleReviewUrl         String?
   gstNumber               String?
   gstLegalName            String?
   bankAccountName         String?
@@ -60,6 +61,7 @@ model Restaurant {
   updatedAt               DateTime                @updatedAt
   categories              Category[]
   coupons                 Coupon[]
+  popularDishes           popularDishes[]
   menuItems               MenuItem[]
   offers                  Offer[]
   orders                  Order[]

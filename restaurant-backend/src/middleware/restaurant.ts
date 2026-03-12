@@ -63,7 +63,7 @@ const extractSubdomain = (host?: string | null): string | null => {
 
 const extractSlugFromPath = (req: Request): string | null => {
   const params = req.params as Record<string, string | undefined>;
-  const paramSlug = params?.['restaurantSlug'] || params?.['slug'];
+  const paramSlug = params?.['restaurantSlug'] || params?.['slug'] || params?.['restaurantId'];
   if (paramSlug) return paramSlug.toLowerCase();
 
   const url = req.originalUrl || req.url || '';

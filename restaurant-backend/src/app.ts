@@ -47,6 +47,8 @@ app.use(cors({
       'http://localhost:3000',
       'http://localhost:3001',
       'https://de-q-restaurants-frontend.vercel.app',
+      'https://bite.dequeue.co.in',
+      'https://demo.bite.dequeue.co.in',
     ].filter(Boolean);
 
     // Allow requests with no origin (like mobile apps or curl requests)

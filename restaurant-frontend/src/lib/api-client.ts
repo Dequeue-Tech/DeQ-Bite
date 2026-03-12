@@ -311,14 +311,14 @@ class ApiClient {
     const slug = this.getRestaurantSlug();
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     if (!slug) return cleanPath;
-    return `/r/${slug}${cleanPath}`;
+    return `/${slug}${cleanPath}`;
   }
 
   private buildTenantEndpoint(path: string): string {
     const slug = this.getRestaurantSlug();
     const cleanPath = path.startsWith('/') ? path : `/${path}`;
     if (!slug) return cleanPath;
-    return `/r/${slug}${cleanPath}`;
+    return `/restaurants/${slug}${cleanPath}`;
   }
 
   getEventStreamUrl(token: string): string {

@@ -18,6 +18,8 @@ type MenuForm = {
 export default function AdminPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
+  const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
+  const homeHref = selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/';
   const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'users' | 'orders' | 'payments'>('dashboard');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -47,11 +49,11 @@ export default function AdminPage() {
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;
     if (!hasAdminAccess) {
-      router.push('/');
+      router.push(homeHref);
       return;
     }
     loadData();
-  }, [user?.restaurantRole, hasAdminAccess, router]);
+  }, [user?.restaurantRole, hasAdminAccess, router, homeHref]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;

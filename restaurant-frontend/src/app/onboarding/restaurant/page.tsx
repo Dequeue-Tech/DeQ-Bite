@@ -39,7 +39,7 @@ export default function RestaurantOnboardingPage() {
         apiClient.setSelectedRestaurantSlug(slugValue);
       }
       toast.success('Restaurant onboarded successfully');
-      router.push(`/r/${slugValue || ''}/admin`);
+      router.push(`/${slugValue || ''}/admin`);
     } catch (error: any) {
       toast.error(error?.message || 'Failed to onboard restaurant');
     } finally {

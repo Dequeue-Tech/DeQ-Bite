@@ -10,7 +10,7 @@ export default function PosRedirectPage() {
 
   useEffect(() => {
     if (slug) {
-      router.replace(`/r/${slug}/menu?pos=1`);
+      router.replace(`/${slug}/menu?pos=1`);
     }
   }, [slug, router]);
 

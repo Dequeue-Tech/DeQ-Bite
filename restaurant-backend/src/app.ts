@@ -121,7 +121,7 @@ tenantRouter.use('/restaurants', restaurantRoutes);
 tenantRouter.use('/offers', offerRoutes);
 tenantRouter.use('/', realtimeRoutes);
 
-app.use('/api/r/:restaurantSlug', tenantRouter);
+app.use('/api/:restaurantSlug', tenantRouter);
 
 app.use('/api/restaurants/:restaurantId/payments', attachRestaurant, paymentRoutes);
 app.use('/api/restaurants/:restaurantId/invoices', attachRestaurant, invoiceRoutes);

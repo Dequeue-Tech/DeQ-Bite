@@ -6,7 +6,7 @@ import { AuthenticatedRequest } from '@/types/api';
 
 const router = Router();
 
-// GET /api/r/:restaurantSlug/events
+// GET /api/:restaurantSlug/events
 router.get('/events', authenticate, requireRestaurant, (req: AuthenticatedRequest, res) => {
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache, no-transform');

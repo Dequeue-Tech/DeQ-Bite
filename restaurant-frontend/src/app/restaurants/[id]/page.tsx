@@ -38,7 +38,7 @@ export default function RestaurantLandingPage() {
     if (!slugValue) return;
     apiClient.setSelectedRestaurantSlug(slugValue);
     toast.success(`${restaurant.name} selected`);
-    router.push(`/r/${slugValue}/menu`);
+    router.push(`/${slugValue}/menu`);
   };
 
   const getInitials = (name: string) =>

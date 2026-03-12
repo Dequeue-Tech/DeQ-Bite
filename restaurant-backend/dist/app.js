@@ -107,7 +107,7 @@ tenantRouter.use('/orders', orders_1.default);
 tenantRouter.use('/coupons', coupons_1.default);
 tenantRouter.use('/restaurants', restaurants_1.default);
 tenantRouter.use('/offers', offers_1.default);
-app.use('/api/r/:restaurantSlug', tenantRouter);
+app.use('/api/:restaurantSlug', tenantRouter);
 app.use('/api/restaurants/:restaurantId/payments', restaurant_1.attachRestaurant, payments_1.default);
 app.use('/api/restaurants/:restaurantId/invoices', restaurant_1.attachRestaurant, invoices_1.default);
 app.use('/api/restaurants/:restaurantId/pdf', restaurant_1.attachRestaurant, pdf_1.default);

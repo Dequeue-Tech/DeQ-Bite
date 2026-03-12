@@ -1,4 +1,26 @@
 const path = require('path');
+const Module = require('module');
+
+// ─── Monorepo path fix ───────────────────────────────────────────────────────
+// Vercel runs this file from the repo root, so __dirname may be
+// /var/task/restaurant-backend/api  but node_modules live at
+// /var/task/restaurant-backend/node_modules.
+// We prepend that directory to Node's module search paths so that
+// require('express') etc. resolve correctly.
+const backendRoot = path.resolve(__dirname, '..');
+if (!Module.globalPaths.includes(path.join(backendRoot, 'node_modules'))) {
+  Module.globalPaths.unshift(path.join(backendRoot, 'node_modules'));
+}
+// Also patch the require paths for the current module
+if (require.resolve.paths) {
+  const existing = require.resolve.paths('express') || [];
+  if (!existing.includes(path.join(backendRoot, 'node_modules'))) {
+    existing.unshift(path.join(backendRoot, 'node_modules'));
+  }
+}
+// Set working directory to backend root so relative requires work
+process.chdir(backendRoot);
+// ─────────────────────────────────────────────────────────────────────────────
 
 function requireFirst(paths) {
   const notFoundErrors = [];

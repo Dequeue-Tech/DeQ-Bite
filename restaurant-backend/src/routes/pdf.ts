@@ -2,10 +2,9 @@ import { Router, Response } from 'express';
 import { prisma } from '@/config/database';
 import jwt from 'jsonwebtoken';
 import { AppError, asyncHandler } from '@/middleware/errorHandler';
-import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
+import { generateInvoicePDF, savePDFToStorage, downloadPDFFromStorage, getPDFDownloadUrl, isPrivateBucket } from '@/lib/pdf';
 import { AuthenticatedRequest } from '@/types/api';
-import path from 'path';
-import fs from 'fs/promises';
+import { logger } from '@/utils/logger';
 
 const router = Router();
 
@@ -58,7 +57,7 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
     token = authHeader.substring(7);
   }
 
-  // If no token provided, allow download only when a public pdfPath exists (served by express.static)
+  // If no token provided, allow download only when a public pdfPath exists
   if (!token) {
     // If PDF bytes exist in DB, allow public download (useful when frontend opens link without auth)
     if (invoice.pdfData) {
@@ -68,20 +67,13 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
       res.setHeader('Content-Length', String(pdfBuffer.length));
       return res.send(pdfBuffer);
     }
-    if (invoice.pdfPath && invoice.pdfPath.startsWith('/invoices/')) {
-      // Build absolute path on disk
-      const rel = invoice.pdfPath.replace(/^\//, '');
-      const absPath = path.join(process.cwd(), rel);
-
-      try {
-        await fs.access(absPath);
-        // Redirect to the public URL so browser can fetch it directly
-        return res.redirect(invoice.pdfPath);
-      } catch (err) {
-        throw new AppError('PDF file not found on server', 404);
-      }
+        
+    // For private buckets, always require authentication
+    // For public buckets, redirect to the B2 URL
+    if (invoice.pdfPath && invoice.pdfPath.startsWith('http') && !isPrivateBucket()) {
+      return res.redirect(invoice.pdfPath);
     }
-
+  
     throw new AppError('Access denied. No token provided.', 401);
   }
 
@@ -99,7 +91,7 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
       throw new AppError('Access denied. You do not own this invoice.', 403);
     }
 
-    // Serve PDF from db if available, else from public path
+    // Serve PDF from db if available
     if (invoice.pdfData) {
       const pdfBuffer = Buffer.from(invoice.pdfData as Uint8Array);
       res.setHeader('Content-Type', 'application/pdf');
@@ -108,8 +100,49 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
       return res.send(pdfBuffer);
     }
 
-    if (invoice.pdfPath && invoice.pdfPath.startsWith('/invoices/')) {
-      return res.redirect(invoice.pdfPath);
+    // For private buckets: stream the file through our server (secure)
+    // For public buckets: redirect to the public URL
+    if (invoice.pdfName) {
+      if (isPrivateBucket()) {
+        // Private bucket: Download and stream through our server
+        // This keeps the B2 URL hidden from users
+        try {
+          const pdfBuffer = await downloadPDFFromStorage(invoice.pdfName);
+          res.setHeader('Content-Type', 'application/pdf');
+          res.setHeader('Content-Disposition', `inline; filename="${invoice.pdfName}"`);
+          res.setHeader('Content-Length', String(pdfBuffer.length));
+          return res.send(pdfBuffer);
+        } catch (downloadError) {
+          logger.warn('Failed to download PDF from B2, will regenerate', {
+            invoiceId,
+            error: downloadError instanceof Error ? downloadError.message : 'Unknown error',
+          });
+        }
+      } else {
+        // Public bucket: Generate a fresh signed URL and redirect
+        try {
+          const downloadUrl = await getPDFDownloadUrl(invoice.pdfName);
+          return res.redirect(downloadUrl);
+        } catch (urlError) {
+          logger.warn('Failed to get PDF download URL, will try direct download', {
+            invoiceId,
+            error: urlError instanceof Error ? urlError.message : 'Unknown error',
+          });
+          // Fallback: try to download and serve directly
+          try {
+            const pdfBuffer = await downloadPDFFromStorage(invoice.pdfName);
+            res.setHeader('Content-Type', 'application/pdf');
+            res.setHeader('Content-Disposition', `inline; filename="${invoice.pdfName}"`);
+            res.setHeader('Content-Length', String(pdfBuffer.length));
+            return res.send(pdfBuffer);
+          } catch (downloadError) {
+            logger.error('Failed to download PDF from B2', {
+              invoiceId,
+              error: downloadError instanceof Error ? downloadError.message : 'Unknown error',
+            });
+          }
+        }
+      }
     }
 
     // If PDF not available, try to generate on demand (only for authenticated owner)

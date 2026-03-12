@@ -3,82 +3,102 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+exports.isPrivateBucket = void 0;
 exports.generateInvoicePDF = generateInvoicePDF;
 exports.savePDFToStorage = savePDFToStorage;
+exports.downloadPDFFromStorage = downloadPDFFromStorage;
+exports.getPDFDownloadUrl = getPDFDownloadUrl;
 exports.cleanupOldInvoices = cleanupOldInvoices;
 const jspdf_1 = __importDefault(require("jspdf"));
-const path_1 = __importDefault(require("path"));
-const promises_1 = __importDefault(require("fs/promises"));
 const logger_1 = require("../utils/logger");
+const b2_storage_1 = require("./b2-storage");
+exports.isPrivateBucket = b2_storage_1.isPrivateBucket;
 function generateInvoicePDF(invoiceData) {
     try {
-        const doc = new jspdf_1.default();
-        doc.setFont('helvetica');
-        doc.setFontSize(20);
-        doc.setTextColor(40, 40, 40);
-        doc.text(invoiceData.restaurantName || 'Restaurant', 20, 25);
-        doc.setFontSize(16);
-        doc.text('INVOICE', 20, 40);
-        doc.setFontSize(10);
-        doc.text(`Invoice #: ${invoiceData.invoiceNumber}`, 140, 25);
-        doc.text(`Date: ${invoiceData.orderDate}`, 140, 35);
-        doc.text(`Table: ${invoiceData.tableNumber}`, 140, 45);
-        doc.setFontSize(12);
-        doc.text('Bill To:', 20, 60);
-        doc.setFontSize(10);
-        doc.text(invoiceData.customerName, 20, 70);
-        if (invoiceData.customerEmail) {
-            doc.text(invoiceData.customerEmail, 20, 80);
-        }
-        if (invoiceData.customerPhone) {
-            doc.text(invoiceData.customerPhone, 20, 90);
-        }
-        const startY = 110;
-        doc.setFontSize(10);
-        doc.setFont('helvetica', 'bold');
-        doc.text('Item', 20, startY);
-        doc.text('Qty', 120, startY);
-        doc.text('Price', 140, startY);
-        doc.text('Total', 170, startY);
-        doc.line(20, startY + 5, 190, startY + 5);
-        doc.setFont('helvetica', 'normal');
-        let currentY = startY + 15;
-        invoiceData.items.forEach((item) => {
-            doc.text(item.name, 20, currentY);
-            doc.text(item.quantity.toString(), 120, currentY);
-            doc.text(`₹${item.price.toFixed(2)}`, 140, currentY);
-            doc.text(`₹${item.total.toFixed(2)}`, 170, currentY);
-            currentY += 10;
+        const doc = new jspdf_1.default({
+            orientation: 'portrait',
+            unit: 'mm',
+            format: [80, 250]
         });
-        currentY += 5;
-        doc.line(20, currentY, 190, currentY);
-        currentY += 10;
-        doc.text('Subtotal:', 140, currentY);
-        doc.text(`₹${invoiceData.subtotal.toFixed(2)}`, 170, currentY);
-        currentY += 10;
-        doc.text('Tax:', 140, currentY);
-        doc.text(`₹${invoiceData.tax.toFixed(2)}`, 170, currentY);
-        currentY += 10;
+        const centerX = 40;
+        let currentY = 15;
         doc.setFont('helvetica', 'bold');
-        doc.text('Total:', 140, currentY);
-        doc.text(`₹${invoiceData.total.toFixed(2)}`, 170, currentY);
-        if (invoiceData.paymentMethod) {
-            currentY += 20;
-            doc.setFont('helvetica', 'normal');
-            doc.text(`Payment Method: ${invoiceData.paymentMethod}`, 20, currentY);
-        }
-        currentY += 30;
+        doc.setFontSize(18);
+        doc.text('Restaurant', centerX, currentY, { align: 'center' });
+        currentY += 4;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        doc.text('Food & Drinks', centerX, currentY, { align: 'center' });
+        currentY += 8;
+        doc.setFont('helvetica', 'bold');
         doc.setFontSize(9);
-        doc.setTextColor(100, 100, 100);
-        doc.text('Thank you for dining with us!', 20, currentY);
-        if (invoiceData.restaurantAddress) {
-            currentY += 10;
-            doc.text(invoiceData.restaurantAddress, 20, currentY);
-        }
-        if (invoiceData.restaurantPhone) {
-            currentY += 10;
-            doc.text(`Phone: ${invoiceData.restaurantPhone}`, 20, currentY);
-        }
+        doc.text(invoiceData.restaurantName || 'ABC CAFE & RESTRO', centerX, currentY, { align: 'center' });
+        currentY += 4;
+        doc.text(invoiceData.gstNumber || '08AAKXX7086X1ZT', centerX, currentY, { align: 'center' });
+        currentY += 5;
+        doc.text('BLOCK D PLOT NO 103', centerX, currentY, { align: 'center' });
+        currentY += 4;
+        doc.text('NEW DELHI-110009', centerX, currentY, { align: 'center' });
+        currentY += 4;
+        doc.setLineWidth(0.5);
+        doc.line(5, currentY, 75, currentY);
+        currentY += 5;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(`Name: ${invoiceData.customerName || ''}`, 5, currentY);
+        currentY += 3;
+        doc.line(5, currentY, 75, currentY);
+        currentY += 5;
+        doc.text(`Date: ${invoiceData.orderDate}`, 5, currentY);
+        doc.setFont('helvetica', 'bold');
+        doc.text(`Dine In: ${invoiceData.tableNumber || '4'}`, 45, currentY);
+        currentY += 4;
+        doc.setFont('helvetica', 'normal');
+        doc.text(`Cashier: ${invoiceData.cashierName || 'biller'}`, 5, currentY);
+        doc.text(`Bill No.: ${invoiceData.invoiceNumber}`, 45, currentY);
+        currentY += 4;
+        doc.line(5, currentY, 75, currentY);
+        currentY += 5;
+        doc.text('No.', 5, currentY);
+        doc.text('Item', 12, currentY);
+        doc.text('Qty.', 45, currentY);
+        doc.text('Price', 55, currentY);
+        doc.text('Amount', 75, currentY, { align: 'right' });
+        currentY += 2;
+        doc.line(5, currentY, 75, currentY);
+        currentY += 5;
+        let totalQty = 0;
+        invoiceData.items.forEach((item, index) => {
+            totalQty += item.quantity;
+            doc.text(`${index + 1}`, 5, currentY);
+            const itemNameLines = doc.splitTextToSize(item.name, 30);
+            doc.text(itemNameLines, 12, currentY);
+            doc.text(item.quantity.toString(), 45, currentY);
+            doc.text(item.price.toFixed(2), 55, currentY);
+            doc.text(item.total.toFixed(2), 75, currentY, { align: 'right' });
+            currentY += (itemNameLines.length * 4) + 1;
+        });
+        doc.line(5, currentY, 75, currentY);
+        currentY += 5;
+        doc.text(`Total Qty: ${totalQty}`, 12, currentY);
+        doc.text('Sub Total', 45, currentY);
+        doc.text(invoiceData.subtotal.toFixed(2), 75, currentY, { align: 'right' });
+        currentY += 4;
+        doc.text('GST 5%', 45, currentY);
+        doc.text(invoiceData.tax.toFixed(2), 75, currentY, { align: 'right' });
+        currentY += 3;
+        doc.line(5, currentY, 75, currentY);
+        currentY += 6;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.text('Grand Total', 40, currentY);
+        doc.text(`INR ${invoiceData.total.toFixed(2)}`, 75, currentY, { align: 'right' });
+        currentY += 3;
+        doc.line(5, currentY, 75, currentY);
+        currentY += 5;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(8);
+        doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber || '13364267896567'}`, centerX, currentY, { align: 'center' });
         const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
         logger_1.logger.info('PDF invoice generated successfully', {
             invoiceNumber: invoiceData.invoiceNumber,
@@ -97,50 +117,95 @@ function generateInvoicePDF(invoiceData) {
 }
 async function savePDFToStorage(pdfBuffer, filename) {
     try {
-        const invoicesDir = path_1.default.join(process.cwd(), 'public', 'invoices');
-        await promises_1.default.mkdir(invoicesDir, { recursive: true });
-        const filePath = path_1.default.join(invoicesDir, filename);
-        await promises_1.default.writeFile(filePath, pdfBuffer);
-        logger_1.logger.info('PDF saved to storage', {
+        if (!(0, b2_storage_1.isB2Configured)()) {
+            logger_1.logger.error('Backblaze B2 is not configured');
+            throw new Error('Cloud storage not configured');
+        }
+        const b2FileName = `invoices/${filename}`;
+        const uploadResult = await (0, b2_storage_1.uploadToB2)(pdfBuffer, b2FileName, 'application/pdf');
+        logger_1.logger.info('PDF saved to B2 cloud storage', {
             filename,
-            path: filePath,
+            b2FileId: uploadResult.fileId,
+            publicUrl: uploadResult.publicUrl,
         });
         return {
-            pdfPath: `/invoices/${filename}`,
+            pdfPath: uploadResult.publicUrl,
             pdfData: pdfBuffer,
             pdfName: filename,
+            b2FileId: uploadResult.fileId,
         };
     }
     catch (error) {
-        logger_1.logger.error('Failed to save PDF to storage', {
+        logger_1.logger.error('Failed to save PDF to B2 storage', {
             error: error instanceof Error ? error.message : 'Unknown error',
             filename,
         });
-        throw new Error('Failed to save PDF invoice');
+        throw new Error('Failed to save PDF invoice to cloud storage');
+    }
+}
+async function downloadPDFFromStorage(fileName) {
+    try {
+        const b2FileName = fileName.startsWith('invoices/') ? fileName : `invoices/${fileName}`;
+        const pdfBuffer = await (0, b2_storage_1.downloadFromB2)(b2FileName);
+        logger_1.logger.info('PDF downloaded from B2 storage', {
+            fileName: b2FileName,
+            size: pdfBuffer.length,
+        });
+        return pdfBuffer;
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to download PDF from B2 storage', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            fileName,
+        });
+        throw new Error('Failed to download PDF from cloud storage');
+    }
+}
+async function getPDFDownloadUrl(fileName) {
+    try {
+        const b2FileName = fileName.startsWith('invoices/') ? fileName : `invoices/${fileName}`;
+        if ((0, b2_storage_1.isPrivateBucket)()) {
+            return await (0, b2_storage_1.getSignedDownloadUrl)(b2FileName, 3600);
+        }
+        const bucketName = process.env['B2_BUCKET_NAME'];
+        if (!bucketName) {
+            throw new Error('B2_BUCKET_NAME not configured');
+        }
+        return `https://f000.backblazeb2.com/file/${bucketName}/${b2FileName}`;
+    }
+    catch (error) {
+        logger_1.logger.error('Failed to get PDF download URL', {
+            error: error instanceof Error ? error.message : 'Unknown error',
+            fileName,
+        });
+        throw new Error('Failed to get PDF download URL');
     }
 }
 async function cleanupOldInvoices(daysOld = 30) {
     try {
-        const invoicesDir = path_1.default.join(process.cwd(), 'public', 'invoices');
-        const files = await promises_1.default.readdir(invoicesDir);
+        if (!(0, b2_storage_1.isB2Configured)()) {
+            logger_1.logger.warn('B2 not configured, skipping cleanup');
+            return;
+        }
         const cutoffDate = new Date();
         cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+        const cutoffTimestamp = cutoffDate.getTime();
+        const files = await (0, b2_storage_1.listFilesInB2)('invoices/');
         let deletedCount = 0;
         for (const file of files) {
-            const filePath = path_1.default.join(invoicesDir, file);
-            const stats = await promises_1.default.stat(filePath);
-            if (stats.mtime < cutoffDate) {
-                await promises_1.default.unlink(filePath);
+            if (file.uploadTimestamp < cutoffTimestamp) {
+                await (0, b2_storage_1.deleteFromB2)(file.fileId, file.fileName);
                 deletedCount++;
             }
         }
-        logger_1.logger.info('Old invoices cleaned up', {
+        logger_1.logger.info('Old invoices cleaned up from B2', {
             deletedCount,
             daysOld,
+            totalFiles: files.length,
         });
     }
     catch (error) {
-        logger_1.logger.error('Failed to cleanup old invoices', {
+        logger_1.logger.error('Failed to cleanup old invoices from B2', {
             error: error instanceof Error ? error.message : 'Unknown error',
             daysOld,
         });

@@ -67,7 +67,15 @@ const extractSlugFromPath = (req: Request): string | null => {
   if (paramSlug) return paramSlug.toLowerCase();
 
   const url = req.originalUrl || req.url || '';
-  const match = /\/r\/([^\/?#]+)(\/|$)/i.exec(url);
+
+  // Match /api/restaurants/:id/... pattern (used by app.use() routes where params aren't populated yet)
+  const restaurantsPathMatch = /\/api\/restaurants\/([^\/\?#]+)(\/|$)/i.exec(url);
+  if (restaurantsPathMatch && restaurantsPathMatch[1]) {
+    return restaurantsPathMatch[1].toLowerCase();
+  }
+
+  // Match /r/:slug/... pattern
+  const match = /\/r\/([^/?#]+)(\/|$)/i.exec(url);
   if (match && match[1]) return match[1].toLowerCase();
 
   return null;

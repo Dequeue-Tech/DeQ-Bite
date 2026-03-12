@@ -105,9 +105,11 @@ app.get('/', (_req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
-app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/platform', platformRoutes);
 
+// Tenant-scoped routes — accessible via:
+//   /api/:restaurantSlug/<resource>   (slug-based)
+//   /api/restaurants/:restaurantId/<resource>   (ID-based, params populated via URL extraction in attachRestaurant)
 const tenantRouter = express.Router({ mergeParams: true });
 tenantRouter.use('/payments', paymentRoutes);
 tenantRouter.use('/invoices', invoiceRoutes);
@@ -121,16 +123,10 @@ tenantRouter.use('/restaurants', restaurantRoutes);
 tenantRouter.use('/offers', offerRoutes);
 tenantRouter.use('/', realtimeRoutes);
 
+// More-specific path MUST come before the generic /api/restaurants listing
+app.use('/api/restaurants/:restaurantId', tenantRouter);
+app.use('/api/restaurants', restaurantRoutes);
 app.use('/api/:restaurantSlug', tenantRouter);
-
-app.use('/api/restaurants/:restaurantId/payments', attachRestaurant, paymentRoutes);
-app.use('/api/restaurants/:restaurantId/invoices', attachRestaurant, invoiceRoutes);
-app.use('/api/restaurants/:restaurantId/pdf', attachRestaurant, pdfRoutes);
-app.use('/api/restaurants/:restaurantId/menu', attachRestaurant, menuRoutes);
-app.use('/api/restaurants/:restaurantId/categories', attachRestaurant, categoryRoutes);
-app.use('/api/restaurants/:restaurantId/tables', attachRestaurant, tableRoutes);
-app.use('/api/restaurants/:restaurantId/orders', attachRestaurant, orderRoutes);
-app.use('/api/restaurants/:restaurantId/coupons', attachRestaurant, couponRoutes);
 
 app.use('/invoices', express.static('public/invoices'));
 

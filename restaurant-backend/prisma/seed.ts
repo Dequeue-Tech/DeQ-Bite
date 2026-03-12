@@ -201,6 +201,45 @@ async function main() {
     }
   }
 
+  const popularDishNames = [
+    { name: 'Butter Chicken', rank: 1 },
+    { name: 'Paneer Tikka', rank: 2 },
+    { name: 'Vegetable Biryani', rank: 3 },
+    { name: 'Gulab Jamun', rank: 4 },
+    { name: 'Masala Chai', rank: 5 },
+  ];
+
+  const menuItems = await prisma.menuItem.findMany({
+    where: { restaurantId: restaurant.id },
+    select: { id: true, name: true },
+  });
+
+  const menuItemIdByName = new Map(menuItems.map((m) => [m.name, m.id]));
+
+  for (const popular of popularDishNames) {
+    const menuItemId = menuItemIdByName.get(popular.name);
+    if (!menuItemId) continue;
+
+    await prisma.popularDish.upsert({
+      where: {
+        restaurantId_menuItemId: {
+          restaurantId: restaurant.id,
+          menuItemId,
+        },
+      },
+      update: {
+        rank: popular.rank,
+        active: true,
+      },
+      create: {
+        restaurantId: restaurant.id,
+        menuItemId,
+        rank: popular.rank,
+        active: true,
+      },
+    });
+  }
+
   for (const table of sampleTables) {
     await prisma.table.upsert({
       where: {

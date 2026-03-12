@@ -292,8 +292,8 @@ class ApiClient {
     const selectedSlug = this.getSelectedRestaurantSlug();
     if (selectedSlug) return selectedSlug.toLowerCase();
 
-    const devSlug = process.env.NEXT_PUBLIC_DEV_RESTAURANT_SLUG || process.env.NEXT_PUBLIC_DEV_SUBDOMAIN;
-    if (devSlug) return devSlug.toLowerCase();
+    // const devSlug = process.env.NEXT_PUBLIC_DEV_RESTAURANT_SLUG || process.env.NEXT_PUBLIC_DEV_SUBDOMAIN;
+    // if (devSlug) return devSlug.toLowerCase();
 
     return null;
   }

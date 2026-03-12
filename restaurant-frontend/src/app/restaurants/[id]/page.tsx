@@ -36,8 +36,8 @@ export default function RestaurantLandingPage() {
   const selectAndOpen = () => {
     const slugValue = restaurant?.slug || restaurant?.subdomain || restaurant?.id;
     if (!slugValue) return;
-    apiClient.setSelectedRestaurantSlug(slugValue);
-    toast.success(`${restaurant.name} selected`);
+    // apiClient.setSelectedRestaurantSlug(slugValue);
+    // toast.success(`${restaurant.name} selected`);
     router.push(`/${slugValue}/menu`);
   };
 

@@ -193,6 +193,23 @@ export interface OrderItem {
 
 class ApiClient {
   private api: AxiosInstance;
+  private blockedRootSegments = new Set([
+    '',
+    'auth',
+    'onboarding',
+    'restaurants',
+    'admin',
+    'central-admin',
+    'cart',
+    'checkout',
+    'kitchen',
+    'menu',
+    'orders',
+    'pos',
+    'api',
+    '_next',
+    'favicon.ico',
+  ]);
 
   constructor() {
     this.api = axios.create({
@@ -266,6 +283,7 @@ class ApiClient {
   setSelectedRestaurantSlug(slug: string): void {
     if (typeof window !== 'undefined') {
       localStorage.setItem('selected_restaurant_slug', slug.toLowerCase());
+      window.dispatchEvent(new Event('restaurant-context-updated'));
     }
   }
 
@@ -276,11 +294,33 @@ class ApiClient {
     return null;
   }
 
+  setSelectedTableNumber(tableNumber: string | number): void {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('selected_table_number', String(tableNumber));
+      window.dispatchEvent(new Event('restaurant-context-updated'));
+    }
+  }
+
+  getSelectedTableNumber(): string | null {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('selected_table_number');
+    }
+    return null;
+  }
+
+  clearSelectedTableNumber(): void {
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('selected_table_number');
+      window.dispatchEvent(new Event('restaurant-context-updated'));
+    }
+  }
+
   private getRestaurantSlugFromPath(): string | null {
     if (typeof window === 'undefined') return null;
-    const match = /^\/r\/([^\/?#]+)/i.exec(window.location.pathname);
-    if (!match || !match[1]) return null;
-    return match[1].toLowerCase();
+    const first = window.location.pathname.split('/').filter(Boolean)[0] || '';
+    if (!first || this.blockedRootSegments.has(first)) return null;
+    if (first.includes('.')) return null;
+    return first.toLowerCase();
   }
 
   private getRestaurantSlug(): string | null {

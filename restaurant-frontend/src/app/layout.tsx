@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from 'next'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
+import RestaurantContextSync from '@/components/RestaurantContextSync'
 
 export const metadata: Metadata = {
   title: 'Restaurant Online Ordering',
@@ -29,6 +30,7 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <div id="root" className="min-h-screen flex flex-col">
+          <RestaurantContextSync />
           <Navbar />
           <main className="flex-1 pb-20 md:pb-0">
             {children}

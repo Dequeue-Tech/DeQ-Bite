@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
+import { apiClient } from '@/lib/api-client';
 
 // Exporting the type so your page.tsx can use it too
 export type RestaurantListItem = {
@@ -32,9 +33,8 @@ export default function SearchableRestaurantList({
   const selectAndOpen = (restaurant: RestaurantListItem) => {
     const slug = restaurant?.slug;
     if (!slug) return;
-    try {
-      localStorage.setItem('selectedRestaurantSlug', slug);
-    } catch {}
+    apiClient.setSelectedRestaurantSlug(slug);
+    apiClient.clearSelectedTableNumber();
     toast.success(`${restaurant.name} selected`);
     router.push(`/${slug}`);
   };

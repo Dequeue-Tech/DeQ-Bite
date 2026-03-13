@@ -26,6 +26,8 @@ function CheckoutPageContent() {
   const payNow = searchParams.get('payNow') === '1';
 
   const [selectedTable, setSelectedTable] = useState('');
+  const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(null);
+  const [isTableLocked, setIsTableLocked] = useState(false);
   const [specialInstructions, setSpecialInstructions] = useState('');
   const [customerInfo, setCustomerInfo] = useState({ name: '', email: '', phone: '' });
   const [tables, setTables] = useState<Table[]>([]);
@@ -68,6 +70,14 @@ function CheckoutPageContent() {
       preloadExistingOrderForPayment(requestedOrderId);
     }
   }, [isAuthenticated, cartItems.length, user, router, step, requestedOrderId, payNow]);
+
+  useEffect(() => {
+    const storedTableNumber = apiClient.getSelectedTableNumber();
+    if (storedTableNumber) {
+      setSelectedTableNumber(storedTableNumber);
+      setIsTableLocked(true);
+    }
+  }, []);
 
   const preloadExistingOrderForPayment = async (orderId: string) => {
     try {
@@ -122,6 +132,19 @@ function CheckoutPageContent() {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (!selectedTableNumber || selectedTable || tables.length === 0) return;
+    const match = tables.find((table) => String(table.number) === String(selectedTableNumber));
+    if (match) {
+      setSelectedTable(match.id);
+      return;
+    }
+    // If the stored table is not available, unlock selection so the user can choose.
+    setIsTableLocked(false);
+    apiClient.clearSelectedTableNumber();
+    setSelectedTableNumber(null);
+  }, [tables, selectedTableNumber, selectedTable]);
 
   const fetchPaymentProviders = async () => {
     try {
@@ -382,7 +405,29 @@ function CheckoutPageContent() {
                     <MapPin className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
                     Select Your Table
                   </h2>
-                  {loading ? (
+                  {isTableLocked ? (
+                    <div className="flex items-center justify-between rounded-lg border border-orange-200 bg-orange-50 px-4 py-3 text-sm">
+                      <div>
+                        <div className="font-semibold text-orange-800">
+                          Table {selectedTableInfo?.number || selectedTableNumber}
+                        </div>
+                        <div className="text-orange-700 text-xs">
+                          {selectedTableInfo?.location || 'Selected from QR'}
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setIsTableLocked(false);
+                          apiClient.clearSelectedTableNumber();
+                          setSelectedTableNumber(null);
+                        }}
+                        className="text-orange-700 text-xs font-semibold hover:text-orange-800"
+                      >
+                        Change table
+                      </button>
+                    </div>
+                  ) : loading ? (
                     <div className="py-4 text-sm">Loading tables...</div>
                   ) : tablesError ? (
                     <div className="py-4 text-sm text-red-600">{tablesError}</div>
@@ -392,7 +437,10 @@ function CheckoutPageContent() {
                         <div
                           key={table.id}
                           className={`border-2 rounded-lg p-3 sm:p-4 cursor-pointer ${selectedTable === table.id ? 'border-orange-500 bg-orange-50' : 'border-gray-200'}`}
-                          onClick={() => setSelectedTable(table.id)}
+                          onClick={() => {
+                            setSelectedTable(table.id);
+                            apiClient.setSelectedTableNumber(table.number);
+                          }}
                         >
                           <h3 className="font-semibold text-base sm:text-lg">Table {table.number}</h3>
                           <p className="text-gray-600 text-xs sm:text-sm">{table.location || 'No location'}</p>

@@ -17,6 +17,8 @@ const Navbar = () => {
   const canAccessAdmin = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
   const canAccessKitchen = canAccessAdmin || user?.restaurantRole === 'STAFF';
   const [showUserDropdown, setShowUserDropdown] = useState(false);
+  const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState<string | null>(null);
+  const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated && user && typeof user.restaurantRole === 'undefined') {
@@ -24,13 +26,26 @@ const Navbar = () => {
     }
   }, [isAuthenticated, user, getProfile]);
 
+  useEffect(() => {
+    const refreshContext = () => {
+      setSelectedRestaurantSlug(apiClient.getSelectedRestaurantSlug());
+      setSelectedTableNumber(apiClient.getSelectedTableNumber());
+    };
+    refreshContext();
+    window.addEventListener('restaurant-context-updated', refreshContext);
+    window.addEventListener('storage', refreshContext);
+    return () => {
+      window.removeEventListener('restaurant-context-updated', refreshContext);
+      window.removeEventListener('storage', refreshContext);
+    };
+  }, [pathname]);
+
   const handleLogout = () => {
     logout();
     setShowUserDropdown(false);
     router.push('/auth/signin');
   };
 
-  const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
   const activeRestaurantSlug = apiClient.getActiveRestaurantSlug();
   const withRestaurant = (path: string) => {
     if (!activeRestaurantSlug) return path;
@@ -39,7 +54,7 @@ const Navbar = () => {
 
   // Desktop navigation links
   const desktopNavLinks = [
-    { name: 'Home', href: `/${selectedRestaurantSlug}` },
+    { name: 'Home', href: selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/' },
     { name: 'Menu', href: withRestaurant('/menu') },
     ...(isAuthenticated ? [
       { name: 'Orders', href: withRestaurant('/orders') },
@@ -51,7 +66,7 @@ const Navbar = () => {
 
   // Mobile bottom navigation links (max 4 items, profile is in top nav)
   const mobileNavLinks = [
-    { name: 'Home', href: `/${selectedRestaurantSlug}`, icon: Home },
+    { name: 'Home', href: selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/', icon: Home },
     { name: 'Menu', href: withRestaurant('/menu'), icon: UtensilsCrossed },
     ...(isAuthenticated ? [
       { name: 'Orders', href: withRestaurant('/orders'), icon: ClipboardList },
@@ -75,6 +90,11 @@ const Navbar = () => {
                 {selectedRestaurantSlug && (
                   <span className="hidden sm:inline ml-1.5 sm:ml-2 text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-orange-100 text-orange-700 truncate max-w-[80px] sm:max-w-[120px]">
                     @{selectedRestaurantSlug}
+                  </span>
+                )}
+                {selectedTableNumber && (
+                  <span className="hidden sm:inline ml-1.5 sm:ml-2 text-xs px-1.5 sm:px-2 py-0.5 sm:py-1 rounded bg-blue-100 text-blue-700 truncate max-w-[80px] sm:max-w-[120px]">
+                    @table-{selectedTableNumber}
                   </span>
                 )}
               </Link>

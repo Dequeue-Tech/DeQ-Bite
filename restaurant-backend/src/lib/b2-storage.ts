@@ -77,7 +77,7 @@ export async function uploadToB2(
   fileBuffer: Buffer,
   fileName: string,
   _contentType: string = 'application/pdf'
-): Promise<{ fileId: string; fileName: string; publicUrl: string }> {
+): Promise<{ fileId: string; fileName: string; publicUrl: string | null }> {
   try {
     await authenticateB2();
     const b2 = getB2Client();
@@ -98,13 +98,15 @@ export async function uploadToB2(
 
     const { fileId, fileName: uploadedFileName } = uploadResponse.data;
 
-    // Generate public URL
-    const publicUrl = generatePublicUrl(fileName);
+    // Generate URL — for private buckets, return null (access via API proxy only)
+    // For public buckets, return the direct B2 URL
+    const publicUrl = isPrivateBucket() ? null : generatePublicUrl(fileName);
 
     logger.info('File uploaded to B2 successfully', {
       fileId,
       fileName: uploadedFileName,
       size: fileBuffer.length,
+      private: isPrivateBucket(),
     });
 
     return {

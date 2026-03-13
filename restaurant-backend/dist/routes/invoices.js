@@ -25,6 +25,17 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             paymentStatus: 'COMPLETED',
         },
         include: {
+            restaurant: {
+                select: {
+                    name: true,
+                    address: true,
+                    city: true,
+                    state: true,
+                    phone: true,
+                    email: true,
+                    gstNumber: true,
+                },
+            },
             user: {
                 select: {
                     name: true,
@@ -88,10 +99,21 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
         }
         const invoiceNumber = invoice?.invoiceNumber ||
             `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+        const taxPercent = order.subtotalPaise > 0
+            ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
+            : undefined;
         const invoiceData = {
+            restaurantName: order.restaurant.name,
+            ...(order.restaurant.address ? { restaurantAddress: order.restaurant.address } : {}),
+            ...(order.restaurant.city ? { restaurantCity: order.restaurant.city } : {}),
+            ...(order.restaurant.state ? { restaurantState: order.restaurant.state } : {}),
+            ...(order.restaurant.phone ? { restaurantPhone: order.restaurant.phone } : {}),
+            ...(order.restaurant.email ? { restaurantEmail: order.restaurant.email } : {}),
+            ...(order.restaurant.gstNumber ? { gstNumber: order.restaurant.gstNumber } : {}),
+            ...(taxPercent !== undefined ? { taxPercent } : {}),
             customerName: order.user.name,
             customerEmail: order.user.email,
-            customerPhone: order.user.phone || '',
+            ...(order.user.phone ? { customerPhone: order.user.phone } : {}),
             invoiceNumber,
             orderDate: order.createdAt.toLocaleDateString('en-IN'),
             items: order.items.map((item) => ({
@@ -104,10 +126,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             tax: order.taxPaise / 100,
             total: order.totalPaise / 100,
             tableNumber: order.table.number,
-            restaurantName: process.env.APP_NAME || 'Restaurant',
-            restaurantAddress: 'Your Restaurant Address Here',
-            restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-            paymentMethod: `Online Payment (${order.paymentProvider || 'RAZORPAY'})`,
+            paymentMethod: `${order.paymentProvider || 'RAZORPAY'}`,
         };
         const pdfBuffer = (0, pdf_1.generateInvoicePDF)(invoiceData);
         const pdfFileName = `invoice-${invoiceNumber}.pdf`;
@@ -304,6 +323,17 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
                             number: true,
                         },
                     },
+                    restaurant: {
+                        select: {
+                            name: true,
+                            address: true,
+                            city: true,
+                            state: true,
+                            phone: true,
+                            email: true,
+                            gstNumber: true,
+                        },
+                    },
                 },
             },
         },
@@ -316,23 +346,33 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             emailSent: false,
             smsSent: false,
         };
+        const resendRestaurantName = invoice.order.restaurant?.name ?? 'Restaurant';
         const invoiceData = {
             customerName: invoice.order.user.name,
             invoiceNumber: invoice.invoiceNumber,
             orderDate: invoice.order.createdAt.toLocaleDateString('en-IN'),
             total: invoice.order.totalPaise / 100,
             tableNumber: invoice.order.table.number,
-            restaurantName: process.env.APP_NAME || 'Restaurant',
+            restaurantName: resendRestaurantName,
         };
         const deliveryMethods = methods || [];
         if (deliveryMethods.includes('EMAIL') && invoice.order.user.email) {
+            const resendTaxPercent = invoice.order.subtotalPaise > 0
+                ? Math.round((invoice.order.taxPaise / invoice.order.subtotalPaise) * 100)
+                : undefined;
             const pdfBuffer = (0, pdf_1.generateInvoicePDF)({
+                ...(invoice.order.restaurant?.address ? { restaurantAddress: invoice.order.restaurant.address } : {}),
+                ...(invoice.order.restaurant?.city ? { restaurantCity: invoice.order.restaurant.city } : {}),
+                ...(invoice.order.restaurant?.state ? { restaurantState: invoice.order.restaurant.state } : {}),
+                ...(invoice.order.restaurant?.phone ? { restaurantPhone: invoice.order.restaurant.phone } : {}),
+                ...(invoice.order.restaurant?.gstNumber ? { gstNumber: invoice.order.restaurant.gstNumber } : {}),
+                ...(resendTaxPercent !== undefined ? { taxPercent: resendTaxPercent } : {}),
                 ...invoiceData,
                 items: [],
                 subtotal: invoice.order.subtotalPaise / 100,
                 tax: invoice.order.taxPaise / 100,
                 customerEmail: invoice.order.user.email,
-                customerPhone: invoice.order.user.phone || '',
+                ...(invoice.order.user.phone ? { customerPhone: invoice.order.user.phone } : {}),
             });
             results.emailSent = await (0, email_1.sendInvoiceEmail)(invoice.order.user.email, invoiceData, pdfBuffer);
         }
@@ -393,6 +433,12 @@ router.post('/:invoiceOrOrderId/refresh-pdf', auth_1.authenticate, restaurant_1.
                     items: { include: { menuItem: { select: { name: true, pricePaise: true } } } },
                     table: true,
                     user: true,
+                    restaurant: {
+                        select: {
+                            name: true, address: true, city: true,
+                            state: true, phone: true, email: true, gstNumber: true,
+                        },
+                    },
                 },
             },
         },
@@ -409,6 +455,12 @@ router.post('/:invoiceOrOrderId/refresh-pdf', auth_1.authenticate, restaurant_1.
                 items: { include: { menuItem: { select: { name: true, pricePaise: true } } } },
                 table: true,
                 user: true,
+                restaurant: {
+                    select: {
+                        name: true, address: true, city: true,
+                        state: true, phone: true, email: true, gstNumber: true,
+                    },
+                },
             },
         });
         if (!order) {
@@ -417,16 +469,41 @@ router.post('/:invoiceOrOrderId/refresh-pdf', auth_1.authenticate, restaurant_1.
         const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
         invoice = await database_1.prisma.invoice.create({
             data: { orderId: order.id, invoiceNumber },
-            include: { order: { include: { items: { include: { menuItem: { select: { name: true, pricePaise: true } } } }, table: true, user: true } } },
+            include: {
+                order: {
+                    include: {
+                        items: { include: { menuItem: { select: { name: true, pricePaise: true } } } },
+                        table: true,
+                        user: true,
+                        restaurant: {
+                            select: {
+                                name: true, address: true, city: true,
+                                state: true, phone: true, email: true, gstNumber: true,
+                            },
+                        },
+                    },
+                },
+            },
         });
     }
     const order = invoice.order;
     if (!order)
         throw new errorHandler_1.AppError('Order not found for invoice', 404);
+    const rfTaxPercent = order.subtotalPaise > 0
+        ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
+        : undefined;
     const invoiceData = {
+        restaurantName: order.restaurant?.name ?? 'Restaurant',
+        ...(order.restaurant?.address ? { restaurantAddress: order.restaurant.address } : {}),
+        ...(order.restaurant?.city ? { restaurantCity: order.restaurant.city } : {}),
+        ...(order.restaurant?.state ? { restaurantState: order.restaurant.state } : {}),
+        ...(order.restaurant?.phone ? { restaurantPhone: order.restaurant.phone } : {}),
+        ...(order.restaurant?.email ? { restaurantEmail: order.restaurant.email } : {}),
+        ...(order.restaurant?.gstNumber ? { gstNumber: order.restaurant.gstNumber } : {}),
+        ...(rfTaxPercent !== undefined ? { taxPercent: rfTaxPercent } : {}),
         customerName: order.user?.name || '',
         customerEmail: order.user?.email || '',
-        customerPhone: order.user?.phone || '',
+        ...(order.user?.phone ? { customerPhone: order.user.phone } : {}),
         invoiceNumber: invoice.invoiceNumber,
         orderDate: order.createdAt.toLocaleDateString('en-IN'),
         items: (order.items || []).map((it) => ({
@@ -439,10 +516,7 @@ router.post('/:invoiceOrOrderId/refresh-pdf', auth_1.authenticate, restaurant_1.
         tax: order.taxPaise / 100,
         total: order.totalPaise / 100,
         tableNumber: order.table?.number || 0,
-        restaurantName: process.env.APP_NAME || 'Restaurant',
-        restaurantAddress: 'Your Restaurant Address Here',
-        restaurantPhone: process.env.TWILIO_PHONE_NUMBER,
-        paymentMethod: `Online Payment (${order.paymentProvider || 'RAZORPAY'})`,
+        paymentMethod: `${order.paymentProvider || 'RAZORPAY'}`,
     };
     const pdfBuffer = (0, pdf_1.generateInvoicePDF)(invoiceData);
     const pdfFileName = `invoice-${invoice.invoiceNumber}.pdf`;

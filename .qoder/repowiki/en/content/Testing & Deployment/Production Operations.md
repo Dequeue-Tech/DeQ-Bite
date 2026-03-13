@@ -11,12 +11,22 @@
 - [razorpay.ts](file://restaurant-backend/src/lib/razorpay.ts)
 - [index.ts](file://restaurant-backend/src/lib/payments/index.ts)
 - [realtime.ts](file://restaurant-backend/src/utils/realtime.ts)
-- [realtime-route.ts](file://restaurant-backend/src/routers/realtime.ts)
+- [realtime-route.ts](file://restaurant-backend/src/routes/realtime.ts)
 - [auth.ts](file://restaurant-backend/src/middleware/auth.ts)
 - [package.json](file://restaurant-backend/package.json)
 - [render.yaml](file://restaurant-backend/render.yaml)
 - [vercel.json](file://restaurant-backend/vercel.json)
+- [app.ts](file://restaurant-backend/src/app.ts)
+- [server.ts](file://restaurant-backend/src/server.ts)
+- [index.js](file://restaurant-backend/api/index.js)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced API entry point error handling with improved database connection management
+- Strengthened error logging patterns with better context capture
+- Improved database connection lifecycle management for both server and serverless deployments
+- Added comprehensive error handling for cold start scenarios in Vercel serverless environment
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -31,7 +41,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides production operations guidance for DeQ-Bite’s live system. It covers monitoring and logging, error handling and exception management, audit trails, database operations, real-time monitoring, scaling and peak load handling, security operations, runbooks, and disaster recovery. The content is grounded in the repository’s backend implementation and deployment configurations.
+This document provides production operations guidance for DeQ-Bite's live system. It covers monitoring and logging, error handling and exception management, audit trails, database operations, real-time monitoring, scaling and peak load handling, security operations, runbooks, and disaster recovery. The content is grounded in the repository's backend implementation and deployment configurations.
 
 ## Project Structure
 The backend is a Node.js/Express application with TypeScript, Prisma ORM, and payment integrations. Key operational areas include:
@@ -74,7 +84,7 @@ MW2 -. handles errors .-> S
 - [index.ts:1-124](file://restaurant-backend/src/lib/payments/index.ts#L1-L124)
 - [razorpay.ts:1-219](file://restaurant-backend/src/lib/razorpay.ts#L1-L219)
 - [realtime.ts:1-23](file://restaurant-backend/src/utils/realtime.ts#L1-L23)
-- [realtime-route.ts:1-40](file://restaurant-backend/src/routers/realtime.ts#L1-L40)
+- [realtime-route.ts:1-40](file://restaurant-backend/src/routes/realtime.ts#L1-L40)
 - [database.ts:1-66](file://restaurant-backend/src/config/database.ts#L1-L66)
 - [schema.prisma:313-324](file://restaurant-backend/prisma/schema.prisma#L313-L324)
 
@@ -83,7 +93,7 @@ MW2 -. handles errors .-> S
 - [index.ts:1-124](file://restaurant-backend/src/lib/payments/index.ts#L1-L124)
 - [razorpay.ts:1-219](file://restaurant-backend/src/lib/razorpay.ts#L1-L219)
 - [realtime.ts:1-23](file://restaurant-backend/src/utils/realtime.ts#L1-L23)
-- [realtime-route.ts:1-40](file://restaurant-backend/src/routers/realtime.ts#L1-L40)
+- [realtime-route.ts:1-40](file://restaurant-backend/src/routes/realtime.ts#L1-L40)
 - [database.ts:1-66](file://restaurant-backend/src/config/database.ts#L1-L66)
 - [schema.prisma:313-324](file://restaurant-backend/prisma/schema.prisma#L313-L324)
 
@@ -102,7 +112,7 @@ MW2 -. handles errors .-> S
 - [index.ts:1-124](file://restaurant-backend/src/lib/payments/index.ts#L1-L124)
 - [razorpay.ts:1-219](file://restaurant-backend/src/lib/razorpay.ts#L1-L219)
 - [realtime.ts:1-23](file://restaurant-backend/src/utils/realtime.ts#L1-L23)
-- [realtime-route.ts:1-40](file://restaurant-backend/src/routers/realtime.ts#L1-L40)
+- [realtime-route.ts:1-40](file://restaurant-backend/src/routes/realtime.ts#L1-L40)
 - [database.ts:1-66](file://restaurant-backend/src/config/database.ts#L1-L66)
 
 ## Architecture Overview
@@ -178,6 +188,47 @@ Send --> End(["Exit"])
 **Section sources**
 - [errorHandler.ts:1-82](file://restaurant-backend/src/middleware/errorHandler.ts#L1-L82)
 
+### Enhanced API Entry Point Error Handling
+**Updated** Improved error handling patterns in API entry point with better logging and database connection management
+
+The API entry point now features enhanced error handling and database connection management designed to improve reliability in both server and serverless environments:
+
+- **Database Connection Management**: Implemented connection promise caching to prevent race conditions during cold starts and ensure consistent database connectivity across concurrent requests.
+- **Enhanced Error Logging**: Added comprehensive logging throughout the API entry point lifecycle including request processing, response handling, and error scenarios.
+- **Graceful Degradation**: Implemented fallback mechanisms for database connection failures with proper error responses and retry logic.
+- **Serverless Optimization**: Optimized for Vercel serverless deployment with proper module resolution and cold start handling.
+
+```mermaid
+sequenceDiagram
+participant Vercel as "Vercel Runtime"
+participant API as "API Entry Point"
+participant DB as "Database"
+participant App as "Express App"
+Vercel->>API : "Cold Start Request"
+API->>API : "Check dbConnectionPromise"
+API->>DB : "connectDatabase()"
+DB-->>API : "Connection Established"
+API->>App : "Return app(req, res)"
+App-->>Vercel : "Response"
+Vercel->>API : "Concurrent Request"
+API->>API : "Check dbConnectionPromise"
+API->>DB : "Use Existing Connection"
+DB-->>API : "Connection Available"
+API->>App : "Return app(req, res)"
+App-->>Vercel : "Response"
+Vercel->>API : "Request with DB Failure"
+API->>API : "Handle Connection Error"
+API-->>Vercel : "503 Database Unavailable"
+```
+
+**Diagram sources**
+- [index.js:36-55](file://restaurant-backend/api/index.js#L36-L55)
+- [server.ts:17-30](file://restaurant-backend/src/server.ts#L17-L30)
+
+**Section sources**
+- [index.js:1-56](file://restaurant-backend/api/index.js#L1-L56)
+- [server.ts:17-30](file://restaurant-backend/src/server.ts#L17-L30)
+
 ### Audit Trail Implementation
 - Audit log model supports actor, restaurant, action, entity, and metadata.
 - Safe writer tolerates missing tables (migration gap) and logs warnings instead of failing core flows.
@@ -243,11 +294,11 @@ SSE-->>Client : "ping keepalive"
 ```
 
 **Diagram sources**
-- [realtime-route.ts:9-37](file://restaurant-backend/src/routers/realtime.ts#L9-L37)
+- [realtime-route.ts:9-37](file://restaurant-backend/src/routes/realtime.ts#L9-L37)
 - [realtime.ts:12-22](file://restaurant-backend/src/utils/realtime.ts#L12-L22)
 
 **Section sources**
-- [realtime-route.ts:1-40](file://restaurant-backend/src/routers/realtime.ts#L1-L40)
+- [realtime-route.ts:1-40](file://restaurant-backend/src/routes/realtime.ts#L1-L40)
 - [realtime.ts:1-23](file://restaurant-backend/src/utils/realtime.ts#L1-L23)
 
 ### Security Operations
@@ -292,20 +343,32 @@ SSE-->>Client : "ping keepalive"
   - Multi-region deployments and failover routing.
   - Runbooks for DB failover and payment provider outages.
 
-[No sources needed since this section provides general guidance]
-
 ### Runbook Procedures
 - Common issues and remediation:
   - Payment signature mismatch: recheck shared secrets and request payloads; inspect logs around verification.
   - Missing audit table: apply migrations; safe writer will resume logging after schema availability.
   - Database connection failures: verify credentials and network; check Prisma logs and connection pool limits.
   - SSE client disconnects: ensure keep-alive pings and client reconnection logic.
+  - API entry point cold start failures: check database connection logs and verify connection promise initialization.
 - Emergency procedures:
   - Isolate failing payment provider by disabling it in environment variables.
   - Roll back recent schema changes if audit or order flows degrade.
   - Engage provider support channels for payment gateway incidents.
+  - Monitor API entry point error rates and implement circuit breaker patterns.
 
-[No sources needed since this section provides general guidance]
+### Enhanced API Entry Point Monitoring
+**Updated** Added comprehensive monitoring and logging for API entry point operations
+
+The API entry point now includes extensive monitoring capabilities to track performance and reliability:
+
+- **Connection Lifecycle Tracking**: Detailed logging of database connection establishment, reuse, and failure scenarios.
+- **Request Processing Metrics**: Comprehensive timing and status tracking for all incoming requests.
+- **Error Pattern Recognition**: Structured error logging with context information for faster troubleshooting.
+- **Serverless Cold Start Optimization**: Optimized module loading and connection management for Vercel serverless environment.
+
+**Section sources**
+- [index.js:36-55](file://restaurant-backend/api/index.js#L36-L55)
+- [server.ts:17-30](file://restaurant-backend/src/server.ts#L17-L30)
 
 ## Dependency Analysis
 The backend depends on Express, Prisma, Winston, and payment SDKs. Providers are pluggable, enabling future integrations.
@@ -347,8 +410,9 @@ G --> C
   - Cache provider public keys; measure provider latency and set timeouts.
 - Real-time:
   - Tune keep-alive intervals and handle client churn efficiently.
-
-[No sources needed since this section provides general guidance]
+- API Entry Point:
+  - Optimize connection pooling and reuse strategies for serverless environments.
+  - Monitor cold start performance and implement connection caching patterns.
 
 ## Troubleshooting Guide
 - Payment verification fails:
@@ -357,23 +421,32 @@ G --> C
   - Confirm migrations applied; safe writer logs warnings and continues.
 - SSE not updating:
   - Check client connectivity and server keep-alive; verify restaurant scope.
+- API entry point failures:
+  - Monitor database connection logs; check connection promise initialization.
+  - Verify Vercel module resolution and cold start timing.
+- Database connection issues:
+  - Check connection pool limits and timeout settings.
+  - Monitor Prisma client logs for connection errors.
 
 **Section sources**
 - [razorpay.ts:65-105](file://restaurant-backend/src/lib/razorpay.ts#L65-L105)
 - [audit.ts:8-15](file://restaurant-backend/src/utils/audit.ts#L8-L15)
-- [realtime-route.ts:32-36](file://restaurant-backend/src/routers/realtime.ts#L32-L36)
+- [realtime-route.ts:32-36](file://restaurant-backend/src/routes/realtime.ts#L32-L36)
+- [index.js:36-55](file://restaurant-backend/api/index.js#L36-L55)
 
 ## Conclusion
-DeQ-Bite’s backend includes robust logging, error handling, audit logging, and payment security. Operational excellence requires centralizing logs, enforcing strict secrets management, automating migrations, and establishing clear runbooks for scaling and DR. The modular provider abstraction and SSE streaming enable extensibility and real-time observability.
-
-[No sources needed since this section summarizes without analyzing specific files]
+DeQ-Bite's backend includes robust logging, error handling, audit logging, and payment security. Recent enhancements to the API entry point provide improved error handling patterns with better logging and database connection management, particularly beneficial for serverless deployments. Operational excellence requires centralizing logs, enforcing strict secrets management, automating migrations, and establishing clear runbooks for scaling and DR. The modular provider abstraction and SSE streaming enable extensibility and real-time observability.
 
 ## Appendices
 - Environment variables to review:
   - JWT_SECRET, DATABASE_URL, DIRECT_DATABASE_URL, LOG_LEVEL, NODE_ENV, RAZORPAY_* and PAYMENT_* keys.
 - Deployment targets:
   - Render web service and Vercel Node runtime routes.
+- API Entry Point Monitoring:
+  - Monitor database connection lifecycle and cold start performance.
+  - Track request processing metrics and error patterns.
 
 **Section sources**
 - [render.yaml:7-12](file://restaurant-backend/render.yaml#L7-L12)
 - [vercel.json:1-12](file://restaurant-backend/vercel.json#L1-L12)
+- [index.js:36-55](file://restaurant-backend/api/index.js#L36-L55)

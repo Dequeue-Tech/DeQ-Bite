@@ -1,7 +1,7 @@
 export declare function uploadToB2(fileBuffer: Buffer, fileName: string, _contentType?: string): Promise<{
     fileId: string;
     fileName: string;
-    publicUrl: string;
+    publicUrl: string | null;
 }>;
 export declare function downloadFromB2(fileName: string): Promise<Buffer>;
 export declare function deleteFromB2(fileId: string, fileName: string): Promise<void>;

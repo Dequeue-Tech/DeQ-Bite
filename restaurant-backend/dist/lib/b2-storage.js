@@ -68,11 +68,12 @@ async function uploadToB2(fileBuffer, fileName, _contentType = 'application/pdf'
             data: fileBuffer,
         });
         const { fileId, fileName: uploadedFileName } = uploadResponse.data;
-        const publicUrl = generatePublicUrl(fileName);
+        const publicUrl = isPrivateBucket() ? null : generatePublicUrl(fileName);
         logger_1.logger.info('File uploaded to B2 successfully', {
             fileId,
             fileName: uploadedFileName,
             size: fileBuffer.length,
+            private: isPrivateBucket(),
         });
         return {
             fileId,

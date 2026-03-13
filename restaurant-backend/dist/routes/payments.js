@@ -7,8 +7,10 @@ const auth_1 = require("../middleware/auth");
 const errorHandler_1 = require("../middleware/errorHandler");
 const payments_1 = require("../lib/payments");
 const logger_1 = require("../utils/logger");
+const audit_1 = require("../utils/audit");
 const pdf_1 = require("../lib/pdf");
 const restaurant_1 = require("../middleware/restaurant");
+const realtime_1 = require("../utils/realtime");
 const router = (0, express_1.Router)();
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
@@ -145,6 +147,17 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
         });
     }
 };
+const buildOrderEventPayload = (order) => ({
+    id: order.id,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentProvider: order.paymentProvider,
+    paidAmountPaise: order.paidAmountPaise,
+    dueAmountPaise: order.dueAmountPaise,
+    totalPaise: order.totalPaise,
+    updatedAt: order.updatedAt,
+    createdAt: order.createdAt,
+});
 router.get('/providers', restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const providers = [
         ...(0, payments_1.getEnabledProviders)(),
@@ -271,7 +284,7 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
     const amountPaidNow = order.dueAmountPaise || Math.max(order.totalPaise - order.paidAmountPaise, 0);
     const nextPaid = order.paidAmountPaise + amountPaidNow;
     const computed = computeDueAndStatus(order.totalPaise, nextPaid);
-    const [, , updatedOrder] = await database_1.prisma.$transaction([
+    const [, updatedOrder] = await database_1.prisma.$transaction([
         database_1.prisma.order.update({
             where: { id: order.id },
             data: {
@@ -315,23 +328,25 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                 providerSignature: razorpay_signature,
             },
         }),
-        database_1.prisma.auditLog.create({
-            data: {
-                actorUserId: req.user.id,
-                restaurantId: order.restaurantId,
-                action: 'PAYMENT_VERIFIED',
-                entityType: 'order',
-                entityId: order.id,
-                metadata: {
-                    amountPaidNow,
-                    paymentStatus: computed.paymentStatus,
-                    dueAmountPaise: computed.dueAmountPaise,
-                    providerPaymentId: razorpay_payment_id,
-                },
-            },
-        }),
     ]);
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: order.restaurantId,
+        action: 'PAYMENT_VERIFIED',
+        entityType: 'order',
+        entityId: order.id,
+        metadata: {
+            amountPaidNow,
+            paymentStatus: computed.paymentStatus,
+            dueAmountPaise: computed.dueAmountPaise,
+            providerPaymentId: razorpay_payment_id,
+        },
+    });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+    (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+        type: 'order.updated',
+        payload: buildOrderEventPayload(updatedOrder),
+    });
     const response = {
         success: true,
         message: computed.paymentStatus === 'COMPLETED' ? 'Payment verified successfully' : 'Partial payment verified successfully',
@@ -389,21 +404,33 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
                 notes: reason || 'Refund',
             },
         }),
-        database_1.prisma.auditLog.create({
-            data: {
-                actorUserId: req.user.id,
-                restaurantId: order.restaurantId,
-                action: 'PAYMENT_REFUNDED',
-                entityType: 'order',
-                entityId: order.id,
-                metadata: {
-                    refundAmountPaise,
-                    refundId: refund.id,
-                    reason,
-                },
-            },
-        }),
     ]);
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: order.restaurantId,
+        action: 'PAYMENT_REFUNDED',
+        entityType: 'order',
+        entityId: order.id,
+        metadata: {
+            refundAmountPaise,
+            refundId: refund.id,
+            reason,
+        },
+    });
+    (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+        type: 'order.updated',
+        payload: buildOrderEventPayload({
+            id: order.id,
+            status: nextPaid === 0 ? 'CANCELLED' : order.status,
+            paymentStatus: nextPaid === 0 ? 'REFUNDED' : computed.paymentStatus,
+            paymentProvider: order.paymentProvider,
+            paidAmountPaise: computed.paidAmountPaise,
+            dueAmountPaise: computed.dueAmountPaise,
+            totalPaise: order.totalPaise,
+            updatedAt: new Date(),
+            createdAt: order.createdAt,
+        }),
+    });
     logger_1.logger.info('Payment refunded successfully', {
         orderId,
         refundId: refund.id,
@@ -484,7 +511,7 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
     const amountToAdd = Math.min(payload.amountPaise ?? order.dueAmountPaise, order.dueAmountPaise);
     const nextPaid = order.paidAmountPaise + amountToAdd;
     const computed = computeDueAndStatus(order.totalPaise, nextPaid);
-    const [, , updatedOrder] = await database_1.prisma.$transaction([
+    const [, updatedOrder] = await database_1.prisma.$transaction([
         database_1.prisma.order.update({
             where: { id: order.id },
             data: {
@@ -508,22 +535,24 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
                 notes: 'Cash payment confirmed by restaurant admin',
             },
         }),
-        database_1.prisma.auditLog.create({
-            data: {
-                actorUserId: req.user.id,
-                restaurantId: order.restaurantId,
-                action: 'CASH_PAYMENT_CONFIRMED',
-                entityType: 'order',
-                entityId: order.id,
-                metadata: {
-                    amountToAdd,
-                    paymentStatus: computed.paymentStatus,
-                    dueAmountPaise: computed.dueAmountPaise,
-                },
-            },
-        }),
     ]);
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: order.restaurantId,
+        action: 'CASH_PAYMENT_CONFIRMED',
+        entityType: 'order',
+        entityId: order.id,
+        metadata: {
+            amountToAdd,
+            paymentStatus: computed.paymentStatus,
+            dueAmountPaise: computed.dueAmountPaise,
+        },
+    });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+    (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+        type: 'order.updated',
+        payload: buildOrderEventPayload(updatedOrder),
+    });
     return res.json({
         success: true,
         message: computed.paymentStatus === 'COMPLETED' ? 'Cash payment fully confirmed' : 'Cash partial payment confirmed',
@@ -579,24 +608,26 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
                 updatedAt: new Date(),
             },
         }),
-        database_1.prisma.auditLog.create({
-            data: {
-                actorUserId: req.user.id,
-                restaurantId: order.restaurantId,
-                action: 'PAYMENT_STATUS_UPDATED',
-                entityType: 'order',
-                entityId: order.id,
-                metadata: {
-                    paymentStatus: payload.paymentStatus,
-                    paidAmountPaise: computed.paidAmountPaise,
-                    dueAmountPaise: computed.dueAmountPaise,
-                },
-            },
-        }),
     ]);
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: order.restaurantId,
+        action: 'PAYMENT_STATUS_UPDATED',
+        entityType: 'order',
+        entityId: order.id,
+        metadata: {
+            paymentStatus: payload.paymentStatus,
+            paidAmountPaise: computed.paidAmountPaise,
+            dueAmountPaise: computed.dueAmountPaise,
+        },
+    });
     if (payload.paymentStatus === 'COMPLETED') {
         await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
     }
+    (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+        type: 'order.updated',
+        payload: buildOrderEventPayload(updatedOrder),
+    });
     return res.json({
         success: true,
         message: 'Payment status updated',

@@ -49,11 +49,15 @@ const extractSubdomain = (host) => {
 };
 const extractSlugFromPath = (req) => {
     const params = req.params;
-    const paramSlug = params?.['restaurantSlug'] || params?.['slug'];
+    const paramSlug = params?.['restaurantSlug'] || params?.['slug'] || params?.['restaurantId'];
     if (paramSlug)
         return paramSlug.toLowerCase();
     const url = req.originalUrl || req.url || '';
-    const match = /\/r\/([^\/?#]+)(\/|$)/i.exec(url);
+    const restaurantsPathMatch = /\/api\/restaurants\/([^\/\?#]+)(\/|$)/i.exec(url);
+    if (restaurantsPathMatch && restaurantsPathMatch[1]) {
+        return restaurantsPathMatch[1].toLowerCase();
+    }
+    const match = /\/r\/([^/?#]+)(\/|$)/i.exec(url);
     if (match && match[1])
         return match[1].toLowerCase();
     return null;

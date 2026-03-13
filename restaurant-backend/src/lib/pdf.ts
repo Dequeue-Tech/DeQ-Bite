@@ -1,12 +1,22 @@
 import jsPDF from 'jspdf';
-import path from 'path';
-import fs from 'fs/promises';
 import { logger } from '@/utils/logger';
+import { 
+  uploadToB2, 
+  downloadFromB2, 
+  listFilesInB2, 
+  deleteFromB2, 
+  isB2Configured,
+  getSignedDownloadUrl,
+  isPrivateBucket as checkPrivateBucket,
+} from './b2-storage';
+
+// Re-export for use in routes
+export const isPrivateBucket = checkPrivateBucket;
 
 export interface InvoiceData {
-  fssaiNumber: string;
-  cashierName: string;
-  gstNumber: string;
+  fssaiNumber?: string;
+  cashierName?: string;
+  gstNumber?: string;
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -186,72 +196,137 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
   }
 }
 /**
- * Save PDF to secure storage
+ * Save PDF to Backblaze B2 cloud storage
  */
 export async function savePDFToStorage(
   pdfBuffer: Buffer,
   filename: string
-): Promise<{ pdfPath: string | null; pdfData: Buffer | null; pdfName: string | null }> {
+): Promise<{ pdfPath: string | null; pdfData: Buffer | null; pdfName: string | null; b2FileId?: string }> {
   try {
-    const invoicesDir = path.join(process.cwd(), 'public', 'invoices');
+    // Check if B2 is configured
+    if (!isB2Configured()) {
+      logger.error('Backblaze B2 is not configured');
+      throw new Error('Cloud storage not configured');
+    }
 
-    // Ensure directory exists
-    await fs.mkdir(invoicesDir, { recursive: true });
+    // Upload to B2 with invoices/ prefix for organization
+    const b2FileName = `invoices/${filename}`;
+    const uploadResult = await uploadToB2(pdfBuffer, b2FileName, 'application/pdf');
 
-    const filePath = path.join(invoicesDir, filename);
-
-    // Save file (for public download support)
-    await fs.writeFile(filePath, pdfBuffer);
-
-    logger.info('PDF saved to storage', {
+    logger.info('PDF saved to B2 cloud storage', {
       filename,
-      path: filePath,
+      b2FileId: uploadResult.fileId,
+      publicUrl: uploadResult.publicUrl,
     });
 
     return {
-      pdfPath: `/invoices/${filename}`,
+      pdfPath: uploadResult.publicUrl,
       pdfData: pdfBuffer,
       pdfName: filename,
+      b2FileId: uploadResult.fileId,
     };
   } catch (error) {
-    logger.error('Failed to save PDF to storage', {
+    logger.error('Failed to save PDF to B2 storage', {
       error: error instanceof Error ? error.message : 'Unknown error',
       filename,
     });
 
-    throw new Error('Failed to save PDF invoice');
+    throw new Error('Failed to save PDF invoice to cloud storage');
   }
 }
 
 /**
- * Clean up old invoice files (optional maintenance function)
+ * Download PDF from Backblaze B2
+ * @param fileName - The filename (with or without invoices/ prefix)
+ * @returns Buffer containing the PDF data
+ */
+export async function downloadPDFFromStorage(fileName: string): Promise<Buffer> {
+  try {
+    // Ensure the filename has the invoices/ prefix
+    const b2FileName = fileName.startsWith('invoices/') ? fileName : `invoices/${fileName}`;
+    
+    const pdfBuffer = await downloadFromB2(b2FileName);
+    
+    logger.info('PDF downloaded from B2 storage', {
+      fileName: b2FileName,
+      size: pdfBuffer.length,
+    });
+
+    return pdfBuffer;
+  } catch (error) {
+    logger.error('Failed to download PDF from B2 storage', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      fileName,
+    });
+    throw new Error('Failed to download PDF from cloud storage');
+  }
+}
+
+/**
+ * Get download URL for a PDF (signed URL for private buckets, direct URL for public)
+ * @param fileName - The filename of the PDF
+ * @returns URL string for downloading the PDF
+ */
+export async function getPDFDownloadUrl(fileName: string): Promise<string> {
+  try {
+    const b2FileName = fileName.startsWith('invoices/') ? fileName : `invoices/${fileName}`;
+    
+    // For private buckets, generate a signed URL
+    if (checkPrivateBucket()) {
+      return await getSignedDownloadUrl(b2FileName, 3600); // 1 hour validity
+    }
+    
+    // For public buckets, return the direct URL
+    // This would need to be imported from b2-storage or reconstructed
+    const bucketName = process.env['B2_BUCKET_NAME'];
+    if (!bucketName) {
+      throw new Error('B2_BUCKET_NAME not configured');
+    }
+    return `https://f000.backblazeb2.com/file/${bucketName}/${b2FileName}`;
+  } catch (error) {
+    logger.error('Failed to get PDF download URL', {
+      error: error instanceof Error ? error.message : 'Unknown error',
+      fileName,
+    });
+    throw new Error('Failed to get PDF download URL');
+  }
+}
+
+/**
+ * Clean up old invoice files from B2 storage (optional maintenance function)
+ * Note: B2 doesn't support automatic expiration, so we list files and delete old ones
  */
 export async function cleanupOldInvoices(daysOld: number = 30): Promise<void> {
   try {
-    const invoicesDir = path.join(process.cwd(), 'public', 'invoices');
-    const files = await fs.readdir(invoicesDir);
-    
+    if (!isB2Configured()) {
+      logger.warn('B2 not configured, skipping cleanup');
+      return;
+    }
+
     const cutoffDate = new Date();
     cutoffDate.setDate(cutoffDate.getDate() - daysOld);
+    const cutoffTimestamp = cutoffDate.getTime();
+
+    // List all invoice files in B2
+    const files = await listFilesInB2('invoices/');
     
     let deletedCount = 0;
     
     for (const file of files) {
-      const filePath = path.join(invoicesDir, file);
-      const stats = await fs.stat(filePath);
-      
-      if (stats.mtime < cutoffDate) {
-        await fs.unlink(filePath);
+      // Check if file is older than cutoff
+      if (file.uploadTimestamp < cutoffTimestamp) {
+        await deleteFromB2(file.fileId, file.fileName);
         deletedCount++;
       }
     }
     
-    logger.info('Old invoices cleaned up', {
+    logger.info('Old invoices cleaned up from B2', {
       deletedCount,
       daysOld,
+      totalFiles: files.length,
     });
   } catch (error) {
-    logger.error('Failed to cleanup old invoices', {
+    logger.error('Failed to cleanup old invoices from B2', {
       error: error instanceof Error ? error.message : 'Unknown error',
       daysOld,
     });

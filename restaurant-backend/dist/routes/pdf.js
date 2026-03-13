@@ -8,8 +8,7 @@ const database_1 = require("../config/database");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const errorHandler_1 = require("../middleware/errorHandler");
 const pdf_1 = require("../lib/pdf");
-const path_1 = __importDefault(require("path"));
-const promises_1 = __importDefault(require("fs/promises"));
+const logger_1 = require("../utils/logger");
 const router = (0, express_1.Router)();
 router.get('/invoice/:invoiceId', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { invoiceId } = req.params;
@@ -58,16 +57,8 @@ router.get('/invoice/:invoiceId', (0, errorHandler_1.asyncHandler)(async (req, r
             res.setHeader('Content-Length', String(pdfBuffer.length));
             return res.send(pdfBuffer);
         }
-        if (invoice.pdfPath && invoice.pdfPath.startsWith('/invoices/')) {
-            const rel = invoice.pdfPath.replace(/^\//, '');
-            const absPath = path_1.default.join(process.cwd(), rel);
-            try {
-                await promises_1.default.access(absPath);
-                return res.redirect(invoice.pdfPath);
-            }
-            catch (err) {
-                throw new errorHandler_1.AppError('PDF file not found on server', 404);
-            }
+        if (invoice.pdfPath && invoice.pdfPath.startsWith('http') && !(0, pdf_1.isPrivateBucket)()) {
+            return res.redirect(invoice.pdfPath);
         }
         throw new errorHandler_1.AppError('Access denied. No token provided.', 401);
     }
@@ -89,8 +80,47 @@ router.get('/invoice/:invoiceId', (0, errorHandler_1.asyncHandler)(async (req, r
             res.setHeader('Content-Length', String(pdfBuffer.length));
             return res.send(pdfBuffer);
         }
-        if (invoice.pdfPath && invoice.pdfPath.startsWith('/invoices/')) {
-            return res.redirect(invoice.pdfPath);
+        if (invoice.pdfName) {
+            if ((0, pdf_1.isPrivateBucket)()) {
+                try {
+                    const pdfBuffer = await (0, pdf_1.downloadPDFFromStorage)(invoice.pdfName);
+                    res.setHeader('Content-Type', 'application/pdf');
+                    res.setHeader('Content-Disposition', `inline; filename="${invoice.pdfName}"`);
+                    res.setHeader('Content-Length', String(pdfBuffer.length));
+                    return res.send(pdfBuffer);
+                }
+                catch (downloadError) {
+                    logger_1.logger.warn('Failed to download PDF from B2, will regenerate', {
+                        invoiceId,
+                        error: downloadError instanceof Error ? downloadError.message : 'Unknown error',
+                    });
+                }
+            }
+            else {
+                try {
+                    const downloadUrl = await (0, pdf_1.getPDFDownloadUrl)(invoice.pdfName);
+                    return res.redirect(downloadUrl);
+                }
+                catch (urlError) {
+                    logger_1.logger.warn('Failed to get PDF download URL, will try direct download', {
+                        invoiceId,
+                        error: urlError instanceof Error ? urlError.message : 'Unknown error',
+                    });
+                    try {
+                        const pdfBuffer = await (0, pdf_1.downloadPDFFromStorage)(invoice.pdfName);
+                        res.setHeader('Content-Type', 'application/pdf');
+                        res.setHeader('Content-Disposition', `inline; filename="${invoice.pdfName}"`);
+                        res.setHeader('Content-Length', String(pdfBuffer.length));
+                        return res.send(pdfBuffer);
+                    }
+                    catch (downloadError) {
+                        logger_1.logger.error('Failed to download PDF from B2', {
+                            invoiceId,
+                            error: downloadError instanceof Error ? downloadError.message : 'Unknown error',
+                        });
+                    }
+                }
+            }
         }
         if (!invoice.orderId) {
             throw new errorHandler_1.AppError('PDF not available for this invoice', 404);

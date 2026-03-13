@@ -1,4 +1,9 @@
+import { isPrivateBucket as checkPrivateBucket } from './b2-storage';
+export declare const isPrivateBucket: typeof checkPrivateBucket;
 export interface InvoiceData {
+    fssaiNumber?: string;
+    cashierName?: string;
+    gstNumber?: string;
     customerName: string;
     customerEmail?: string;
     customerPhone?: string;
@@ -24,6 +29,9 @@ export declare function savePDFToStorage(pdfBuffer: Buffer, filename: string): P
     pdfPath: string | null;
     pdfData: Buffer | null;
     pdfName: string | null;
+    b2FileId?: string;
 }>;
+export declare function downloadPDFFromStorage(fileName: string): Promise<Buffer>;
+export declare function getPDFDownloadUrl(fileName: string): Promise<string>;
 export declare function cleanupOldInvoices(daysOld?: number): Promise<void>;
 //# sourceMappingURL=pdf.d.ts.map

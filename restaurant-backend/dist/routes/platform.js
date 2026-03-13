@@ -4,6 +4,7 @@ const express_1 = require("express");
 const zod_1 = require("zod");
 const database_1 = require("../config/database");
 const auth_1 = require("../middleware/auth");
+const audit_1 = require("../utils/audit");
 const router = (0, express_1.Router)();
 const updateRestaurantStatusSchema = zod_1.z.object({
     status: zod_1.z.enum(['APPROVED', 'SUSPENDED']),
@@ -83,15 +84,13 @@ router.patch('/restaurants/:id/status', async (req, res) => {
             approvedByUserId: true,
         },
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId,
-            action: `PLATFORM_RESTAURANT_${payload.status}`,
-            entityType: 'restaurant',
-            entityId: restaurantId,
-            metadata: payload,
-        },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId,
+        action: `PLATFORM_RESTAURANT_${payload.status}`,
+        entityType: 'restaurant',
+        entityId: restaurantId,
+        metadata: payload,
     });
     return res.json({
         success: true,
@@ -116,15 +115,13 @@ router.patch('/restaurants/:id/commission', async (req, res) => {
             commissionRate: true,
         },
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId,
-            action: 'PLATFORM_COMMISSION_UPDATED',
-            entityType: 'restaurant',
-            entityId: restaurantId,
-            metadata: payload,
-        },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId,
+        action: 'PLATFORM_COMMISSION_UPDATED',
+        entityType: 'restaurant',
+        entityId: restaurantId,
+        metadata: payload,
     });
     return res.json({
         success: true,
@@ -164,15 +161,13 @@ router.patch('/restaurants/:id/details', async (req, res) => {
             country: true,
         },
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId,
-            action: 'PLATFORM_RESTAURANT_DETAILS_UPDATED',
-            entityType: 'restaurant',
-            entityId: restaurantId,
-            metadata: payload,
-        },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId,
+        action: 'PLATFORM_RESTAURANT_DETAILS_UPDATED',
+        entityType: 'restaurant',
+        entityId: restaurantId,
+        metadata: payload,
     });
     return res.json({
         success: true,

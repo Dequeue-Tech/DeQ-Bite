@@ -6,6 +6,7 @@ const database_1 = require("../config/database");
 const client_1 = require("@prisma/client");
 const auth_1 = require("../middleware/auth");
 const restaurant_1 = require("../middleware/restaurant");
+const audit_1 = require("../utils/audit");
 const router = (0, express_1.Router)();
 const hasRestaurantStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
@@ -301,17 +302,15 @@ router.post('/', auth_1.authenticate, async (req, res) => {
             role: 'OWNER',
         },
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId: restaurant.id,
-            action: 'RESTAURANT_CREATED',
-            entityType: 'restaurant',
-            entityId: restaurant.id,
-            metadata: {
-                slug: restaurant.slug,
-                subdomain: restaurant.subdomain,
-            },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: restaurant.id,
+        action: 'RESTAURANT_CREATED',
+        entityType: 'restaurant',
+        entityId: restaurant.id,
+        metadata: {
+            slug: restaurant.slug,
+            subdomain: restaurant.subdomain,
         },
     });
     const response = {
@@ -353,15 +352,13 @@ router.put('/settings/payment-policy', auth_1.authenticate, restaurant_1.require
         },
         select: policySelect,
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId: req.restaurant.id,
-            action: 'PAYMENT_POLICY_UPDATED',
-            entityType: 'restaurant',
-            entityId: req.restaurant.id,
-            metadata: payload,
-        },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: req.restaurant.id,
+        action: 'PAYMENT_POLICY_UPDATED',
+        entityType: 'restaurant',
+        entityId: req.restaurant.id,
+        metadata: payload,
     });
     return res.json({
         success: true,
@@ -444,17 +441,15 @@ router.post('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
             },
         },
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId: req.restaurant.id,
-            action: 'RESTAURANT_USER_UPSERT',
-            entityType: 'restaurant_user',
-            entityId: membership.id,
-            metadata: {
-                userId: membership.userId,
-                role: membership.role,
-            },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: req.restaurant.id,
+        action: 'RESTAURANT_USER_UPSERT',
+        entityType: 'restaurant_user',
+        entityId: membership.id,
+        metadata: {
+            userId: membership.userId,
+            role: membership.role,
         },
     });
     return res.status(201).json({

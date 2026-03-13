@@ -5,6 +5,7 @@ const database_1 = require("../config/database");
 const auth_1 = require("../middleware/auth");
 const restaurant_1 = require("../middleware/restaurant");
 const logger_1 = require("../utils/logger");
+const realtime_1 = require("../utils/realtime");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 router.use(auth_1.authenticate);
@@ -31,6 +32,17 @@ const calculateDiscountFromCoupon = (coupon, subtotalPaise) => {
     }
     return Math.min(discountPaise, subtotalPaise);
 };
+const buildOrderEventPayload = (order) => ({
+    id: order.id,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentProvider: order.paymentProvider,
+    paidAmountPaise: order.paidAmountPaise,
+    dueAmountPaise: order.dueAmountPaise,
+    totalPaise: order.totalPaise,
+    updatedAt: order.updatedAt,
+    createdAt: order.createdAt,
+});
 const applyCoupon = async (restaurantId, code, subtotalPaise) => {
     const normalizedCode = normalizeCouponCode(code);
     const coupon = await database_1.prisma.coupon.findFirst({
@@ -206,6 +218,10 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
             userId,
             paymentCollectionTiming,
         });
+        (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+            type: 'order.created',
+            payload: buildOrderEventPayload(order),
+        });
         return res.status(201).json({
             success: true,
             data: order,
@@ -311,6 +327,10 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                 },
             }),
         ]);
+        (0, realtime_1.emitRestaurantEvent)(updatedOrder.restaurantId, {
+            type: 'order.updated',
+            payload: buildOrderEventPayload(updatedOrder),
+        });
         return res.status(200).json({
             success: true,
             data: updatedOrder,
@@ -397,6 +417,10 @@ router.post('/:id/apply-coupon', restaurant_1.requireRestaurant, async (req, res
                     },
                 }),
             ]))[0];
+        (0, realtime_1.emitRestaurantEvent)(updatedOrder.restaurantId, {
+            type: 'order.updated',
+            payload: buildOrderEventPayload(updatedOrder),
+        });
         return res.json({
             success: true,
             data: updatedOrder,
@@ -516,6 +540,10 @@ router.put('/:id/status', restaurant_1.requireRestaurant, (0, restaurant_1.autho
                 table: true,
             },
         });
+        (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+            type: 'order.updated',
+            payload: buildOrderEventPayload(order),
+        });
         return res.json({ success: true, data: order, message: 'Order status updated' });
     }
     catch (error) {
@@ -554,6 +582,22 @@ router.put('/:id/cancel', restaurant_1.requireRestaurant, async (req, res) => {
                 status: 'CANCELLED',
                 paymentStatus: 'FAILED',
             },
+            select: {
+                id: true,
+                restaurantId: true,
+                status: true,
+                paymentStatus: true,
+                paymentProvider: true,
+                paidAmountPaise: true,
+                dueAmountPaise: true,
+                totalPaise: true,
+                updatedAt: true,
+                createdAt: true,
+            },
+        });
+        (0, realtime_1.emitRestaurantEvent)(cancelled.restaurantId, {
+            type: 'order.updated',
+            payload: buildOrderEventPayload(cancelled),
         });
         return res.json({ success: true, data: cancelled, message: 'Order cancelled' });
     }

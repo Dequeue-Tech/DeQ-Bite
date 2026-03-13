@@ -5,6 +5,7 @@ const zod_1 = require("zod");
 const database_1 = require("../config/database");
 const auth_1 = require("../middleware/auth");
 const restaurant_1 = require("../middleware/restaurant");
+const audit_1 = require("../utils/audit");
 const router = (0, express_1.Router)();
 const offerSchema = zod_1.z.object({
     name: zod_1.z.string().min(2).max(120),
@@ -51,17 +52,15 @@ router.post('/', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restau
             active: payload.active ?? true,
         },
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId: req.restaurant.id,
-            action: 'OFFER_CREATED',
-            entityType: 'offer',
-            entityId: offer.id,
-            metadata: {
-                name: offer.name,
-                code: offer.code,
-            },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: req.restaurant.id,
+        action: 'OFFER_CREATED',
+        entityType: 'offer',
+        entityId: offer.id,
+        metadata: {
+            name: offer.name,
+            code: offer.code,
         },
     });
     return res.status(201).json({ success: true, data: { offer }, message: 'Offer created' });
@@ -96,15 +95,13 @@ router.put('/:id', auth_1.authenticate, restaurant_1.requireRestaurant, (0, rest
             ...(payload.active !== undefined ? { active: payload.active } : {}),
         },
     });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId: req.restaurant.id,
-            action: 'OFFER_UPDATED',
-            entityType: 'offer',
-            entityId: offer.id,
-            metadata: payload,
-        },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: req.restaurant.id,
+        action: 'OFFER_UPDATED',
+        entityType: 'offer',
+        entityId: offer.id,
+        metadata: payload,
     });
     return res.json({ success: true, data: { offer }, message: 'Offer updated' });
 });
@@ -124,14 +121,12 @@ router.delete('/:id', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
         return res.status(404).json({ success: false, error: 'Offer not found' });
     }
     await database_1.prisma.offer.delete({ where: { id } });
-    await database_1.prisma.auditLog.create({
-        data: {
-            actorUserId: req.user.id,
-            restaurantId: req.restaurant.id,
-            action: 'OFFER_DELETED',
-            entityType: 'offer',
-            entityId: id,
-        },
+    await (0, audit_1.safeCreateAuditLog)({
+        actorUserId: req.user.id,
+        restaurantId: req.restaurant.id,
+        action: 'OFFER_DELETED',
+        entityType: 'offer',
+        entityId: id,
     });
     return res.json({ success: true, message: 'Offer deleted' });
 });

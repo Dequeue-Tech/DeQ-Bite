@@ -1,53 +1,55 @@
+'use strict';
 const path = require('path');
 
-function requireFirst(paths) {
-  const notFoundErrors = [];
-  for (const modulePath of paths) {
-    try {
-      return require(modulePath);
-    } catch (error) {
-      if (!error || error.code !== 'MODULE_NOT_FOUND') {
-        throw error;
-      }
-      notFoundErrors.push(`${modulePath}: ${error.message}`);
-    }
-  }
-  throw new Error(
-    `Unable to load any module from: ${paths.join(', ')}\n${notFoundErrors.join('\n')}`
-  );
+// Vercel deploys the function at /var/task/<file>.
+// __dirname here is always the absolute dir of THIS file (api/).
+// The project root (restaurant-backend/) is one level up.
+const backendRoot = path.resolve(__dirname, '..');
+
+// ─── Inject node_modules paths BEFORE any other require() ───────────────────
+// This is required when Vercel does not install under the same prefix as
+// the compiled JS lives in (happens in monorepo layouts).
+const Module = require('module');
+const nodeModulesDirs = [
+  path.join(backendRoot, 'node_modules'),          // normal / root-dir layout
+  path.resolve('/var/task/node_modules'),           // vercel managed install
+  path.resolve('/var/task/restaurant-backend/node_modules'), // monorepo layout
+];
+for (const dir of nodeModulesDirs) {
+  if (!Module.globalPaths.includes(dir)) Module.globalPaths.unshift(dir);
 }
+const existing = process.env.NODE_PATH ? process.env.NODE_PATH.split(path.delimiter) : [];
+for (const dir of nodeModulesDirs) {
+  if (!existing.includes(dir)) existing.push(dir);
+}
+process.env.NODE_PATH = existing.join(path.delimiter);
+Module._initPaths();
+// ─────────────────────────────────────────────────────────────────────────────
 
-// Try multiple path strategies to handle different deployment environments
-const apiDir = __dirname;
-const rootDir = path.join(apiDir, '..');
+// Load compiled app and database modules using absolute paths
+const appModule  = require(path.join(backendRoot, 'dist', 'app'));
+const dbModule   = require(path.join(backendRoot, 'dist', 'config', 'database'));
 
-const appPaths = [
-  path.join(rootDir, 'dist', 'app'),
-  path.join(rootDir, 'dist', 'src', 'app'),
-  '../dist/app',
-  '../dist/src/app',
-];
-
-const dbPaths = [
-  path.join(rootDir, 'dist', 'config', 'database'),
-  path.join(rootDir, 'dist', 'src', 'config', 'database'),
-  '../dist/config/database',
-  '../dist/src/config/database',
-];
-
-const appModule = requireFirst(appPaths);
-const dbModule = requireFirst(dbPaths);
-
-const app = appModule.default || appModule;
+const app             = appModule.default || appModule;
 const connectDatabase = dbModule.connectDatabase;
 
-let dbConnectionPromise;
+let dbConnectionPromise = null;
 
 module.exports = async (req, res) => {
   if (!dbConnectionPromise) {
-    dbConnectionPromise = connectDatabase();
+    dbConnectionPromise = connectDatabase().catch((err) => {
+      dbConnectionPromise = null; // reset so next cold-start retries
+      return Promise.reject(err);
+    });
   }
 
-  await dbConnectionPromise;
+  try {
+    await dbConnectionPromise;
+  } catch (dbErr) {
+    console.error('[api/index] DB connection failed:', dbErr.message);
+    res.status(503).json({ error: 'Database unavailable', detail: dbErr.message });
+    return;
+  }
+
   return app(req, res);
 };

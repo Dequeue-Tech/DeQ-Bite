@@ -25,6 +25,14 @@ declare global {
       ENCRYPTION_KEY: string;
       API_KEY: string;
       LOG_LEVEL: string;
+      
+      // Backblaze B2 Configuration
+      B2_APPLICATION_KEY_ID: string;
+      B2_APPLICATION_KEY: string;
+      B2_BUCKET_ID?: string;
+      B2_BUCKET_NAME?: string;
+      B2_BUCKET_PRIVATE?: string;
+      B2_CUSTOM_DOMAIN?: string;
     }
   }
 }

@@ -29,10 +29,11 @@ export default function RootLayout({
         <script src="https://checkout.razorpay.com/v1/checkout.js" async></script>
       </head>
       <body className="antialiased">
-        <div id="root" className="min-h-screen flex flex-col">
+        <div id="root" className="min-h-screen flex flex-col pb-24 md:pb-0 safe-area-pb">
           <RestaurantContextSync />
           <Navbar />
-          <main className="flex-1 pb-20 md:pb-0">
+          {/* main content area now flexes; padding applied on root to push pages up above fixed nav */}
+          <main className="flex-1">
             {children}
           </main>
           <Toaster 

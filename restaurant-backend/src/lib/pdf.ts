@@ -14,9 +14,16 @@ import {
 export const isPrivateBucket = checkPrivateBucket;
 
 export interface InvoiceData {
-  fssaiNumber?: string;
-  cashierName?: string;
+  // Restaurant details — fetched from DB
+  restaurantName: string;
+  restaurantAddress?: string;
+  restaurantCity?: string;
+  restaurantState?: string;
+  restaurantPhone?: string;
+  restaurantEmail?: string;
   gstNumber?: string;
+  fssaiNumber?: string;
+  // Order details
   customerName: string;
   customerEmail?: string;
   customerPhone?: string;
@@ -30,11 +37,10 @@ export interface InvoiceData {
   }>;
   subtotal: number;
   tax: number;
+  taxPercent?: number;   // e.g. 5 for "GST 5%"
   total: number;
   tableNumber: number;
-  restaurantName: string;
-  restaurantAddress?: string;
-  restaurantPhone?: string;
+  cashierName?: string;
   paymentMethod?: string;
 }
 
@@ -59,26 +65,38 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
     
     // --- Header ---
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(18);
-    doc.text('Restaurant', centerX, currentY, { align: 'center' });
-    
-    currentY += 4;
-    doc.setFont('helvetica', 'normal');
-    doc.setFontSize(8);
-    doc.text('Food & Drinks', centerX, currentY, { align: 'center' });
-    
-    currentY += 8;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(9);
-    doc.text(invoiceData.restaurantName || 'ABC CAFE & RESTRO', centerX, currentY, { align: 'center' });
-    
-    currentY += 4;
-    doc.text(invoiceData.gstNumber || '08AAKXX7086X1ZT', centerX, currentY, { align: 'center' });
-    
-    currentY += 5;
-    doc.text('BLOCK D PLOT NO 103', centerX, currentY, { align: 'center' });
-    currentY += 4;
-    doc.text('NEW DELHI-110009', centerX, currentY, { align: 'center' });
+    doc.setFontSize(14);
+    doc.text(invoiceData.restaurantName, centerX, currentY, { align: 'center' });
+
+    if (invoiceData.gstNumber) {
+      currentY += 5;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(`GST: ${invoiceData.gstNumber}`, centerX, currentY, { align: 'center' });
+    }
+
+    // Address line(s)
+    if (invoiceData.restaurantAddress) {
+      currentY += 4;
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      const addressLines = doc.splitTextToSize(invoiceData.restaurantAddress, 65);
+      doc.text(addressLines, centerX, currentY, { align: 'center' });
+      currentY += (addressLines.length - 1) * 4;
+    }
+
+    if (invoiceData.restaurantCity || invoiceData.restaurantState) {
+      currentY += 4;
+      const cityState = [invoiceData.restaurantCity, invoiceData.restaurantState]
+        .filter(Boolean)
+        .join(', ');
+      doc.text(cityState, centerX, currentY, { align: 'center' });
+    }
+
+    if (invoiceData.restaurantPhone) {
+      currentY += 4;
+      doc.text(`Ph: ${invoiceData.restaurantPhone}`, centerX, currentY, { align: 'center' });
+    }
     
     // --- Divider ---
     currentY += 4;
@@ -102,7 +120,7 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
     
     currentY += 4;
     doc.setFont('helvetica', 'normal');
-    doc.text(`Cashier: ${invoiceData.cashierName || 'biller'}`, 5, currentY);
+    doc.text(`Cashier: ${invoiceData.cashierName || '-'}`, 5, currentY);
     doc.text(`Bill No.: ${invoiceData.invoiceNumber}`, 45, currentY);
     
     currentY += 4;
@@ -151,8 +169,8 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
     doc.text(invoiceData.subtotal.toFixed(2), 75, currentY, { align: 'right' });
     
     currentY += 4;
-    // Assuming GST is 5% in your data
-    doc.text('GST 5%', 45, currentY);
+    const taxLabel = invoiceData.taxPercent ? `GST ${invoiceData.taxPercent}%` : 'GST';
+    doc.text(taxLabel, 45, currentY);
     doc.text(invoiceData.tax.toFixed(2), 75, currentY, { align: 'right' });
     
     currentY += 3;
@@ -171,10 +189,12 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
     doc.line(5, currentY, 75, currentY);
     
     // --- Footer ---
-    currentY += 5;
-    doc.setFont('helvetica', 'bold');
-    doc.setFontSize(8);
-    doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber || '13364267896567'}`, centerX, currentY, { align: 'center' });
+    if (invoiceData.fssaiNumber) {
+      currentY += 5;
+      doc.setFont('helvetica', 'bold');
+      doc.setFontSize(8);
+      doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber}`, centerX, currentY, { align: 'center' });
+    }
     
     // Generate buffer
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));

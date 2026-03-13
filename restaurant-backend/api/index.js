@@ -1,110 +1,53 @@
+'use strict';
 const path = require('path');
+
+// Vercel deploys the function at /var/task/<file>.
+// __dirname here is always the absolute dir of THIS file (api/).
+// The project root (restaurant-backend/) is one level up.
+const backendRoot = path.resolve(__dirname, '..');
+
+// ─── Inject node_modules paths BEFORE any other require() ───────────────────
+// This is required when Vercel does not install under the same prefix as
+// the compiled JS lives in (happens in monorepo layouts).
 const Module = require('module');
-
-// ─── Fix: ensure node_modules next to this file's package root is on the
-// search path BEFORE any require() call. Vercel serverless functions run
-// from /var/task/<repoRoot> but node_modules lives at
-// /var/task/<repoRoot>/restaurant-backend/node_modules (monorepo) OR at
-// /var/task/node_modules when Root Directory is set correctly.
-// We add ALL candidate node_modules dirs so it works in both layouts.
-const apiDir = path.resolve(__dirname);           // …/api
-const backendRoot = path.resolve(apiDir, '..');   // …/restaurant-backend
-const repoRoot = path.resolve(backendRoot, '..'); // …/ (repo root)
-
-const nmCandidates = [
-  path.join(backendRoot, 'node_modules'),
-  path.join(repoRoot, 'node_modules'),
-  '/var/task/node_modules',
-  '/var/task/restaurant-backend/node_modules',
+const nodeModulesDirs = [
+  path.join(backendRoot, 'node_modules'),          // normal / root-dir layout
+  path.resolve('/var/task/node_modules'),           // vercel managed install
+  path.resolve('/var/task/restaurant-backend/node_modules'), // monorepo layout
 ];
-
-for (const nm of nmCandidates) {
-  if (!Module.globalPaths.includes(nm)) {
-    Module.globalPaths.push(nm);
-  }
+for (const dir of nodeModulesDirs) {
+  if (!Module.globalPaths.includes(dir)) Module.globalPaths.unshift(dir);
 }
-
-// Also patch NODE_PATH so child requires inherit the same paths
-const existingNodePath = process.env.NODE_PATH || '';
-const extraPaths = nmCandidates.join(path.delimiter);
-process.env.NODE_PATH = existingNodePath
-  ? `${existingNodePath}${path.delimiter}${extraPaths}`
-  : extraPaths;
-Module._initPaths(); // re-initialise module search paths
-
-const rootDir = backendRoot;
-
-const appPaths = [
-  path.join(rootDir, 'dist', 'app'),
-  path.join(rootDir, 'dist', 'src', 'app'),
-];
-
-const dbPaths = [
-  path.join(rootDir, 'dist', 'config', 'database'),
-  path.join(rootDir, 'dist', 'src', 'config', 'database'),
-];
-
-function requireFirst(paths) {
-  const notFoundErrors = [];
-  for (const modulePath of paths) {
-    try {
-      return require(modulePath);
-    } catch (error) {
-      if (!error || error.code !== 'MODULE_NOT_FOUND') {
-        throw error;
-      }
-      notFoundErrors.push(`${modulePath}: ${error.message}`);
-    }
-  }
-  throw new Error(
-    `Unable to load any module from: ${paths.join(', ')}\n${notFoundErrors.join('\n')}`
-  );
+const existing = process.env.NODE_PATH ? process.env.NODE_PATH.split(path.delimiter) : [];
+for (const dir of nodeModulesDirs) {
+  if (!existing.includes(dir)) existing.push(dir);
 }
+process.env.NODE_PATH = existing.join(path.delimiter);
+Module._initPaths();
+// ─────────────────────────────────────────────────────────────────────────────
 
-let app;
-let connectDatabase;
-let initError;
+// Load compiled app and database modules using absolute paths
+const appModule  = require(path.join(backendRoot, 'dist', 'app'));
+const dbModule   = require(path.join(backendRoot, 'dist', 'config', 'database'));
 
-try {
-  const appModule = requireFirst(appPaths);
-  const dbModule = requireFirst(dbPaths);
-  app = appModule.default || appModule;
-  connectDatabase = dbModule.connectDatabase;
-} catch (err) {
-  initError = err;
-  console.error('FATAL: Failed to load app modules:', err.message);
-}
+const app             = appModule.default || appModule;
+const connectDatabase = dbModule.connectDatabase;
 
-let dbConnectionPromise;
+let dbConnectionPromise = null;
 
 module.exports = async (req, res) => {
-  // If module loading failed, return a clear 500 with the error
-  if (initError) {
-    console.error('Module load error on request:', initError.message);
-    res.status(500).json({
-      error: 'Server initialisation failed',
-      detail: initError.message,
-    });
-    return;
-  }
-
-  // Connect to DB once per cold start
   if (!dbConnectionPromise) {
     dbConnectionPromise = connectDatabase().catch((err) => {
-      // Reset so next request retries
-      dbConnectionPromise = null;
-      throw err;
+      dbConnectionPromise = null; // reset so next cold-start retries
+      return Promise.reject(err);
     });
   }
 
   try {
     await dbConnectionPromise;
   } catch (dbErr) {
-    console.error('Database connection failed:', dbErr.message);
-    res.status(503).json({
-      error: 'Database connection failed',
-      detail: dbErr.message,
-    });
+    console.error('[api/index] DB connection failed:', dbErr.message);
+    res.status(503).json({ error: 'Database unavailable', detail: dbErr.message });
     return;
   }
 

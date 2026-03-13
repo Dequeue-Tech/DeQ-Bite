@@ -9,9 +9,19 @@
 - [sms.ts](file://restaurant-backend/src/lib/sms.ts)
 - [schema.prisma](file://restaurant-backend/prisma/schema.prisma)
 - [database.ts](file://restaurant-backend/src/config/database.ts)
-- [.env.example](file://restaurant-backend/.env.example)
+- [env.d.ts](file://restaurant-backend/src/types/env.d.ts)
+- [test-b2.mjs](file://restaurant-backend/test-b2.mjs)
 - [render.yaml](file://restaurant-backend/render.yaml)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Enhanced B2 storage integration with dual bucket configuration support (public/private)
+- Updated upload function to return null for public URLs when using private buckets
+- Implemented proper access control through signed URLs for private bucket files
+- Added new `isPrivateBucket()` detection function
+- Added new `getSignedDownloadUrl()` function for temporary file access
+- Updated security considerations to reflect private bucket access patterns
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -28,11 +38,13 @@
 ## Introduction
 This document describes the file storage and management system for generated invoices and documents. It covers directory structure under public/invoices, file naming conventions, persistence strategy, access controls, public download capabilities, cleanup mechanisms, integration with PDF generation and email/SMS workflows, security considerations, and performance optimization for large-scale storage.
 
+**Updated** Enhanced with support for both public and private Backblaze B2 bucket configurations, implementing proper access control through signed URLs for private bucket files.
+
 ## Project Structure
 The system centers around:
 - An Express route module that orchestrates invoice generation, delivery, and retrieval.
 - A PDF generation library that produces invoice PDF buffers.
-- A Backblaze B2 storage adapter that persists PDFs and generates public URLs.
+- A Backblaze B2 storage adapter that persists PDFs and generates appropriate URLs based on bucket configuration.
 - Email and SMS libraries for delivery notifications.
 - A Prisma schema that models invoice records and their relations to orders.
 
@@ -54,17 +66,17 @@ R --> DB
 ```
 
 **Diagram sources**
-- [invoices.ts:1-599](file://restaurant-backend/src/routes/invoices.ts#L1-L599)
-- [pdf.ts:1-293](file://restaurant-backend/src/lib/pdf.ts#L1-L293)
-- [b2-storage.ts:1-281](file://restaurant-backend/src/lib/b2-storage.ts#L1-L281)
+- [invoices.ts:1-674](file://restaurant-backend/src/routes/invoices.ts#L1-L674)
+- [pdf.ts:1-354](file://restaurant-backend/src/lib/pdf.ts#L1-L354)
+- [b2-storage.ts:1-337](file://restaurant-backend/src/lib/b2-storage.ts#L1-L337)
 - [schema.prisma:208-222](file://restaurant-backend/prisma/schema.prisma#L208-L222)
 - [email.ts:1-227](file://restaurant-backend/src/lib/email.ts#L1-L227)
 - [sms.ts:1-131](file://restaurant-backend/src/lib/sms.ts#L1-L131)
 
 **Section sources**
-- [invoices.ts:1-599](file://restaurant-backend/src/routes/invoices.ts#L1-L599)
-- [pdf.ts:1-293](file://restaurant-backend/src/lib/pdf.ts#L1-L293)
-- [b2-storage.ts:1-281](file://restaurant-backend/src/lib/b2-storage.ts#L1-L281)
+- [invoices.ts:1-674](file://restaurant-backend/src/routes/invoices.ts#L1-L674)
+- [pdf.ts:1-354](file://restaurant-backend/src/lib/pdf.ts#L1-L354)
+- [b2-storage.ts:1-337](file://restaurant-backend/src/lib/b2-storage.ts#L1-L337)
 - [schema.prisma:208-222](file://restaurant-backend/prisma/schema.prisma#L208-L222)
 - [email.ts:1-227](file://restaurant-backend/src/lib/email.ts#L1-L227)
 - [sms.ts:1-131](file://restaurant-backend/src/lib/sms.ts#L1-L131)
@@ -72,7 +84,7 @@ R --> DB
 ## Core Components
 - Invoice route controller: Validates requests, loads order data, generates PDFs, persists via B2, sends email/SMS, and updates the invoice record.
 - PDF generator: Creates invoice PDF buffers with standardized layout and pricing.
-- B2 storage adapter: Handles upload, download, listing, deletion, and public URL generation for invoice files.
+- B2 storage adapter: Handles upload, download, listing, deletion, and URL generation for invoice files with dual bucket support.
 - Email/SMS integrations: Send notifications with optional PDF attachments or text messages.
 - Prisma model: Stores invoice metadata, delivery status, and optional local PDF data.
 
@@ -81,6 +93,7 @@ Key responsibilities:
 - Cloud storage via Backblaze B2 with invoices/ prefix.
 - Unique invoice number generation and conflict resolution.
 - Cleanup of old files based on configurable retention.
+- **Updated** Dual bucket configuration support with automatic access control.
 
 **Section sources**
 - [invoices.ts:22-241](file://restaurant-backend/src/routes/invoices.ts#L22-L241)
@@ -92,7 +105,7 @@ Key responsibilities:
 - [schema.prisma:208-222](file://restaurant-backend/prisma/schema.prisma#L208-L222)
 
 ## Architecture Overview
-The invoice lifecycle integrates route handlers, PDF generation, cloud storage, and delivery channels.
+The invoice lifecycle integrates route handlers, PDF generation, cloud storage, and delivery channels with enhanced B2 bucket configuration support.
 
 ```mermaid
 sequenceDiagram
@@ -151,17 +164,21 @@ Operational note:
 
 ### Cloud Storage with Backblaze B2
 - All invoice PDFs are uploaded to B2 under a structured prefix for organization.
-- Public URLs are generated either via a custom domain or B2’s native URL format.
+- **Updated** Public URLs are generated differently based on bucket configuration:
+  - **Public buckets**: Direct B2 URLs are returned for immediate access
+  - **Private buckets**: `null` is returned for public URLs; access controlled via signed URLs
 - Authentication and bucket resolution are handled centrally with caching.
 
 Key behaviors:
 - Prefixes all uploads with invoices/.
-- Generates public URLs using a custom domain if configured; otherwise uses B2’s file URL.
+- Generates public URLs using a custom domain if configured; otherwise uses B2's native URL format.
 - Lists and deletes files for maintenance tasks.
+- **Updated** Detects bucket type using `isPrivateBucket()` function.
 
 Security and reliability:
 - Uses application keys and bucket identifiers from environment variables.
 - Centralized authentication caching avoids repeated authorizations.
+- **Updated** Private bucket access enforced through signed URLs with configurable expiration.
 
 **Section sources**
 - [pdf.ts:190-225](file://restaurant-backend/src/lib/pdf.ts#L190-L225)
@@ -169,6 +186,7 @@ Security and reliability:
 - [b2-storage.ts:128-144](file://restaurant-backend/src/lib/b2-storage.ts#L128-L144)
 - [b2-storage.ts:43-67](file://restaurant-backend/src/lib/b2-storage.ts#L43-L67)
 - [b2-storage.ts:31-38](file://restaurant-backend/src/lib/b2-storage.ts#L31-L38)
+- [b2-storage.ts:257-259](file://restaurant-backend/src/lib/b2-storage.ts#L257-L259)
 
 ### File Naming Conventions and Uniqueness
 - PDF filenames are derived from the invoice number with a fixed prefix and .pdf suffix.
@@ -199,7 +217,7 @@ ReturnExisting --> End
 
 ### Persistence Strategy: Database and Cloud
 - Database fields capture delivery metadata and optional local PDF data.
-- Cloud storage stores the canonical PDF with a public URL.
+- Cloud storage stores the canonical PDF with appropriate URL handling based on bucket configuration.
 - The route updates the invoice record with cloud metadata after successful upload.
 
 ```mermaid
@@ -236,17 +254,21 @@ ORDER ||--o| INVOICE : "references"
 - [schema.prisma:208-222](file://restaurant-backend/prisma/schema.prisma#L208-L222)
 
 ### Access Controls and Public Downloads
-- Public download capability is achieved via B2 public URLs.
+- **Updated** Public download capability varies based on bucket configuration:
+  - **Public buckets**: Direct B2 URLs are returned for immediate access
+  - **Private buckets**: `null` is returned for public URLs; access controlled via signed URLs
 - Custom domain support allows branded URLs if configured.
 - Access control relies on route-level authentication and restaurant ownership checks.
 
 Operational notes:
 - The route validates that the requesting user owns the order and restaurant before generating or retrieving invoices.
-- Public URLs are returned in API responses for clients to access PDFs.
+- **Updated** For private buckets, signed URLs are generated with configurable expiration (default 1 hour).
+- Public URLs are returned in API responses for clients to access PDFs when using public buckets.
 
 **Section sources**
 - [invoices.ts:244-287](file://restaurant-backend/src/routes/invoices.ts#L244-L287)
 - [b2-storage.ts:128-144](file://restaurant-backend/src/lib/b2-storage.ts#L128-L144)
+- [b2-storage.ts:267-302](file://restaurant-backend/src/lib/b2-storage.ts#L267-L302)
 
 ### Cleanup Mechanisms for Old Files
 - A maintenance function lists invoice files in B2 and deletes those older than a configurable threshold.
@@ -313,22 +335,28 @@ end
 
 ### Security Considerations
 - Environment-based configuration for B2 credentials and bucket identifiers.
-- Optional custom domain for public URLs; otherwise B2’s native URL is used.
+- **Updated** Dual bucket configuration support:
+  - **Public buckets**: Direct URL access with optional custom domain
+  - **Private buckets**: Access controlled via signed URLs with configurable expiration
 - Route-level authentication and restaurant ownership checks prevent unauthorized access.
 - Email/SMS delivery requires presence of recipient contact details.
+- **Updated** Private bucket enforcement ensures all files require signed URLs for access.
 
 Recommendations:
 - Restrict B2 application keys to least privilege.
-- Use a custom domain with appropriate CDN/WAF protections.
+- Use a custom domain with appropriate CDN/WAF protections for public buckets.
 - Store sensitive environment variables outside the repository.
 - Validate and sanitize inputs for PDF generation.
+- **Updated** Configure `B2_BUCKET_PRIVATE=true` for private buckets to enforce access control.
 
 **Section sources**
 - [b2-storage.ts:13-26](file://restaurant-backend/src/lib/b2-storage.ts#L13-L26)
 - [b2-storage.ts:43-67](file://restaurant-backend/src/lib/b2-storage.ts#L43-L67)
 - [b2-storage.ts:128-144](file://restaurant-backend/src/lib/b2-storage.ts#L128-L144)
+- [b2-storage.ts:257-259](file://restaurant-backend/src/lib/b2-storage.ts#L257-L259)
+- [b2-storage.ts:267-302](file://restaurant-backend/src/lib/b2-storage.ts#L267-L302)
 - [invoices.ts:244-287](file://restaurant-backend/src/routes/invoices.ts#L244-L287)
-- [.env.example:1-53](file://restaurant-backend/.env.example#L1-L53)
+- [env.d.ts:29-36](file://restaurant-backend/src/types/env.d.ts#L29-L36)
 
 ### Backup Strategies
 - Cloud-first approach: PDFs are persisted in B2; database holds metadata and optional binary data.
@@ -372,36 +400,55 @@ database_ts["database.ts"] --> schema_prisma
 - B2 listing and deletion operations scale with file count; batch processing and pagination are supported.
 - Database queries use indexed fields (orderId, invoiceNumber) to minimize overhead.
 - Environment configuration supports production logging and acceleration extensions.
-
-[No sources needed since this section provides general guidance]
+- **Updated** Private bucket access adds minimal overhead through signed URL generation.
 
 ## Troubleshooting Guide
 Common issues and resolutions:
 - Missing B2 credentials or bucket configuration: Uploads fail; ensure environment variables are set.
+- **Updated** Private bucket configuration issues: Verify `B2_BUCKET_PRIVATE=true` for private access control.
 - Public URL generation errors: Verify custom domain or bucket name configuration.
 - Email/SMS failures: Check provider credentials and contact availability.
 - Database connectivity: Confirm Prisma client initialization and connection logs.
 - Cleanup routine not triggered: Verify B2 configuration and retention period.
+- **Updated** Private bucket access denied: Ensure signed URL generation is used instead of direct URLs.
 
 **Section sources**
 - [b2-storage.ts:13-26](file://restaurant-backend/src/lib/b2-storage.ts#L13-L26)
 - [b2-storage.ts:128-144](file://restaurant-backend/src/lib/b2-storage.ts#L128-L144)
+- [b2-storage.ts:257-259](file://restaurant-backend/src/lib/b2-storage.ts#L257-L259)
+- [b2-storage.ts:267-302](file://restaurant-backend/src/lib/b2-storage.ts#L267-L302)
 - [email.ts:31-61](file://restaurant-backend/src/lib/email.ts#L31-L61)
 - [sms.ts:31-66](file://restaurant-backend/src/lib/sms.ts#L31-L66)
 - [database.ts:44-62](file://restaurant-backend/src/config/database.ts#L44-L62)
 
 ## Conclusion
-The system provides a robust, scalable solution for invoice PDF generation and delivery. It leverages B2 for durable, public-access storage, integrates seamlessly with email/SMS workflows, and maintains strong uniqueness guarantees via database constraints. Operational hygiene is supported by a configurable cleanup routine and environment-driven configuration.
+The system provides a robust, scalable solution for invoice PDF generation and delivery. It leverages B2 for durable, configurable storage with support for both public and private bucket access patterns, integrates seamlessly with email/SMS workflows, and maintains strong uniqueness guarantees via database constraints. Operational hygiene is supported by a configurable cleanup routine and environment-driven configuration with enhanced security through proper access control mechanisms.
 
-[No sources needed since this section summarizes without analyzing specific files]
+**Updated** The enhanced B2 integration now provides flexible deployment options with proper access control enforcement for private bucket configurations.
 
 ## Appendices
 
 ### Environment Variables
-- B2 configuration: application key ID and key, bucket ID or bucket name, optional custom domain.
+- B2 configuration: application key ID and key, bucket ID or bucket name, optional custom domain, **updated** private bucket flag.
 - Email/SMS providers: SMTP/Twilio credentials and phone number.
 - Application settings: app name, base URL, rate limiting, encryption key, and API key.
 
 **Section sources**
-- [.env.example:1-53](file://restaurant-backend/.env.example#L1-L53)
+- [env.d.ts:29-36](file://restaurant-backend/src/types/env.d.ts#L29-L36)
 - [render.yaml:1-13](file://restaurant-backend/render.yaml#L1-L13)
+
+### B2 Storage Configuration Options
+- **Public Bucket Mode**: `B2_BUCKET_PRIVATE=false` (default)
+  - Direct URL access to files
+  - Optional custom domain support
+  - Suitable for publicly accessible invoices
+
+- **Private Bucket Mode**: `B2_BUCKET_PRIVATE=true`
+  - Access controlled via signed URLs
+  - Configurable expiration (default 1 hour)
+  - Enhanced security for sensitive documents
+
+**Section sources**
+- [b2-storage.ts:257-259](file://restaurant-backend/src/lib/b2-storage.ts#L257-L259)
+- [b2-storage.ts:267-302](file://restaurant-backend/src/lib/b2-storage.ts#L267-L302)
+- [test-b2.mjs:1-60](file://restaurant-backend/test-b2.mjs#L1-L60)

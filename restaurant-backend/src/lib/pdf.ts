@@ -52,18 +52,16 @@ export interface InvoiceData {
 
 export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
   try {
-    // Set format to 80mm width (Standard POS Receipt Roll) 
-    // Height is set to 250mm but can be adjusted based on item count
     const doc = new jsPDF({
       orientation: 'portrait',
       unit: 'mm',
-      format: [80, 250] 
+      format: [80, 250]
     });
-    
-    const centerX = 40; // Center of an 80mm page
-    let currentY = 15;
-    
-    // --- Header ---
+
+    const centerX = 40;
+    let currentY = 12;
+
+    // ----- HEADER -----
     doc.setFont('helvetica', 'bold');
     doc.setFontSize(14);
     doc.text(invoiceData.restaurantName, centerX, currentY, { align: 'center' });
@@ -75,10 +73,8 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
       doc.text(`GST: ${invoiceData.gstNumber}`, centerX, currentY, { align: 'center' });
     }
 
-    // Address line(s)
     if (invoiceData.restaurantAddress) {
       currentY += 4;
-      doc.setFont('helvetica', 'normal');
       doc.setFontSize(8);
       const addressLines = doc.splitTextToSize(invoiceData.restaurantAddress, 65);
       doc.text(addressLines, centerX, currentY, { align: 'center' });
@@ -97,121 +93,133 @@ export function generateInvoicePDF(invoiceData: InvoiceData): Buffer {
       currentY += 4;
       doc.text(`Ph: ${invoiceData.restaurantPhone}`, centerX, currentY, { align: 'center' });
     }
-    
-    // --- Divider ---
-    currentY += 4;
-    doc.setLineWidth(0.5);
-    doc.line(5, currentY, 75, currentY);
-    
-    // --- Customer Details ---
+
     currentY += 5;
-    doc.setFont('helvetica', 'normal');
+    doc.setLineWidth(0.3);
+    doc.line(5, currentY, 75, currentY);
+
+    // ----- CUSTOMER -----
+    currentY += 6;
     doc.setFontSize(9);
-    doc.text(`Name: ${invoiceData.customerName || ''}`, 5, currentY);
-    
-    currentY += 3;
-    doc.line(5, currentY, 75, currentY);
-    
-    // --- Bill Details ---
-    currentY += 5;
-    doc.text(`Date: ${invoiceData.orderDate}`, 5, currentY);
-    doc.setFont('helvetica', 'bold');
-    doc.text(`Dine In: ${invoiceData.tableNumber || '4'}`, 45, currentY);
-    
+    doc.text(`Name: ${invoiceData.customerName || '-'}`, 5, currentY);
+
     currentY += 4;
+    doc.line(5, currentY, 75, currentY);
+
+    // ----- BILL DETAILS -----
+    currentY += 6;
+    doc.text(`Date: ${invoiceData.orderDate}`, 5, currentY);
+
+    doc.setFont('helvetica', 'bold');
+    doc.text(`Dine In: ${invoiceData.tableNumber || '-'}`, 45, currentY);
+
+    currentY += 5;
     doc.setFont('helvetica', 'normal');
     doc.text(`Cashier: ${invoiceData.cashierName || '-'}`, 5, currentY);
-    doc.text(`Bill No.: ${invoiceData.invoiceNumber}`, 45, currentY);
-    
+    doc.text(`Bill No: ${invoiceData.invoiceNumber}`, 45, currentY);
+
     currentY += 4;
     doc.line(5, currentY, 75, currentY);
-    
-    // --- Items Header ---
-    currentY += 5;
-    doc.text('No.', 5, currentY);
+
+    // ----- ITEMS HEADER -----
+    currentY += 6;
+    doc.setFontSize(9);
+
+    doc.text('No', 5, currentY);
     doc.text('Item', 12, currentY);
-    doc.text('Qty.', 45, currentY);
+    doc.text('Qty', 45, currentY);
     doc.text('Price', 55, currentY);
-    doc.text('Amount', 75, currentY, { align: 'right' });
-    
+    doc.text('Amt', 75, currentY, { align: 'right' });
+
     currentY += 2;
     doc.line(5, currentY, 75, currentY);
-    
-    // --- Items List ---
+
+    // ----- ITEMS -----
     currentY += 5;
     let totalQty = 0;
-    
+
     invoiceData.items.forEach((item, index) => {
       totalQty += item.quantity;
-      
-      // Serial Number
+
       doc.text(`${index + 1}`, 5, currentY);
-      
-      // Wrap long item names inside a 30mm width block
+
       const itemNameLines = doc.splitTextToSize(item.name, 30);
       doc.text(itemNameLines, 12, currentY);
-      
-      // Quantities and Prices
+
       doc.text(item.quantity.toString(), 45, currentY);
       doc.text(item.price.toFixed(2), 55, currentY);
       doc.text(item.total.toFixed(2), 75, currentY, { align: 'right' });
-      
-      // Shift Y down based on the number of lines the item name took
-      currentY += (itemNameLines.length * 4) + 1; 
+
+      currentY += (itemNameLines.length * 5) + 3;
     });
-    
+
     doc.line(5, currentY, 75, currentY);
-    
-    // --- Totals Section ---
-    currentY += 5;
-    doc.text(`Total Qty: ${totalQty}`, 12, currentY);
+
+    // ----- TOTALS -----
+    currentY += 8;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+
+    doc.text(`Total Qty: ${totalQty}`, 5, currentY);
     doc.text('Sub Total', 45, currentY);
     doc.text(invoiceData.subtotal.toFixed(2), 75, currentY, { align: 'right' });
-    
-    currentY += 4;
-    const taxLabel = invoiceData.taxPercent ? `GST ${invoiceData.taxPercent}%` : 'GST';
+
+    currentY += 8;
+
+    const taxLabel = invoiceData.taxPercent
+      ? `GST ${invoiceData.taxPercent}%`
+      : 'GST';
+
     doc.text(taxLabel, 45, currentY);
     doc.text(invoiceData.tax.toFixed(2), 75, currentY, { align: 'right' });
-    
-    currentY += 3;
+
+    // separator above grand total
+    currentY += 7;
+    doc.setLineWidth(0.5);
     doc.line(5, currentY, 75, currentY);
-    
-    // --- Grand Total ---
-    currentY += 6;
+
+    // ----- GRAND TOTAL -----
+    currentY += 9;
+
     doc.setFont('helvetica', 'bold');
-    doc.setFontSize(10);
-    doc.text('Grand Total', 40, currentY);
-    // Note: jsPDF standard fonts don't natively support the ₹ symbol well without importing a custom TTF font.
-    // Use 'INR' or 'Rs' if the ₹ renders as a question mark.
-    doc.text(`INR ${invoiceData.total.toFixed(2)}`, 75, currentY, { align: 'right' }); 
-    
-    currentY += 3;
+    doc.setFontSize(11);
+
+    doc.text('Grand Total', 5, currentY);
+    doc.text(`INR ${invoiceData.total.toFixed(2)}`, 75, currentY, { align: 'right' });
+
+    currentY += 8;
+    doc.setLineWidth(0.5);
     doc.line(5, currentY, 75, currentY);
-    
-    // --- Footer ---
+    currentY += 2;
+    doc.line(5, currentY, 75, currentY); // double line under grand total
+
+    // ----- FOOTER -----
     if (invoiceData.fssaiNumber) {
-      currentY += 5;
+      currentY += 6;
       doc.setFont('helvetica', 'bold');
       doc.setFontSize(8);
-      doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber}`, centerX, currentY, { align: 'center' });
+      doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber}`, centerX, currentY, {
+        align: 'center'
+      });
     }
-    
-    // Generate buffer
+
     const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
-    
+
     logger.info('PDF invoice generated successfully', {
       invoiceNumber: invoiceData.invoiceNumber,
       customerName: invoiceData.customerName,
-      total: invoiceData.total,
+      total: invoiceData.total
     });
-    
+
     return pdfBuffer;
+
   } catch (error) {
     logger.error('PDF generation failed', {
       error: error instanceof Error ? error.message : 'Unknown error',
-      invoiceNumber: invoiceData.invoiceNumber,
+      invoiceNumber: invoiceData.invoiceNumber
     });
-    
+
     throw new Error('Failed to generate PDF invoice');
   }
 }

@@ -56,6 +56,8 @@ function CheckoutPageContent() {
   const [discountPaise, setDiscountPaise] = useState(0);
   const [restaurantPolicy, setRestaurantPolicy] = useState<{ paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL'; cashPaymentEnabled: boolean } | null>(null);
 
+  const selectedTableInfo = tables.find((table) => table.id === selectedTable);
+
   useEffect(() => {
     if (!isAuthenticated) {
       router.push('/auth/signin');

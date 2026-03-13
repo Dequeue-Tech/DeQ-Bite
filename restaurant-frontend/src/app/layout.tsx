@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from 'next'
+import { Suspense } from 'react'
 import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
@@ -30,7 +31,9 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <div id="root" className="min-h-screen flex flex-col pb-24 md:pb-0 safe-area-pb">
-          <RestaurantContextSync />
+          <Suspense fallback={null}>
+            <RestaurantContextSync />
+          </Suspense>
           <Navbar />
           {/* main content area now flexes; padding applied on root to push pages up above fixed nav */}
           <main className="flex-1">

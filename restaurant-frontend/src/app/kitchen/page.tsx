@@ -152,7 +152,7 @@ export default function KitchenPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6">
+    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 mb-20">
       <div className="max-w-7xl mx-auto">
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
           <div className="flex items-center gap-2">

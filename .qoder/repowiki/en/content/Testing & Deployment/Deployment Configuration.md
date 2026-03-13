@@ -15,7 +15,15 @@
 - [next.config.js](file://restaurant-frontend/next.config.js)
 - [vercel.json](file://restaurant-frontend/vercel.json)
 - [package.json](file://restaurant-frontend/package.json)
+- [index.js](file://restaurant-backend/dist/api/index.js)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Updated Vercel deployment configuration section to reflect enhanced reliability measures
+- Added explicit Prisma client inclusion in deployment bundle configuration
+- Updated build and deployment process documentation to address node_modules path resolution improvements
+- Enhanced troubleshooting guidance for Vercel deployment issues
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -30,7 +38,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides a comprehensive deployment configuration guide for DeQ-Bite’s cloud infrastructure. It covers backend deployment on Render, frontend deployment on Vercel, database setup with PostgreSQL, CI/CD considerations, environment-specific configurations, domain and SSL management, CDN setup, security controls, and operational runbooks for production.
+This document provides a comprehensive deployment configuration guide for DeQ-Bite's cloud infrastructure. It covers backend deployment on Render, frontend deployment on Vercel, database setup with PostgreSQL, CI/CD considerations, environment-specific configurations, domain and SSL management, CDN setup, security controls, and operational runbooks for production.
 
 ## Project Structure
 The repository is split into two primary applications:
@@ -197,6 +205,13 @@ Render-->>Dev : Service deployed
 - Static site generation:
   - The frontend configuration does not enable SSG; defaults apply.
 
+**Updated** Enhanced Vercel deployment reliability through improved node_modules path resolution and explicit Prisma client inclusion in deployment bundle
+
+- Enhanced deployment configuration:
+  - Explicit inclusion of Prisma client and database engine files in deployment bundle
+  - Improved node_modules path resolution system for reliable module loading
+  - Comprehensive file inclusion patterns for production stability
+
 ```mermaid
 sequenceDiagram
 participant Vercel as "Vercel"
@@ -204,8 +219,10 @@ participant Next as "Next.js App"
 participant Backend as "Backend API"
 Vercel->>Next : Build frontend
 Vercel->>Backend : Route /api/* to serverless handler
+Vercel->>Backend : Include Prisma client files
+Vercel->>Backend : Resolve node_modules paths
 Next-->>Vercel : Static assets served
-Backend-->>Vercel : API responses
+Backend-->>Vercel : API responses with stable dependencies
 ```
 
 **Diagram sources**
@@ -432,8 +449,6 @@ end
 - Observability:
   - Utilize structured logging and health endpoints for proactive monitoring.
 
-[No sources needed since this section provides general guidance]
-
 ## Troubleshooting Guide
 - Database connectivity:
   - Verify environment variables for database URLs and credentials.
@@ -451,17 +466,30 @@ end
   - Use the /health endpoint to confirm service readiness.
   - Check graceful shutdown signals for container lifecycle events.
 
+**Updated** Enhanced Vercel deployment troubleshooting for improved reliability
+
+- Vercel deployment issues:
+  - Verify Prisma client files are included in deployment bundle
+  - Check node_modules path resolution for production dependencies
+  - Ensure serverless-http handler loads correctly
+  - Validate environment variable loading in Vercel runtime
+
+- Build process verification:
+  - Confirm Prisma client generation completes successfully
+  - Verify TypeScript compilation produces expected output
+  - Check tsc-alias resolves path aliases correctly
+  - Validate serverless handler creation with proper configuration
+
 **Section sources**
 - [database.ts](file://restaurant-backend/src/config/database.ts)
 - [app.ts](file://restaurant-backend/src/app.ts)
 - [email.ts](file://restaurant-backend/src/lib/email.ts)
 - [sms.ts](file://restaurant-backend/src/lib/sms.ts)
 - [server.ts](file://restaurant-backend/src/server.ts)
+- [index.js](file://restaurant-backend/dist/api/index.js)
 
 ## Conclusion
-DeQ-Bite’s deployment leverages Render for the backend and Vercel for the frontend, with PostgreSQL managed via Prisma. The configuration emphasizes security through middleware, strict CORS, and environment-driven secrets. Operational readiness can be improved by adding CI/CD automation, explicit domain/SSL configuration, and CDN integration. Monitoring and alerting should be integrated with platform-native observability tools.
-
-[No sources needed since this section summarizes without analyzing specific files]
+DeQ-Bite's deployment leverages Render for the backend and Vercel for the frontend, with PostgreSQL managed via Prisma. The configuration emphasizes security through middleware, strict CORS, and environment-driven secrets. Recent enhancements to Vercel deployment reliability through improved node_modules path resolution and explicit Prisma client inclusion provide better production stability. Operational readiness can be improved by adding CI/CD automation, explicit domain/SSL configuration, and CDN integration. Monitoring and alerting should be integrated with platform-native observability tools.
 
 ## Appendices
 
@@ -486,6 +514,8 @@ DeQ-Bite’s deployment leverages Render for the backend and Vercel for the fron
 - Frontend
   - Configure environment variables on Vercel (NEXT_PUBLIC_API_URL, NEXT_PUBLIC_APP_NAME).
   - Validate route handling to backend.
+  - Verify Prisma client inclusion in deployment bundle.
+  - Confirm node_modules path resolution works correctly.
 - Database
   - Confirm Prisma datasource URLs and permissions.
   - Test connection and migrations.
@@ -496,5 +526,4 @@ DeQ-Bite’s deployment leverages Render for the backend and Vercel for the fron
   - Add CI/CD triggers.
   - Configure domain and SSL on respective platforms.
   - Set up monitoring and alerts.
-
-[No sources needed since this section provides general guidance]
+  - Verify Vercel deployment reliability metrics.

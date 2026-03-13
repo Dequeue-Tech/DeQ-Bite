@@ -1,9 +1,14 @@
 import { isPrivateBucket as checkPrivateBucket } from './b2-storage';
 export declare const isPrivateBucket: typeof checkPrivateBucket;
 export interface InvoiceData {
-    fssaiNumber?: string;
-    cashierName?: string;
+    restaurantName: string;
+    restaurantAddress?: string;
+    restaurantCity?: string;
+    restaurantState?: string;
+    restaurantPhone?: string;
+    restaurantEmail?: string;
     gstNumber?: string;
+    fssaiNumber?: string;
     customerName: string;
     customerEmail?: string;
     customerPhone?: string;
@@ -17,11 +22,10 @@ export interface InvoiceData {
     }>;
     subtotal: number;
     tax: number;
+    taxPercent?: number;
     total: number;
     tableNumber: number;
-    restaurantName: string;
-    restaurantAddress?: string;
-    restaurantPhone?: string;
+    cashierName?: string;
     paymentMethod?: string;
 }
 export declare function generateInvoicePDF(invoiceData: InvoiceData): Buffer;

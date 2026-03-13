@@ -23,22 +23,33 @@ function generateInvoicePDF(invoiceData) {
         const centerX = 40;
         let currentY = 15;
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(18);
-        doc.text('Restaurant', centerX, currentY, { align: 'center' });
-        currentY += 4;
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(8);
-        doc.text('Food & Drinks', centerX, currentY, { align: 'center' });
-        currentY += 8;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(9);
-        doc.text(invoiceData.restaurantName || 'ABC CAFE & RESTRO', centerX, currentY, { align: 'center' });
-        currentY += 4;
-        doc.text(invoiceData.gstNumber || '08AAKXX7086X1ZT', centerX, currentY, { align: 'center' });
-        currentY += 5;
-        doc.text('BLOCK D PLOT NO 103', centerX, currentY, { align: 'center' });
-        currentY += 4;
-        doc.text('NEW DELHI-110009', centerX, currentY, { align: 'center' });
+        doc.setFontSize(14);
+        doc.text(invoiceData.restaurantName, centerX, currentY, { align: 'center' });
+        if (invoiceData.gstNumber) {
+            currentY += 5;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            doc.text(`GST: ${invoiceData.gstNumber}`, centerX, currentY, { align: 'center' });
+        }
+        if (invoiceData.restaurantAddress) {
+            currentY += 4;
+            doc.setFont('helvetica', 'normal');
+            doc.setFontSize(8);
+            const addressLines = doc.splitTextToSize(invoiceData.restaurantAddress, 65);
+            doc.text(addressLines, centerX, currentY, { align: 'center' });
+            currentY += (addressLines.length - 1) * 4;
+        }
+        if (invoiceData.restaurantCity || invoiceData.restaurantState) {
+            currentY += 4;
+            const cityState = [invoiceData.restaurantCity, invoiceData.restaurantState]
+                .filter(Boolean)
+                .join(', ');
+            doc.text(cityState, centerX, currentY, { align: 'center' });
+        }
+        if (invoiceData.restaurantPhone) {
+            currentY += 4;
+            doc.text(`Ph: ${invoiceData.restaurantPhone}`, centerX, currentY, { align: 'center' });
+        }
         currentY += 4;
         doc.setLineWidth(0.5);
         doc.line(5, currentY, 75, currentY);
@@ -54,7 +65,7 @@ function generateInvoicePDF(invoiceData) {
         doc.text(`Dine In: ${invoiceData.tableNumber || '4'}`, 45, currentY);
         currentY += 4;
         doc.setFont('helvetica', 'normal');
-        doc.text(`Cashier: ${invoiceData.cashierName || 'biller'}`, 5, currentY);
+        doc.text(`Cashier: ${invoiceData.cashierName || '-'}`, 5, currentY);
         doc.text(`Bill No.: ${invoiceData.invoiceNumber}`, 45, currentY);
         currentY += 4;
         doc.line(5, currentY, 75, currentY);
@@ -84,7 +95,8 @@ function generateInvoicePDF(invoiceData) {
         doc.text('Sub Total', 45, currentY);
         doc.text(invoiceData.subtotal.toFixed(2), 75, currentY, { align: 'right' });
         currentY += 4;
-        doc.text('GST 5%', 45, currentY);
+        const taxLabel = invoiceData.taxPercent ? `GST ${invoiceData.taxPercent}%` : 'GST';
+        doc.text(taxLabel, 45, currentY);
         doc.text(invoiceData.tax.toFixed(2), 75, currentY, { align: 'right' });
         currentY += 3;
         doc.line(5, currentY, 75, currentY);
@@ -95,10 +107,12 @@ function generateInvoicePDF(invoiceData) {
         doc.text(`INR ${invoiceData.total.toFixed(2)}`, 75, currentY, { align: 'right' });
         currentY += 3;
         doc.line(5, currentY, 75, currentY);
-        currentY += 5;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(8);
-        doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber || '13364267896567'}`, centerX, currentY, { align: 'center' });
+        if (invoiceData.fssaiNumber) {
+            currentY += 5;
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(8);
+            doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber}`, centerX, currentY, { align: 'center' });
+        }
         const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
         logger_1.logger.info('PDF invoice generated successfully', {
             invoiceNumber: invoiceData.invoiceNumber,

@@ -2,11 +2,31 @@ import { PrismaClient } from '@prisma/client';
 import { logger } from '@/utils/logger';
 
 const createPrismaClient = () => {
-  const client = new PrismaClient({
-    log: process.env.NODE_ENV === 'production' 
-      ? ['error', 'warn'] 
-      : ['query', 'info', 'warn', 'error'],
-  });
+  const shouldLogQueries = process.env.LOG_SLOW_QUERIES !== 'false';
+  const slowQueryMs = Number(process.env.SLOW_QUERY_MS || 200);
+  const log: any[] = process.env.NODE_ENV === 'production'
+    ? ['error', 'warn']
+    : ['query', 'info', 'warn', 'error'];
+
+  if (shouldLogQueries) {
+    log.push({ emit: 'event', level: 'query' });
+  }
+
+  let client: any = new PrismaClient({ log });
+
+  if (shouldLogQueries && typeof client.$on === 'function') {
+    client.$on('query', (e: any) => {
+      if (e.duration >= slowQueryMs) {
+        const includeParams = process.env.LOG_SLOW_QUERY_PARAMS === 'true';
+        logger.warn('Slow query detected', {
+          durationMs: e.duration,
+          query: e.query,
+          ...(includeParams ? { params: e.params } : {}),
+          target: e.target,
+        });
+      }
+    });
+  }
 
   // Check if using Prisma Accelerate (prisma+postgres:// or prisma+mysql://)
   const databaseUrl = process.env.DATABASE_URL || '';
@@ -16,13 +36,12 @@ const createPrismaClient = () => {
       // This prevents startup failure if the package isn't installed.
       // eslint-disable-next-line @typescript-eslint/no-var-requires
       const { withAccelerate } = require('@prisma/extension-accelerate');
-      return client.$extends(withAccelerate());
+      client = client.$extends(withAccelerate());
     } catch (error) {
       logger.warn('Prisma Accelerate requested but @prisma/extension-accelerate is not installed. Falling back to regular Prisma client.');
-      return client;
     }
   }
-  
+
   return client;
 };
 

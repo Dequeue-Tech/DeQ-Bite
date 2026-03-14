@@ -5,6 +5,7 @@ import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
 import { safeCreateAuditLog } from '@/utils/audit';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
@@ -26,6 +27,9 @@ const offerUpdateSchema = offerSchema.partial();
 const normalizeCode = (code?: string) => (code ? code.trim().toUpperCase() : undefined);
 
 router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
+  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
   const offers = await prisma.offer.findMany({
     where: {
       restaurantId: req.restaurant!.id,
@@ -33,6 +37,9 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
     orderBy: {
       createdAt: 'desc',
     },
+    ...(typeof take === 'number' ? { take } : {}),
+    ...(cursor ? { cursor, skip: 1 } : {}),
+    ...(accelerateCache(60, 120) as any),
   });
 
   return res.json({

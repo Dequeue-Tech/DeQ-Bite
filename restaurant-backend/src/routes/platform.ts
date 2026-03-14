@@ -4,6 +4,7 @@ import { prisma } from '@/config/database';
 import { authenticate, authorize } from '@/middleware/auth';
 import { AuthenticatedRequest } from '@/types/api';
 import { safeCreateAuditLog } from '@/utils/audit';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
@@ -34,6 +35,9 @@ router.use(authorize('OWNER'));
 router.get('/restaurants', async (req: AuthenticatedRequest, res: Response) => {
   const status = req.query['status'] as string | undefined;
 
+  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
   const restaurants = await prisma.restaurant.findMany({
     where: status && ['PENDING_APPROVAL', 'APPROVED', 'SUSPENDED'].includes(status)
       ? ({ status } as any)
@@ -60,6 +64,9 @@ router.get('/restaurants', async (req: AuthenticatedRequest, res: Response) => {
     orderBy: {
       createdAt: 'desc',
     },
+    ...(typeof take === 'number' ? { take } : {}),
+    ...(cursor ? { cursor, skip: 1 } : {}),
+    ...(accelerateCache(60, 120) as any),
   });
 
   return res.json({
@@ -206,6 +213,9 @@ router.patch('/restaurants/:id/details', async (req: AuthenticatedRequest, res: 
 router.get('/orders', async (req: AuthenticatedRequest, res: Response) => {
   const restaurantId = req.query['restaurantId'] as string | undefined;
 
+  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 500) : undefined;
+  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
   const orders = await prisma.order.findMany({
     where: {
       ...(restaurantId ? { restaurantId } : {}),
@@ -235,7 +245,8 @@ router.get('/orders', async (req: AuthenticatedRequest, res: Response) => {
     orderBy: {
       createdAt: 'desc',
     },
-    take: 500,
+    ...(typeof take === 'number' ? { take } : { take: 500 }),
+    ...(cursor ? { cursor, skip: 1 } : {}),
   });
 
   return res.json({ success: true, data: { orders } });
@@ -250,12 +261,14 @@ router.get('/earnings', async (_req: AuthenticatedRequest, res: Response) => {
         platformCommissionPaise: true,
         restaurantEarningPaise: true,
       },
+      ...(accelerateCache(60, 120) as any),
     }),
     (prisma as any).earning.aggregate({
       where: { settled: false },
       _sum: {
         restaurantEarningPaise: true,
       },
+      ...(accelerateCache(60, 120) as any),
     }),
     // Cast to any to avoid overly strict groupBy overload typing issues across Prisma versions
     (prisma as any).earning.groupBy({
@@ -268,12 +281,14 @@ router.get('/earnings', async (_req: AuthenticatedRequest, res: Response) => {
       _count: {
         _all: true,
       },
+      ...(accelerateCache(60, 120) as any),
     }),
   ]);
 
   const restaurants = await prisma.restaurant.findMany({
     where: { id: { in: byRestaurant.map((entry: { restaurantId: string }) => entry.restaurantId) } },
     select: { id: true, name: true },
+    ...(accelerateCache(60, 120) as any),
   });
 
   const restaurantNameById = new Map(restaurants.map((r: { id: string; name: string }) => [r.id, r.name]));

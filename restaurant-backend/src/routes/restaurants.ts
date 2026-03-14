@@ -6,6 +6,7 @@ import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { safeCreateAuditLog } from '@/utils/audit';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
@@ -150,6 +151,7 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
       select: searchSelect,
       orderBy: { name: 'asc' },
       take: 50,
+      ...(accelerateCache(60, 120) as any),
     });
   } catch (err: any) {
     const isStatusError =
@@ -165,6 +167,7 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
         select: searchSelect,
         orderBy: { name: 'asc' },
         take: 50,
+        ...(accelerateCache(60, 120) as any),
       });
     } else {
       throw err;
@@ -235,6 +238,7 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
     restaurant = await prisma.restaurant.findFirst({
       where: baseFilter,
       select: detailSelect,
+      ...(accelerateCache(120, 240) as any),
     });
   } catch (err: any) {
     const isStatusError =
@@ -249,6 +253,7 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
       restaurant = await prisma.restaurant.findFirst({
         where: fallback,
         select: detailSelect,
+        ...(accelerateCache(120, 240) as any),
       });
     } else {
       throw err;
@@ -310,6 +315,9 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
     mineSelect.status = true;
   }
 
+  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
+  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
   const restaurants = await prisma.restaurantUser.findMany({
     where: {
       userId: req.user!.id,
@@ -320,6 +328,9 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
         select: mineSelect,
       },
     },
+    ...(typeof take === 'number' ? { take } : {}),
+    ...(cursor ? { cursor, skip: 1 } : {}),
+    ...(accelerateCache(120, 300) as any),
   });
 
   const response: ApiResponse = {
@@ -422,6 +433,7 @@ router.get('/settings/payment-policy', authenticate, requireRestaurant, authoriz
   const restaurant: any = await prisma.restaurant.findUnique({
     where: { id: req.restaurant!.id },
     select: policySelect,
+    ...(accelerateCache(120, 300) as any),
   });
 
   return res.json({
@@ -467,6 +479,9 @@ router.put('/settings/payment-policy', authenticate, requireRestaurant, authoriz
 
 // GET /api/restaurants/users
 router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
+  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
   const users = await prisma.restaurantUser.findMany({
     where: {
       restaurantId: req.restaurant!.id,
@@ -487,6 +502,9 @@ router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('O
     orderBy: {
       createdAt: 'desc',
     },
+    ...(typeof take === 'number' ? { take } : {}),
+    ...(cursor ? { cursor, skip: 1 } : {}),
+    ...(accelerateCache(120, 300) as any),
   });
 
   const response: ApiResponse = {

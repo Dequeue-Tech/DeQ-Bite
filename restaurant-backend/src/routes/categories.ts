@@ -2,12 +2,16 @@ import { Router } from 'express';
 import { prisma } from '@/config/database';
 import { requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
 // Get all categories
 router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
+    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
     const categories = await prisma.category.findMany({
       where: {
         active: true,
@@ -15,7 +19,10 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
       },
       orderBy: {
         sortOrder: 'asc'
-      }
+      },
+      ...(typeof take === 'number' ? { take } : {}),
+      ...(cursor ? { cursor, skip: 1 } : {}),
+      ...(accelerateCache(600, 1200) as any),
     });
 
     return res.json({
@@ -49,7 +56,8 @@ router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => 
       where: {
         id,
         restaurantId: req.restaurant!.id,
-      }
+      },
+      ...(accelerateCache(300, 600) as any),
     });
 
     if (!category) {

@@ -4,6 +4,7 @@ import { prisma } from '@/config/database';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
@@ -30,6 +31,9 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
     const { categoryId } = req.query;
     
+    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
+    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
     const menuItems = await prisma.menuItem.findMany({
       where: {
         available: true,
@@ -41,7 +45,10 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
       },
       orderBy: {
         name: 'asc'
-      }
+      },
+      ...(typeof take === 'number' ? { take } : {}),
+      ...(cursor ? { cursor, skip: 1 } : {}),
+      ...(accelerateCache(300, 600) as any),
     });
 
     return res.json({
@@ -62,6 +69,9 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 // Get all menu items for admin/staff including unavailable items
 router.get('/admin/all', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
   try {
+    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
     const menuItems = await prisma.menuItem.findMany({
       where: {
         restaurantId: req.restaurant!.id,
@@ -72,6 +82,9 @@ router.get('/admin/all', authenticate, requireRestaurant, authorizeRestaurantRol
       orderBy: {
         createdAt: 'desc',
       },
+      ...(typeof take === 'number' ? { take } : {}),
+      ...(cursor ? { cursor, skip: 1 } : {}),
+      ...(accelerateCache(60, 120) as any),
     });
 
     return res.json({
@@ -100,7 +113,8 @@ router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => 
       },
       include: {
         category: true
-      }
+      },
+      ...(accelerateCache(300, 600) as any),
     });
 
     if (!menuItem) {

@@ -9,6 +9,7 @@ import { sendInvoiceEmail } from '@/lib/email';
 import { sendInvoiceSMS } from '@/lib/sms';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { logger } from '@/utils/logger';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
@@ -293,6 +294,7 @@ router.get('/:orderId', authenticate, requireRestaurant, asyncHandler(async (req
         },
       },
     },
+    ...(accelerateCache(120, 300) as any),
   });
 
   if (!invoice) {
@@ -309,6 +311,9 @@ router.get('/:orderId', authenticate, requireRestaurant, asyncHandler(async (req
 
 // GET /api/invoices/user/list - Get all invoices for authenticated user
 router.get('/user/list', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
+  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
   const invoices = await prisma.invoice.findMany({
     where: {
       order: {
@@ -335,6 +340,9 @@ router.get('/user/list', authenticate, requireRestaurant, asyncHandler(async (re
     orderBy: {
       issuedAt: 'desc',
     },
+    ...(accelerateCache(120, 300) as any),
+    ...(typeof take === 'number' ? { take } : {}),
+    ...(cursor ? { cursor, skip: 1 } : {}),
   });
 
   const response: ApiResponse = {

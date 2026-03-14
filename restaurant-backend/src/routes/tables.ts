@@ -2,14 +2,21 @@ import { Router } from 'express';
 import { prisma } from '@/config/database';
 import { requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
 // Get all tables
 router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
+    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
     const tables = await prisma.table.findMany({
       where: { restaurantId: req.restaurant!.id },
+      ...(typeof take === 'number' ? { take } : {}),
+      ...(cursor ? { cursor, skip: 1 } : {}),
+      ...(accelerateCache(60, 120) as any),
     });
     return res.json({
       success: true,
@@ -28,11 +35,17 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 // Get available tables
 router.get('/available', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
+    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
     const availableTables = await prisma.table.findMany({
       where: {
         active: true,
         restaurantId: req.restaurant!.id,
-      }
+      },
+      ...(typeof take === 'number' ? { take } : {}),
+      ...(cursor ? { cursor, skip: 1 } : {}),
+      ...(accelerateCache(60, 120) as any),
     });
     return res.json({
       success: true,
@@ -63,7 +76,8 @@ router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => 
       where: {
         id,
         restaurantId: req.restaurant!.id,
-      }
+      },
+      ...(accelerateCache(60, 120) as any),
     });
     
     if (!table) {

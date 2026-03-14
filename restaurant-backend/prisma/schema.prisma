@@ -84,6 +84,7 @@ model RestaurantUser {
   user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([restaurantId, userId])
+  @@index([restaurantId, userId, active])
   @@map("restaurant_users")
 }
 
@@ -101,6 +102,7 @@ model Category {
   menuItems    MenuItem[]
 
   @@unique([restaurantId, name])
+  @@index([restaurantId, active, sortOrder])
   @@map("categories")
 }
 
@@ -128,6 +130,8 @@ model MenuItem {
   popularDishes   PopularDish[]
 
   @@map("menu_items")
+  @@index([restaurantId, available])
+  @@index([restaurantId, categoryId])
 }
 
 model PopularDish {
@@ -156,6 +160,7 @@ model Table {
   restaurant   Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@unique([restaurantId, number])
+  @@index([restaurantId, active])
   @@map("tables")
 }
 
@@ -190,6 +195,10 @@ model Order {
   payments                Payment[]
 
   @@map("orders")
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, userId, createdAt])
+  @@index([restaurantId, status, createdAt])
+  @@index([restaurantId, paymentStatus, createdAt])
 }
 
 model OrderItem {
@@ -219,6 +228,7 @@ model Invoice {
   order         Order           @relation(fields: [orderId], references: [id])
 
   @@map("invoices")
+  @@index([issuedAt])
 }
 
 model Coupon {
@@ -273,6 +283,8 @@ model Offer {
   restaurant           Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
 
   @@map("offers")
+  @@index([restaurantId, active])
+  @@index([restaurantId, startsAt, endsAt])
 }
 
 model Payment {
@@ -293,6 +305,8 @@ model Payment {
   order             Order        @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@map("payments")
+  @@index([orderId])
+  @@index([restaurantId, createdAt])
 }
 
 model Earning {

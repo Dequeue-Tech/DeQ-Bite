@@ -3,6 +3,7 @@ import { prisma } from '@/config/database';
 import { AppError } from '@/middleware/errorHandler';
 import { AuthenticatedRequest } from '@/types/api';
 import { Prisma } from '@prisma/client';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 // collect restaurant field names from generated client DMMF so we can safely
 // build select clauses at runtime. This lets us deploy new code before the
@@ -145,6 +146,7 @@ export const attachRestaurant = async (
       restaurant = await prisma.restaurant.findFirst({
         where: baseFilter,
         ...(basicSelect ? { select: basicSelect } : {}),
+        ...(accelerateCache(30, 60) as any),
       });
     } catch (err: any) {
       // If the client schema doesn't know about "status" or other fields, fall back
@@ -170,6 +172,7 @@ export const attachRestaurant = async (
           const partialRestaurant = await prisma.restaurant.findFirst({
             where: fallbackFilter,
             ...(fallbackSelect ? { select: fallbackSelect } : {}),
+            ...(accelerateCache(30, 60) as any),
           });
 
           if (partialRestaurant) {

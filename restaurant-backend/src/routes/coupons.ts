@@ -5,6 +5,7 @@ import { prisma } from '@/config/database';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
+import { accelerateCache } from '@/utils/accelerate-cache';
 
 const router = Router();
 
@@ -51,9 +52,15 @@ const computeDiscountPaise = (coupon: any, subtotalPaise: number) => {
 
 // GET /api/coupons - list coupons (admin/owner)
 router.get('/', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
+  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+
   const coupons = await prisma.coupon.findMany({
     where: { restaurantId: req.restaurant!.id },
     orderBy: { createdAt: 'desc' },
+    ...(typeof take === 'number' ? { take } : {}),
+    ...(cursor ? { cursor, skip: 1 } : {}),
+    ...(accelerateCache(60, 120) as any),
   });
 
   const response: ApiResponse = {
@@ -143,15 +150,16 @@ router.post('/validate', requireRestaurant, async (req: AuthenticatedRequest, re
   const { code, subtotalPaise } = validateCouponSchema.parse(req.body);
   const normalized = normalizeCode(code);
 
-  const coupon = await prisma.coupon.findFirst({
+  const coupon = await prisma.coupon.findUnique({
     where: {
-      restaurantId: req.restaurant!.id,
-      code: normalized,
-      active: true,
+      restaurantId_code: {
+        restaurantId: req.restaurant!.id,
+        code: normalized,
+      },
     },
   });
 
-  if (!coupon) {
+  if (!coupon || !coupon.active) {
     return res.status(404).json({ success: false, error: 'Invalid or inactive coupon' });
   }
 

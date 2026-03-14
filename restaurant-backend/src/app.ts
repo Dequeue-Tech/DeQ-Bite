@@ -7,6 +7,7 @@ import dotenv from 'dotenv';
 import { errorHandler } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { attachRestaurant } from '@/middleware/restaurant';
+import { optionalAuth } from '@/middleware/auth';
 
 
 import authRoutes from '@/routes/auth';
@@ -82,6 +83,7 @@ app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
 app.use(attachRestaurant);
+app.use(optionalAuth);
 
 app.use(morgan('combined', {
   stream: {

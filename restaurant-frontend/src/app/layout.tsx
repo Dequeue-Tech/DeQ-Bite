@@ -4,6 +4,7 @@ import './globals.css'
 import { Toaster } from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
 import RestaurantContextSync from '@/components/RestaurantContextSync'
+import RestaurantStaffGuard from '@/components/RestaurantStaffGuard'
 
 export const metadata: Metadata = {
   title: 'Restaurant Online Ordering',
@@ -33,6 +34,9 @@ export default function RootLayout({
         <div id="root" className="min-h-screen flex flex-col pb-24 md:pb-0 safe-area-pb">
           <Suspense fallback={null}>
             <RestaurantContextSync />
+          </Suspense>
+          <Suspense fallback={null}>
+            <RestaurantStaffGuard />
           </Suspense>
           <Navbar />
           {/* main content area now flexes; padding applied on root to push pages up above fixed nav */}

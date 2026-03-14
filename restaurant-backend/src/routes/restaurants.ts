@@ -39,6 +39,17 @@ function buildSelect(fields: string[]) {
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
+const STAFF_ROLES = new Set(['OWNER', 'ADMIN', 'STAFF', 'KITCHEN_STAFF']);
+
+const isStaffAccount = async (user: { id: string; role: string }) => {
+  if (STAFF_ROLES.has(user.role)) return true;
+  const membership = await prisma.restaurantUser.findFirst({
+    where: { userId: user.id, active: true },
+    select: { id: true },
+  });
+  return !!membership;
+};
+
 const slugify = (value: string) =>
   value
     .toLowerCase()
@@ -91,6 +102,13 @@ const addRestaurantUserSchema = z.object({
 
 // GET /api/restaurants/public/search?query=abc&cuisine=indian&location=city
 router.get('/public/search', async (req: AuthenticatedRequest, res: Response) => {
+  if (req.user && (await isStaffAccount(req.user))) {
+    return res.status(403).json({
+      success: false,
+      error: 'Access denied for restaurant staff accounts.',
+    });
+  }
+
   const query = (req.query['query'] as string | undefined)?.trim() || '';
   const cuisine = (req.query['cuisine'] as string | undefined)?.trim();
   const location = (req.query['location'] as string | undefined)?.trim();
@@ -239,6 +257,25 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
 
   if (!restaurant) {
     return res.status(404).json({ success: false, error: 'Restaurant not found' });
+  }
+
+  if (req.user && (await isStaffAccount(req.user))) {
+    const membership = await prisma.restaurantUser.findUnique({
+      where: {
+        restaurantId_userId: {
+          restaurantId: restaurant.id,
+          userId: req.user.id,
+        },
+      },
+      select: { active: true },
+    });
+
+    if (!membership || !membership.active) {
+      return res.status(403).json({
+        success: false,
+        error: 'Access denied for restaurant staff accounts.',
+      });
+    }
   }
 
   return res.json({

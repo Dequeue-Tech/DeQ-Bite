@@ -215,6 +215,26 @@ export const requireRestaurant = (
   if (!req.restaurant) {
     return next(new AppError('Restaurant context required', 400));
   }
+  if (req.user && ['OWNER', 'ADMIN', 'STAFF', 'KITCHEN_STAFF'].includes(req.user.role)) {
+    prisma.restaurantUser
+      .findUnique({
+        where: {
+          restaurantId_userId: {
+            restaurantId: req.restaurant.id,
+            userId: req.user.id,
+          },
+        },
+        select: { active: true },
+      })
+      .then((membership) => {
+        if (!membership || !membership.active) {
+          return next(new AppError('Access denied. Restaurant membership required.', 403));
+        }
+        return next();
+      })
+      .catch((error) => next(error));
+    return;
+  }
   return next();
 };
 

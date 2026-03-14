@@ -4,7 +4,10 @@ import { useEffect, useState } from 'react';
 import { useRouter, usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import Link from 'next/link';
-import { ChefHat, ShoppingCart, Home, UtensilsCrossed, ClipboardList, User, Settings, LogOut, ChevronDown } from 'lucide-react';
+import { 
+  ChefHat, ShoppingCart, Home, UtensilsCrossed, 
+  ClipboardList, User, LogOut, ChevronDown, LayoutDashboard 
+} from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { apiClient } from '@/lib/api-client';
 
@@ -167,68 +170,82 @@ const Navbar = () => {
             </div>
 
             {/* Mobile: Profile icon with dropdown */}
-            <div className='md:hidden flex items-center'>
+            <div className='md:hidden flex items-center h-full relative'>
               {isAuthenticated ? (
-              <div className="md:hidden relative">
-                <button
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    setShowUserDropdown(!showUserDropdown);
-                  }}
-                  className="flex items-center gap-1 p-2 text-gray-600 hover:text-orange-600 active:bg-gray-100 rounded-lg transition-colors"
+                <>
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setShowUserDropdown(!showUserDropdown);
+                    }}
+                    className="flex items-center justify-center p-1.5 text-gray-600 hover:text-orange-600 active:bg-gray-100 rounded-full transition-colors"
+                  >
+                    <User className="h-6 w-6" />
+                    <ChevronDown className={`h-3 w-3 ml-0.5 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} />
+                  </button>
+
+                  {/* Glassy Floating Dropdown */}
+                  {showUserDropdown && (
+                    <div 
+                      onClick={(e) => e.stopPropagation()}
+                      className="absolute right-0 top-full mt-2 w-56 rounded-xl border border-white/20 bg-white/80 backdrop-blur-md shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                    >
+                      {/* User Info Section */}
+                      <div className="px-4 py-3 border-b border-gray-200/50 bg-gradient-to-br from-orange-50/50 to-transparent">
+                        <p className="text-sm font-semibold text-gray-900 truncate">
+                          {user?.name || user?.email || 'User'}
+                        </p>
+                        {user?.email && user?.name && (
+                          <p className="text-xs text-gray-500 truncate mt-0.5">
+                            {user.email}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Action Buttons */}
+                      <div className="py-2">
+                        {/* Admin Link - Only visible if canAccessAdmin */}
+                        {canAccessAdmin && (
+                          <Link
+                            href={withRestaurant('/admin')}
+                            onClick={() => setShowUserDropdown(false)}
+                            className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors"
+                          >
+                            <LayoutDashboard className="h-4 w-4" />
+                            <span>Admin Dashboard</span>
+                          </Link>
+                        )}
+
+                        <Link
+                          href={withRestaurant('/orders')}
+                          onClick={() => setShowUserDropdown(false)}
+                          className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
+                        >
+                          <ClipboardList className="h-4 w-4" />
+                          <span className="font-medium">My Orders</span>
+                        </Link>
+                        
+                        <div className="h-px w-full bg-gray-100 my-1"></div>
+
+                        <button
+                          onClick={handleLogout}
+                          className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
+                        >
+                          <LogOut className="h-4 w-4" />
+                          <span className="font-medium">Logout</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </>
+              ) : (
+                <Link 
+                  href="/auth/signin" 
+                  className="flex items-center justify-center p-2 text-orange-600 hover:text-orange-700 active:bg-gray-50 rounded-full transition-colors"
                 >
                   <User className="h-6 w-6" />
-                  <ChevronDown className={`h-4 w-4 transition-transform ${showUserDropdown ? 'rotate-180' : ''}`} />
-                </button>
-
-                {/* Glassy Floating Dropdown */}
-                {showUserDropdown && (
-                  <div 
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute right-0 mt-2 w-56 rounded-xl border border-white/20 bg-white/80 backdrop-blur-md shadow-2xl z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
-                  >
-                    {/* User Info Section */}
-                    <div className="px-4 py-3 border-b border-gray-200/50 bg-gradient-to-br from-orange-50/50 to-transparent">
-                      <p className="text-sm font-semibold text-gray-900 truncate">
-                        {user?.name || user?.email || 'User'}
-                      </p>
-                      {user?.email && user?.name && (
-                        <p className="text-xs text-gray-500 truncate mt-0.5">
-                          {user.email}
-                        </p>
-                      )}
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="py-2">
-                      <Link
-                        href={withRestaurant('/orders')}
-                        onClick={() => setShowUserDropdown(false)}
-                        className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-orange-50 hover:text-orange-600 transition-colors"
-                      >
-                        <ClipboardList className="h-4 w-4" />
-                        <span className="font-medium">Orders</span>
-                      </Link>
-                      
-                      <button
-                        onClick={handleLogout}
-                        className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 transition-colors"
-                      >
-                        <LogOut className="h-4 w-4" />
-                        <span className="font-medium">Logout</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
-              </div>
-            ) : (
-              <Link 
-                href="/auth/signin" 
-                className="md:hidden flex items-center p-2 text-orange-600 hover:text-orange-700 active:bg-gray-50 rounded-lg transition-colors"
-              >
-                <User className="h-6 w-6" />
-              </Link>
-            )}
+                </Link>
+              )}
             </div>
           </div>
         </div>

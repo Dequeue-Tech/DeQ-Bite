@@ -6,6 +6,8 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { AuthenticatedRequest } from '@/types/api';
 import { safeCreateAuditLog } from '@/utils/audit';
 import { accelerateCache } from '@/utils/accelerate-cache';
+import { cacheResponse } from '@/middleware/cache';
+import { invalidateCacheByPrefix } from '@/utils/cache';
 
 const router = Router();
 
@@ -26,7 +28,7 @@ const offerUpdateSchema = offerSchema.partial();
 
 const normalizeCode = (code?: string) => (code ? code.trim().toUpperCase() : undefined);
 
-router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
+router.get('/', requireRestaurant, cacheResponse(120, 'offers:list'), async (req: AuthenticatedRequest, res) => {
   const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
   const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
 
@@ -49,115 +51,133 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 });
 
 router.post('/', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res) => {
-  const payload = offerSchema.parse(req.body);
+  try {
+    const payload = offerSchema.parse(req.body);
 
-  const offer = await prisma.offer.create({
-    data: {
+    const offer = await prisma.offer.create({
+      data: {
+        restaurantId: req.restaurant!.id,
+        name: payload.name,
+        description: payload.description ?? null,
+        code: normalizeCode(payload.code) ?? null,
+        discountType: payload.discountType,
+        value: payload.value,
+        minOrderPaise: payload.minOrderPaise ?? null,
+        maxDiscountPaise: payload.maxDiscountPaise ?? null,
+        startsAt: payload.startsAt ? new Date(payload.startsAt) : null,
+        endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
+        active: payload.active ?? true,
+      },
+    });
+
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
       restaurantId: req.restaurant!.id,
-      name: payload.name,
-      description: payload.description ?? null,
-      code: normalizeCode(payload.code) ?? null,
-      discountType: payload.discountType,
-      value: payload.value,
-      minOrderPaise: payload.minOrderPaise ?? null,
-      maxDiscountPaise: payload.maxDiscountPaise ?? null,
-      startsAt: payload.startsAt ? new Date(payload.startsAt) : null,
-      endsAt: payload.endsAt ? new Date(payload.endsAt) : null,
-      active: payload.active ?? true,
-    },
-  });
+      action: 'OFFER_CREATED',
+      entityType: 'offer',
+      entityId: offer.id,
+      metadata: {
+        name: offer.name,
+        code: offer.code,
+      },
+    });
 
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId: req.restaurant!.id,
-    action: 'OFFER_CREATED',
-    entityType: 'offer',
-    entityId: offer.id,
-    metadata: {
-      name: offer.name,
-      code: offer.code,
-    },
-  });
-
-  return res.status(201).json({ success: true, data: { offer }, message: 'Offer created' });
+    return res.status(201).json({ success: true, data: { offer }, message: 'Offer created' });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('offers:list', req.restaurant.id);
+    }
+  }
 });
 
 router.put('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res) => {
-  const id = req.params['id'];
-  if (!id) {
-    return res.status(400).json({ success: false, error: 'Offer id is required' });
-  }
+  try {
+    const id = req.params['id'];
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Offer id is required' });
+    }
 
-  const payload = offerUpdateSchema.parse(req.body);
+    const payload = offerUpdateSchema.parse(req.body);
 
-  const existing = await prisma.offer.findFirst({
-    where: {
-      id,
+    const existing = await prisma.offer.findFirst({
+      where: {
+        id,
+        restaurantId: req.restaurant!.id,
+      },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Offer not found' });
+    }
+
+    const offer = await prisma.offer.update({
+      where: { id },
+      data: {
+        ...(payload.name !== undefined ? { name: payload.name } : {}),
+        ...(payload.description !== undefined ? { description: payload.description } : {}),
+        ...(payload.code !== undefined ? { code: normalizeCode(payload.code) ?? null } : {}),
+        ...(payload.discountType !== undefined ? { discountType: payload.discountType } : {}),
+        ...(payload.value !== undefined ? { value: payload.value } : {}),
+        ...(payload.minOrderPaise !== undefined ? { minOrderPaise: payload.minOrderPaise ?? null } : {}),
+        ...(payload.maxDiscountPaise !== undefined ? { maxDiscountPaise: payload.maxDiscountPaise ?? null } : {}),
+        ...(payload.startsAt !== undefined ? { startsAt: payload.startsAt ? new Date(payload.startsAt) : null } : {}),
+        ...(payload.endsAt !== undefined ? { endsAt: payload.endsAt ? new Date(payload.endsAt) : null } : {}),
+        ...(payload.active !== undefined ? { active: payload.active } : {}),
+      },
+    });
+
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
       restaurantId: req.restaurant!.id,
-    },
-  });
+      action: 'OFFER_UPDATED',
+      entityType: 'offer',
+      entityId: offer.id,
+      metadata: payload,
+    });
 
-  if (!existing) {
-    return res.status(404).json({ success: false, error: 'Offer not found' });
+    return res.json({ success: true, data: { offer }, message: 'Offer updated' });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('offers:list', req.restaurant.id);
+    }
   }
-
-  const offer = await prisma.offer.update({
-    where: { id },
-    data: {
-      ...(payload.name !== undefined ? { name: payload.name } : {}),
-      ...(payload.description !== undefined ? { description: payload.description } : {}),
-      ...(payload.code !== undefined ? { code: normalizeCode(payload.code) ?? null } : {}),
-      ...(payload.discountType !== undefined ? { discountType: payload.discountType } : {}),
-      ...(payload.value !== undefined ? { value: payload.value } : {}),
-      ...(payload.minOrderPaise !== undefined ? { minOrderPaise: payload.minOrderPaise ?? null } : {}),
-      ...(payload.maxDiscountPaise !== undefined ? { maxDiscountPaise: payload.maxDiscountPaise ?? null } : {}),
-      ...(payload.startsAt !== undefined ? { startsAt: payload.startsAt ? new Date(payload.startsAt) : null } : {}),
-      ...(payload.endsAt !== undefined ? { endsAt: payload.endsAt ? new Date(payload.endsAt) : null } : {}),
-      ...(payload.active !== undefined ? { active: payload.active } : {}),
-    },
-  });
-
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId: req.restaurant!.id,
-    action: 'OFFER_UPDATED',
-    entityType: 'offer',
-    entityId: offer.id,
-    metadata: payload,
-  });
-
-  return res.json({ success: true, data: { offer }, message: 'Offer updated' });
 });
 
 router.delete('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res) => {
-  const id = req.params['id'];
-  if (!id) {
-    return res.status(400).json({ success: false, error: 'Offer id is required' });
-  }
+  try {
+    const id = req.params['id'];
+    if (!id) {
+      return res.status(400).json({ success: false, error: 'Offer id is required' });
+    }
 
-  const existing = await prisma.offer.findFirst({
-    where: {
-      id,
+    const existing = await prisma.offer.findFirst({
+      where: {
+        id,
+        restaurantId: req.restaurant!.id,
+      },
+      select: { id: true },
+    });
+
+    if (!existing) {
+      return res.status(404).json({ success: false, error: 'Offer not found' });
+    }
+
+    await prisma.offer.delete({ where: { id } });
+
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
       restaurantId: req.restaurant!.id,
-    },
-    select: { id: true },
-  });
+      action: 'OFFER_DELETED',
+      entityType: 'offer',
+      entityId: id,
+    });
 
-  if (!existing) {
-    return res.status(404).json({ success: false, error: 'Offer not found' });
+    return res.json({ success: true, message: 'Offer deleted' });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('offers:list', req.restaurant.id);
+    }
   }
-
-  await prisma.offer.delete({ where: { id } });
-
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId: req.restaurant!.id,
-    action: 'OFFER_DELETED',
-    entityType: 'offer',
-    entityId: id,
-  });
-
-  return res.json({ success: true, message: 'Offer deleted' });
 });
 
 export default router;

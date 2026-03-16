@@ -1,6 +1,8 @@
 import app from '@/app';
 import { logger } from '@/utils/logger';
 import { connectDatabase } from '@/config/database';
+import http from 'http';
+import { initSocketServer } from '@/realtime/socket';
 
 const PORT = process.env.PORT || 5000;
 
@@ -18,7 +20,10 @@ async function startServer() {
   try {
     await connectDatabase();
 
-    app.listen(PORT, () => {
+    const server = http.createServer(app);
+    initSocketServer(server);
+
+    server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);
       logger.info(`Health check available at http://localhost:${PORT}/health`);
       logger.info(`Environment: ${process.env.NODE_ENV || 'development'}`);

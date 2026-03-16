@@ -7,6 +7,7 @@ import { apiClient, Order } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
+import { subscribeToOrderEvents } from '@/lib/realtime-client';
 
 const statusColors: Record<string, string> = {
   PENDING: 'bg-yellow-100 text-yellow-800',
@@ -23,6 +24,10 @@ export default function OrdersPage() {
   const { user, isAuthenticated } = useAuthStore();
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersLimit] = useState(5);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [ordersTotalPages, setOrdersTotalPages] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
   const [payNowOrderId, setPayNowOrderId] = useState<string | null>(null);
   const [couponByOrder, setCouponByOrder] = useState<Record<string, string>>({});
@@ -34,40 +39,28 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (isAuthenticated && user) {
-      fetchOrders();
-      const timer = setInterval(fetchOrders, 15000);
-      return () => clearInterval(timer);
+      setOrdersPage(1);
     }
   }, [isAuthenticated, user]);
 
   useEffect(() => {
-    if (!isAuthenticated || !user || typeof window === 'undefined') return;
-    const token = localStorage.getItem('auth_token');
-    if (!token) return;
-
-    let source: EventSource | null = null;
-    try {
-      source = new EventSource(apiClient.getEventStreamUrl(token));
-    } catch {
-      source = null;
+    if (isAuthenticated && user) {
+      fetchOrders(ordersPage);
     }
+  }, [isAuthenticated, user, ordersPage]);
 
-    if (!source) return;
+  useEffect(() => {
+    if (!isAuthenticated || !user || typeof window === 'undefined') return;
+    const cleanup = subscribeToOrderEvents({
+      scope: 'user',
+      onEvent: (event) => {
+        const order = event?.payload?.order;
+        if (!order?.id) return;
+        handleRealtimeOrderUpdate(order);
+      },
+    });
 
-    const onOrderUpdated = () => {
-      fetchOrders();
-    };
-
-    source.addEventListener('order.created', onOrderUpdated);
-    source.addEventListener('order.updated', onOrderUpdated);
-
-    source.onerror = () => {
-      // Browser will retry automatically; no-op
-    };
-
-    return () => {
-      source?.close();
-    };
+    return cleanup;
   }, [isAuthenticated, user]);
 
   useEffect(() => {
@@ -87,13 +80,141 @@ export default function OrdersPage() {
     }
   }, []);
 
-  const fetchOrders = async () => {
+  const enqueueNotifications = (newNotifs: Array<{ id: string; message: string; time: string }>) => {
+    if (!newNotifs.length) return;
+
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      newNotifs.slice(0, 3).forEach((note) => {
+        try {
+          new Notification('Order Update', {
+            body: note.message,
+            tag: note.id,
+          });
+        } catch {
+          // ignore notification errors
+        }
+      });
+    }
+
+    setNotifications((prev) => {
+      const merged = [...newNotifs, ...prev].slice(0, 20);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('order_notifications', JSON.stringify(merged));
+      }
+      return merged;
+    });
+  };
+
+  const updateSnapshot = (orderId: string, status: string, paymentStatus: string) => {
+    if (typeof window === 'undefined') return;
+    try {
+      const snapshotRaw = localStorage.getItem('order_status_snapshot');
+      const snapshot: Record<string, { status: string; paymentStatus: string }> = snapshotRaw ? JSON.parse(snapshotRaw) : {};
+      snapshot[orderId] = { status, paymentStatus };
+      localStorage.setItem('order_status_snapshot', JSON.stringify(snapshot));
+    } catch {
+      // ignore
+    }
+  };
+
+  const applyOrderUpdate = (incoming: Partial<Order> & { id: string }) => {
+    setOrders((prev) => {
+      const index = prev.findIndex((order) => order.id === incoming.id);
+      const existing = index >= 0 ? prev[index] : null;
+      const nextOrder: Order = existing
+        ? {
+            ...existing,
+            ...incoming,
+            items: incoming.items ?? existing.items,
+            table: incoming.table ?? existing.table,
+            user: incoming.user ?? existing.user,
+          }
+        : (incoming as Order);
+
+      if (index === -1) {
+        if (ordersPage !== 1) return prev;
+        return [nextOrder, ...prev].slice(0, ordersLimit);
+      }
+
+      const next = [...prev];
+      next[index] = nextOrder;
+      return next;
+    });
+  };
+
+  const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }) => {
+    let added = false;
+    setOrders((prev) => {
+      const index = prev.findIndex((order) => order.id === incoming.id);
+      const existing = index >= 0 ? prev[index] : null;
+      const nextOrder: Order = existing
+        ? {
+            ...existing,
+            ...incoming,
+            items: incoming.items ?? existing.items,
+            table: incoming.table ?? existing.table,
+            user: incoming.user ?? existing.user,
+          }
+        : (incoming as Order);
+
+      if (existing) {
+        const newNotifs: Array<{ id: string; message: string; time: string }> = [];
+        if (incoming.status && incoming.status !== existing.status) {
+          newNotifs.push({
+            id: `${incoming.id}-status-${Date.now()}`,
+            message: `Order #${incoming.id.slice(0, 8).toUpperCase()} moved to ${incoming.status}`,
+            time: new Date().toLocaleTimeString(),
+          });
+        }
+        if (incoming.paymentStatus && incoming.paymentStatus !== existing.paymentStatus) {
+          newNotifs.push({
+            id: `${incoming.id}-payment-${Date.now()}`,
+            message: `Payment for order #${incoming.id.slice(0, 8).toUpperCase()} is ${incoming.paymentStatus}`,
+            time: new Date().toLocaleTimeString(),
+          });
+        }
+        if (newNotifs.length) enqueueNotifications(newNotifs);
+      } else {
+        enqueueNotifications([
+          {
+            id: `${incoming.id}-new-${Date.now()}`,
+            message: `New order #${incoming.id.slice(0, 8).toUpperCase()} placed`,
+            time: new Date().toLocaleTimeString(),
+          },
+        ]);
+      }
+
+      updateSnapshot(nextOrder.id, nextOrder.status, nextOrder.paymentStatus);
+
+      if (index === -1) {
+        if (ordersPage !== 1) return prev;
+        added = true;
+        return [nextOrder, ...prev].slice(0, ordersLimit);
+      }
+
+      const next = [...prev];
+      next[index] = nextOrder;
+      return next;
+    });
+
+    if (added) {
+      setOrdersTotal((prev) => {
+        const nextTotal = prev + 1;
+        setOrdersTotalPages(Math.max(1, Math.ceil(nextTotal / ordersLimit)));
+        return nextTotal;
+      });
+    }
+  };
+
+  const fetchOrders = async (page = ordersPage) => {
     try {
       setLoading(true);
-      const response = await apiClient.getOrders();
+      const response = await apiClient.getOrdersPage(page, ordersLimit);
       if (response.success) {
         const nextOrders = response.data || [];
         setOrders(nextOrders);
+        setOrdersTotal(response.pagination?.total || 0);
+        setOrdersTotalPages(response.pagination?.totalPages || 1);
 
         if (typeof window !== 'undefined') {
           const snapshotRaw = localStorage.getItem('order_status_snapshot');
@@ -118,22 +239,7 @@ export default function OrdersPage() {
             }
           });
 
-          if (newNotifs.length && 'Notification' in window && Notification.permission === 'granted') {
-            newNotifs.slice(0, 3).forEach((note) => {
-              try {
-                new Notification('Order Update', {
-                  body: note.message,
-                  tag: note.id,
-                });
-              } catch {
-                // ignore notification errors
-              }
-            });
-          }
-
-          const merged = [...newNotifs, ...notifications].slice(0, 20);
-          setNotifications(merged);
-          localStorage.setItem('order_notifications', JSON.stringify(merged));
+          enqueueNotifications(newNotifs);
 
           const nextSnapshot: Record<string, { status: string; paymentStatus: string }> = {};
           nextOrders.forEach((order) => {
@@ -238,7 +344,9 @@ export default function OrdersPage() {
       const response = await apiClient.applyCouponToOrder(orderId, couponCode);
       if (response.success) {
         toast.success('Coupon applied');
-        await fetchOrders();
+        if (response.data) {
+          applyOrderUpdate(response.data);
+        }
       } else {
         throw new Error(response.error || 'Failed to apply coupon');
       }
@@ -255,7 +363,7 @@ export default function OrdersPage() {
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
           <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Your Orders</h1>
           <button
-            onClick={fetchOrders}
+            onClick={() => fetchOrders(ordersPage)}
             disabled={loading}
             className="flex items-center px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 text-sm sm:text-base"
           >
@@ -304,6 +412,28 @@ export default function OrdersPage() {
               ))}
             </div>
           )}
+        </div>
+
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+          <p className="text-xs sm:text-sm text-gray-500 font-medium">
+            Page {ordersPage} of {ordersTotalPages} - {ordersTotal} orders
+          </p>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setOrdersPage((prev) => Math.max(1, prev - 1))}
+              disabled={ordersPage <= 1 || loading}
+              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Prev
+            </button>
+            <button
+              onClick={() => setOrdersPage((prev) => Math.min(ordersTotalPages, prev + 1))}
+              disabled={ordersPage >= ordersTotalPages || loading}
+              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+            >
+              Next
+            </button>
+          </div>
         </div>
 
         {loading ? (

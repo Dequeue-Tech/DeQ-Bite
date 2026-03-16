@@ -7,6 +7,12 @@ export interface ApiResponse<T = any> {
   message?: string;
   error?: string;
   errors?: any[];
+  pagination?: {
+    page: number;
+    limit: number;
+    total: number;
+    totalPages: number;
+  };
 }
 
 export interface User {
@@ -653,8 +659,26 @@ class ApiClient {
     return response.data;
   }
 
+  async getOrdersPage(page = 1, limit = 20): Promise<ApiResponse<Order[]>> {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint(`/orders?${params.toString()}`));
+    return response.data;
+  }
+
   async getRestaurantOrders(): Promise<ApiResponse<Order[]>> {
     const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint('/orders/restaurant/all'));
+    return response.data;
+  }
+
+  async getRestaurantOrdersPage(page = 1, limit = 20): Promise<ApiResponse<Order[]>> {
+    const params = new URLSearchParams({
+      page: String(page),
+      limit: String(limit),
+    });
+    const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint(`/orders/restaurant/all?${params.toString()}`));
     return response.data;
   }
 

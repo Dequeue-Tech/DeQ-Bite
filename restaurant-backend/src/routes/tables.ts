@@ -3,11 +3,12 @@ import { prisma } from '@/config/database';
 import { requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
 import { accelerateCache } from '@/utils/accelerate-cache';
+import { cacheResponse } from '@/middleware/cache';
 
 const router = Router();
 
 // Get all tables
-router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
+router.get('/', requireRestaurant, cacheResponse(120, 'tables:list'), async (req: AuthenticatedRequest, res) => {
   try {
     const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
     const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
@@ -33,7 +34,7 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 });
 
 // Get available tables
-router.get('/available', requireRestaurant, async (req: AuthenticatedRequest, res) => {
+router.get('/available', requireRestaurant, cacheResponse(60, 'tables:available'), async (req: AuthenticatedRequest, res) => {
   try {
     const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
     const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
@@ -62,7 +63,7 @@ router.get('/available', requireRestaurant, async (req: AuthenticatedRequest, re
 });
 
 // Get table by ID
-router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => {
+router.get('/:id', requireRestaurant, cacheResponse(120, 'tables:item'), async (req: AuthenticatedRequest, res) => {
   try {
     const { id } = req.params;
     if (!id) {

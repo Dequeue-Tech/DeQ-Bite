@@ -7,6 +7,8 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { safeCreateAuditLog } from '@/utils/audit';
 import { accelerateCache } from '@/utils/accelerate-cache';
+import { cacheResponse } from '@/middleware/cache';
+import { invalidateCacheByPrefix } from '@/utils/cache';
 
 const router = Router();
 
@@ -102,7 +104,7 @@ const addRestaurantUserSchema = z.object({
 });
 
 // GET /api/restaurants/public/search?query=abc&cuisine=indian&location=city
-router.get('/public/search', async (req: AuthenticatedRequest, res: Response) => {
+router.get('/public/search', cacheResponse(60, 'restaurants:public:search', { skip: (req) => !!(req as AuthenticatedRequest).user }), async (req: AuthenticatedRequest, res: Response) => {
   if (req.user && (await isStaffAccount(req.user))) {
     return res.status(403).json({
       success: false,
@@ -185,7 +187,7 @@ router.get('/public/search', async (req: AuthenticatedRequest, res: Response) =>
 });
 
 // GET /api/restaurants/public/:identifier
-router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Response) => {
+router.get('/public/:identifier', cacheResponse(120, 'restaurants:public:detail', { skip: (req) => !!(req as AuthenticatedRequest).user }), async (req: AuthenticatedRequest, res: Response) => {
   const identifier = req.params['identifier'];
 
   if (!identifier) {
@@ -292,7 +294,7 @@ router.get('/public/:identifier', async (req: AuthenticatedRequest, res: Respons
 });
 
 // GET /api/restaurants/current
-router.get('/current', requireRestaurant, async (req: AuthenticatedRequest, res: Response) => {
+router.get('/current', requireRestaurant, cacheResponse(60, 'restaurants:current'), async (req: AuthenticatedRequest, res: Response) => {
   const response: ApiResponse = {
     success: true,
     data: { restaurant: req.restaurant },
@@ -423,7 +425,7 @@ router.post('/', authenticate, async (req: AuthenticatedRequest, res: Response) 
 });
 
 // GET /api/restaurants/settings/payment-policy
-router.get('/settings/payment-policy', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
+router.get('/settings/payment-policy', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), cacheResponse(60, 'restaurants:payment-policy'), async (req: AuthenticatedRequest, res: Response) => {
   const policySelect = buildSelect([
     'id',
     'name',
@@ -444,41 +446,48 @@ router.get('/settings/payment-policy', authenticate, requireRestaurant, authoriz
 
 // PUT /api/restaurants/settings/payment-policy
 router.put('/settings/payment-policy', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
-  const payload = updatePaymentPolicySchema.parse(req.body);
+  try {
+    const payload = updatePaymentPolicySchema.parse(req.body);
 
-  const policySelect = buildSelect([
-    'id',
-    'name',
-    'paymentCollectionTiming',
-    'cashPaymentEnabled',
-  ]);
-  const restaurant: any = await prisma.restaurant.update({
-    where: { id: req.restaurant!.id },
-    data: {
-      paymentCollectionTiming: payload.paymentCollectionTiming,
-      cashPaymentEnabled: payload.cashPaymentEnabled,
-    },
-    select: policySelect,
-  });
+    const policySelect = buildSelect([
+      'id',
+      'name',
+      'paymentCollectionTiming',
+      'cashPaymentEnabled',
+    ]);
+    const restaurant: any = await prisma.restaurant.update({
+      where: { id: req.restaurant!.id },
+      data: {
+        paymentCollectionTiming: payload.paymentCollectionTiming,
+        cashPaymentEnabled: payload.cashPaymentEnabled,
+      },
+      select: policySelect,
+    });
 
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId: req.restaurant!.id,
-    action: 'PAYMENT_POLICY_UPDATED',
-    entityType: 'restaurant',
-    entityId: req.restaurant!.id,
-    metadata: payload,
-  });
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
+      restaurantId: req.restaurant!.id,
+      action: 'PAYMENT_POLICY_UPDATED',
+      entityType: 'restaurant',
+      entityId: req.restaurant!.id,
+      metadata: payload,
+    });
 
-  return res.json({
-    success: true,
-    message: 'Payment policy updated',
-    data: { paymentPolicy: restaurant },
-  });
+    return res.json({
+      success: true,
+      message: 'Payment policy updated',
+      data: { paymentPolicy: restaurant },
+    });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('restaurants:payment-policy', req.restaurant.id);
+      await invalidateCacheByPrefix('restaurants:current', req.restaurant.id);
+    }
+  }
 });
 
 // GET /api/restaurants/users
-router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
+router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), cacheResponse(60, 'restaurants:users'), async (req: AuthenticatedRequest, res: Response) => {
   const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
   const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
 
@@ -536,73 +545,79 @@ router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('O
 
 // POST /api/restaurants/users
 router.post('/users', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
-  const payload = addRestaurantUserSchema.parse(req.body);
+  try {
+    const payload = addRestaurantUserSchema.parse(req.body);
 
-  const user = await prisma.user.findUnique({
-    where: { email: payload.email },
-    select: { id: true },
-  });
-
-  if (!user) {
-    return res.status(404).json({
-      success: false,
-      error: 'User not found. Ask them to sign up first.',
+    const user = await prisma.user.findUnique({
+      where: { email: payload.email },
+      select: { id: true },
     });
-  }
 
-  const membership = await prisma.restaurantUser.upsert({
-    where: {
-      restaurantId_userId: {
-        restaurantId: req.restaurant!.id,
-        userId: user.id,
-      },
-    },
-    update: {
-      role: payload.role,
-      active: true,
-    },
-    create: {
-      restaurantId: req.restaurant!.id,
-      userId: user.id,
-      role: payload.role,
-      active: true,
-    },
-    include: {
-      user: {
-        select: {
-          id: true,
-          name: true,
-          email: true,
-          phone: true,
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        error: 'User not found. Ask them to sign up first.',
+      });
+    }
+
+    const membership = await prisma.restaurantUser.upsert({
+      where: {
+        restaurantId_userId: {
+          restaurantId: req.restaurant!.id,
+          userId: user.id,
         },
       },
-    },
-  });
-
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId: req.restaurant!.id,
-    action: 'RESTAURANT_USER_UPSERT',
-    entityType: 'restaurant_user',
-    entityId: membership.id,
-    metadata: {
-      userId: membership.userId,
-      role: membership.role,
-    },
-  });
-
-  return res.status(201).json({
-    success: true,
-    data: {
-      membership: {
-        id: membership.id,
-        role: membership.role,
-        active: membership.active,
-        user: membership.user,
+      update: {
+        role: payload.role,
+        active: true,
       },
-    },
-    message: 'Restaurant user added/updated successfully',
-  });
+      create: {
+        restaurantId: req.restaurant!.id,
+        userId: user.id,
+        role: payload.role,
+        active: true,
+      },
+      include: {
+        user: {
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+      },
+    });
+
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
+      restaurantId: req.restaurant!.id,
+      action: 'RESTAURANT_USER_UPSERT',
+      entityType: 'restaurant_user',
+      entityId: membership.id,
+      metadata: {
+        userId: membership.userId,
+        role: membership.role,
+      },
+    });
+
+    return res.status(201).json({
+      success: true,
+      data: {
+        membership: {
+          id: membership.id,
+          role: membership.role,
+          active: membership.active,
+          user: membership.user,
+        },
+      },
+      message: 'Restaurant user added/updated successfully',
+    });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('restaurants:users', req.restaurant.id);
+    }
+  }
 });
 
 export default router;

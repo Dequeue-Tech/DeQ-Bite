@@ -5,6 +5,8 @@ import { authenticate, authorize } from '@/middleware/auth';
 import { AuthenticatedRequest } from '@/types/api';
 import { safeCreateAuditLog } from '@/utils/audit';
 import { accelerateCache } from '@/utils/accelerate-cache';
+import { cacheResponse } from '@/middleware/cache';
+import { invalidateCacheByPrefix } from '@/utils/cache';
 
 const router = Router();
 
@@ -32,7 +34,7 @@ router.use(authenticate);
 router.use(authorize('OWNER'));
 
 // GET /api/platform/restaurants
-router.get('/restaurants', async (req: AuthenticatedRequest, res: Response) => {
+router.get('/restaurants', cacheResponse(60, 'platform:restaurants'), async (req: AuthenticatedRequest, res: Response) => {
   const status = req.query['status'] as string | undefined;
 
   const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
@@ -82,42 +84,48 @@ router.patch('/restaurants/:id/status', async (req: AuthenticatedRequest, res: R
     return res.status(400).json({ success: false, error: 'Restaurant id is required' });
   }
 
-  const payload = updateRestaurantStatusSchema.parse(req.body);
+  try {
+    const payload = updateRestaurantStatusSchema.parse(req.body);
 
-  const restaurant = await prisma.restaurant.update({
-    where: { id: restaurantId },
-    data: {
-      status: payload.status,
-      active: payload.status !== 'SUSPENDED',
-      approvedAt: payload.status === 'APPROVED' ? new Date() : null,
-      approvedByUserId: payload.status === 'APPROVED' ? req.user!.id : null,
-      suspendedReason: payload.status === 'SUSPENDED' ? payload.suspendedReason || 'Suspended by platform admin' : null,
-    },
-    select: {
-      id: true,
-      name: true,
-      status: true,
-      active: true,
-      suspendedReason: true,
-      approvedAt: true,
-      approvedByUserId: true,
-    },
-  });
+    const restaurant = await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: {
+        status: payload.status,
+        active: payload.status !== 'SUSPENDED',
+        approvedAt: payload.status === 'APPROVED' ? new Date() : null,
+        approvedByUserId: payload.status === 'APPROVED' ? req.user!.id : null,
+        suspendedReason: payload.status === 'SUSPENDED' ? payload.suspendedReason || 'Suspended by platform admin' : null,
+      },
+      select: {
+        id: true,
+        name: true,
+        status: true,
+        active: true,
+        suspendedReason: true,
+        approvedAt: true,
+        approvedByUserId: true,
+      },
+    });
 
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId,
-    action: `PLATFORM_RESTAURANT_${payload.status}`,
-    entityType: 'restaurant',
-    entityId: restaurantId,
-    metadata: payload,
-  });
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
+      restaurantId,
+      action: `PLATFORM_RESTAURANT_${payload.status}`,
+      entityType: 'restaurant',
+      entityId: restaurantId,
+      metadata: payload,
+    });
 
-  return res.json({
-    success: true,
-    data: { restaurant },
-    message: `Restaurant ${payload.status.toLowerCase()} successfully`,
-  });
+    return res.json({
+      success: true,
+      data: { restaurant },
+      message: `Restaurant ${payload.status.toLowerCase()} successfully`,
+    });
+  } finally {
+    await invalidateCacheByPrefix('platform:restaurants', 'global');
+    await invalidateCacheByPrefix('restaurants:public:detail', 'global');
+    await invalidateCacheByPrefix('restaurants:public:search', 'global');
+  }
 });
 
 // PATCH /api/platform/restaurants/:id/commission
@@ -127,34 +135,38 @@ router.patch('/restaurants/:id/commission', async (req: AuthenticatedRequest, re
     return res.status(400).json({ success: false, error: 'Restaurant id is required' });
   }
 
-  const payload = updateCommissionSchema.parse(req.body);
+  try {
+    const payload = updateCommissionSchema.parse(req.body);
 
-  const restaurant = await prisma.restaurant.update({
-    where: { id: restaurantId },
-    data: {
-      commissionRate: payload.commissionRate,
-    },
-    select: {
-      id: true,
-      name: true,
-      commissionRate: true,
-    },
-  });
+    const restaurant = await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: {
+        commissionRate: payload.commissionRate,
+      },
+      select: {
+        id: true,
+        name: true,
+        commissionRate: true,
+      },
+    });
 
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId,
-    action: 'PLATFORM_COMMISSION_UPDATED',
-    entityType: 'restaurant',
-    entityId: restaurantId,
-    metadata: payload,
-  });
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
+      restaurantId,
+      action: 'PLATFORM_COMMISSION_UPDATED',
+      entityType: 'restaurant',
+      entityId: restaurantId,
+      metadata: payload,
+    });
 
-  return res.json({
-    success: true,
-    data: { restaurant },
-    message: 'Commission updated successfully',
-  });
+    return res.json({
+      success: true,
+      data: { restaurant },
+      message: 'Commission updated successfully',
+    });
+  } finally {
+    await invalidateCacheByPrefix('platform:restaurants', 'global');
+  }
 });
 
 // PATCH /api/platform/restaurants/:id/details
@@ -164,53 +176,59 @@ router.patch('/restaurants/:id/details', async (req: AuthenticatedRequest, res: 
     return res.status(400).json({ success: false, error: 'Restaurant id is required' });
   }
 
-  const payload = updateRestaurantDetailsSchema.parse(req.body);
-  const detailUpdateData = {
-    ...(payload.gstNumber !== undefined ? { gstNumber: payload.gstNumber } : {}),
-    ...(payload.bankAccountName !== undefined ? { bankAccountName: payload.bankAccountName } : {}),
-    ...(payload.bankAccountNumber !== undefined ? { bankAccountNumber: payload.bankAccountNumber } : {}),
-    ...(payload.bankIfsc !== undefined ? { bankIfsc: payload.bankIfsc } : {}),
-    ...(payload.address !== undefined ? { address: payload.address } : {}),
-    ...(payload.city !== undefined ? { city: payload.city } : {}),
-    ...(payload.state !== undefined ? { state: payload.state } : {}),
-    ...(payload.country !== undefined ? { country: payload.country } : {}),
-  };
+  try {
+    const payload = updateRestaurantDetailsSchema.parse(req.body);
+    const detailUpdateData = {
+      ...(payload.gstNumber !== undefined ? { gstNumber: payload.gstNumber } : {}),
+      ...(payload.bankAccountName !== undefined ? { bankAccountName: payload.bankAccountName } : {}),
+      ...(payload.bankAccountNumber !== undefined ? { bankAccountNumber: payload.bankAccountNumber } : {}),
+      ...(payload.bankIfsc !== undefined ? { bankIfsc: payload.bankIfsc } : {}),
+      ...(payload.address !== undefined ? { address: payload.address } : {}),
+      ...(payload.city !== undefined ? { city: payload.city } : {}),
+      ...(payload.state !== undefined ? { state: payload.state } : {}),
+      ...(payload.country !== undefined ? { country: payload.country } : {}),
+    };
 
-  const restaurant = await prisma.restaurant.update({
-    where: { id: restaurantId },
-    data: detailUpdateData,
-    select: {
-      id: true,
-      name: true,
-      gstNumber: true,
-      bankAccountName: true,
-      bankAccountNumber: true,
-      bankIfsc: true,
-      address: true,
-      city: true,
-      state: true,
-      country: true,
-    },
-  });
+    const restaurant = await prisma.restaurant.update({
+      where: { id: restaurantId },
+      data: detailUpdateData,
+      select: {
+        id: true,
+        name: true,
+        gstNumber: true,
+        bankAccountName: true,
+        bankAccountNumber: true,
+        bankIfsc: true,
+        address: true,
+        city: true,
+        state: true,
+        country: true,
+      },
+    });
 
-  await safeCreateAuditLog({
-    actorUserId: req.user!.id,
-    restaurantId,
-    action: 'PLATFORM_RESTAURANT_DETAILS_UPDATED',
-    entityType: 'restaurant',
-    entityId: restaurantId,
-    metadata: payload,
-  });
+    await safeCreateAuditLog({
+      actorUserId: req.user!.id,
+      restaurantId,
+      action: 'PLATFORM_RESTAURANT_DETAILS_UPDATED',
+      entityType: 'restaurant',
+      entityId: restaurantId,
+      metadata: payload,
+    });
 
-  return res.json({
-    success: true,
-    data: { restaurant },
-    message: 'Restaurant details updated',
-  });
+    return res.json({
+      success: true,
+      data: { restaurant },
+      message: 'Restaurant details updated',
+    });
+  } finally {
+    await invalidateCacheByPrefix('platform:restaurants', 'global');
+    await invalidateCacheByPrefix('restaurants:public:detail', 'global');
+    await invalidateCacheByPrefix('restaurants:public:search', 'global');
+  }
 });
 
 // GET /api/platform/orders
-router.get('/orders', async (req: AuthenticatedRequest, res: Response) => {
+router.get('/orders', cacheResponse(30, 'platform:orders'), async (req: AuthenticatedRequest, res: Response) => {
   const restaurantId = req.query['restaurantId'] as string | undefined;
 
   const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 500) : undefined;
@@ -247,13 +265,14 @@ router.get('/orders', async (req: AuthenticatedRequest, res: Response) => {
     },
     ...(typeof take === 'number' ? { take } : { take: 500 }),
     ...(cursor ? { cursor, skip: 1 } : {}),
+    ...(accelerateCache(30, 60) as any),
   });
 
   return res.json({ success: true, data: { orders } });
 });
 
 // GET /api/platform/earnings
-router.get('/earnings', async (_req: AuthenticatedRequest, res: Response) => {
+router.get('/earnings', cacheResponse(30, 'platform:earnings'), async (_req: AuthenticatedRequest, res: Response) => {
   const [totals, pendingSettlements, byRestaurant] = await Promise.all([
     (prisma as any).earning.aggregate({
       _sum: {

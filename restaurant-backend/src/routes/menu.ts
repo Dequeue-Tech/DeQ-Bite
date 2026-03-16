@@ -5,6 +5,8 @@ import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
 import { accelerateCache } from '@/utils/accelerate-cache';
+import { cacheResponse } from '@/middleware/cache';
+import { invalidateCacheByPrefix } from '@/utils/cache';
 
 const router = Router();
 
@@ -27,7 +29,7 @@ const menuItemSchema = z.object({
 const menuItemUpdateSchema = menuItemSchema.partial();
 
 // Get all menu items with optional category filter
-router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
+router.get('/', requireRestaurant, cacheResponse(120, 'menu:list'), async (req: AuthenticatedRequest, res) => {
   try {
     const { categoryId } = req.query;
     
@@ -67,7 +69,7 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 });
 
 // Get all menu items for admin/staff including unavailable items
-router.get('/admin/all', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
+router.get('/admin/all', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), cacheResponse(30, 'menu:admin'), async (req: AuthenticatedRequest, res) => {
   try {
     const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
     const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
@@ -102,7 +104,7 @@ router.get('/admin/all', authenticate, requireRestaurant, authorizeRestaurantRol
 });
 
 // Get a specific menu item by ID
-router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => {
+router.get('/:id', requireRestaurant, cacheResponse(120, 'menu:item'), async (req: AuthenticatedRequest, res) => {
   try {
     const id = req.params['id'] as string;
     
@@ -202,6 +204,12 @@ router.post('/', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER
       error: 'Failed to create menu item',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('menu:list', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:item', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:admin', req.restaurant.id);
+    }
   }
 });
 
@@ -278,6 +286,12 @@ router.put('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('OWN
       error: 'Failed to update menu item',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('menu:list', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:item', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:admin', req.restaurant.id);
+    }
   }
 });
 
@@ -326,6 +340,12 @@ router.patch('/:id/availability', authenticate, requireRestaurant, authorizeRest
       error: 'Failed to update menu item availability',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('menu:list', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:item', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:admin', req.restaurant.id);
+    }
   }
 });
 
@@ -363,6 +383,12 @@ router.delete('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('
       error: 'Failed to delete menu item',
       message: error instanceof Error ? error.message : 'Unknown error',
     });
+  } finally {
+    if (req.restaurant?.id) {
+      await invalidateCacheByPrefix('menu:list', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:item', req.restaurant.id);
+      await invalidateCacheByPrefix('menu:admin', req.restaurant.id);
+    }
   }
 });
 

@@ -6,6 +6,7 @@ import { apiClient, Order } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import { ChefHat, RefreshCcw } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { subscribeToOrderEvents } from '@/lib/realtime-client';
 
 const statusFlow = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'];
 
@@ -35,33 +36,53 @@ export default function KitchenPage() {
 
   useEffect(() => {
     if (!hasKitchenAccess || typeof window === 'undefined') return;
-    const token = localStorage.getItem('auth_token');
-    if (!token) return;
+    const restaurantSlug = apiClient.getActiveRestaurantSlug();
+    const cleanup = subscribeToOrderEvents({
+      restaurant: restaurantSlug,
+      scope: 'restaurant',
+      onEvent: (event) => {
+        const order = event?.payload?.order;
+        if (!order?.id) return;
+        handleRealtimeOrderUpdate(order);
+      },
+    });
 
-    let source: EventSource | null = null;
-    try {
-      source = new EventSource(apiClient.getEventStreamUrl(token));
-    } catch {
-      source = null;
-    }
-
-    if (!source) return;
-
-    const onOrderUpdated = () => {
-      fetchOrders();
-    };
-
-    source.addEventListener('order.created', onOrderUpdated);
-    source.addEventListener('order.updated', onOrderUpdated);
-
-    source.onerror = () => {
-      // Browser will retry automatically; no-op
-    };
-
-    return () => {
-      source?.close();
-    };
+    return cleanup;
   }, [hasKitchenAccess]);
+
+  const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }) => {
+    const isActive = (status?: Order['status']) => status && !['COMPLETED', 'CANCELLED'].includes(status);
+
+    setOrders((prev) => {
+      const index = prev.findIndex((order) => order.id === incoming.id);
+      const existing = index >= 0 ? prev[index] : null;
+      const nextOrder = existing
+        ? {
+            ...existing,
+            ...incoming,
+            items: incoming.items ?? existing.items,
+            table: incoming.table ?? existing.table,
+            user: incoming.user ?? existing.user,
+          }
+        : (incoming as Order);
+
+      if (existing && incoming.status && incoming.status !== existing.status) {
+        toast(`Order #${incoming.id.slice(0, 8).toUpperCase()} moved to ${incoming.status}`);
+      }
+
+      if (!isActive(nextOrder.status)) {
+        return prev.filter((order) => order.id !== nextOrder.id);
+      }
+
+      if (index === -1) {
+        return [nextOrder, ...prev];
+      }
+
+      const next = [...prev];
+      next[index] = nextOrder as Order;
+      return next;
+    });
+  };
 
   const fetchOrders = async () => {
     try {
@@ -123,7 +144,9 @@ export default function KitchenPage() {
       const response = await apiClient.updateOrderStatus(order.id, nextStatus);
       if (response.success) {
         toast.success(`Order moved to ${nextStatus}`);
-        await fetchOrders();
+        if (response.data) {
+          handleRealtimeOrderUpdate(response.data);
+        }
       }
     } catch (error: any) {
       toast.error(error?.message || 'Failed to update order');
@@ -138,7 +161,9 @@ export default function KitchenPage() {
       const response = await apiClient.updateOrderStatus(order.id, 'CANCELLED');
       if (response.success) {
         toast.success('Order cancelled');
-        await fetchOrders();
+        if (response.data) {
+          handleRealtimeOrderUpdate(response.data);
+        }
       }
     } catch (error: any) {
       toast.error(error?.message || 'Failed to cancel order');

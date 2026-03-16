@@ -50,44 +50,68 @@ function MenuPageContent() {
     }
     setSelectedSlug(slug);
     setActiveOrderId(searchParams.get('orderId'));
-    fetchMenuData();
+    fetchMenuData(slug);
   }, [searchParams, setActiveOrderId]);
 
-  const fetchMenuData = async () => {
+  const fetchMenuData = async (slugOverride?: string | null) => {
     try {
-      setLoading(true);
+      const slugKey = slugOverride || selectedSlug || 'default';
+      const cacheKey = `menu_cache_${slugKey}`;
+      const cacheRaw = typeof window !== 'undefined' ? sessionStorage.getItem(cacheKey) : null;
+      const cacheTsRaw = typeof window !== 'undefined' ? sessionStorage.getItem(`${cacheKey}_ts`) : null;
+      const cacheTs = cacheTsRaw ? Number(cacheTsRaw) : 0;
+      const hasFreshCache = cacheRaw && cacheTs && Date.now() - cacheTs < 60_000;
+
+      if (hasFreshCache) {
+        try {
+          const cached = JSON.parse(cacheRaw);
+          if (Array.isArray(cached.menuItems)) setMenuItems(cached.menuItems);
+          if (Array.isArray(cached.categories)) setCategories(cached.categories);
+          setLoading(false);
+        } catch {
+          // ignore cache parse errors
+        }
+      } else {
+        setLoading(true);
+      }
+
       setError(null);
-      console.log('Fetching menu data...');
 
       const [menuResponse, categoriesResponse] = await Promise.all([
         apiClient.getMenuItems(),
         apiClient.getCategories(),
       ]).catch(err => {
-        console.error('Promise.all error:', err);
         throw err;
       });
 
-      console.log('Menu response:', menuResponse);
-      console.log('Categories response:', categoriesResponse);
-
       // Check if responses are valid and have success=true
       if (menuResponse && menuResponse.success && Array.isArray(menuResponse.data)) {
-        console.log('Setting menu items:', menuResponse.data);
         setMenuItems(menuResponse.data);
       } else {
-        console.error('Invalid menu response:', menuResponse);
         setMenuItems([]);
       }
 
       if (categoriesResponse && categoriesResponse.success && Array.isArray(categoriesResponse.data)) {
-        console.log('Setting categories:', categoriesResponse.data);
         setCategories(categoriesResponse.data);
       } else {
-        console.error('Invalid categories response:', categoriesResponse);
         setCategories([]);
       }
+
+      if (typeof window !== 'undefined') {
+        try {
+          sessionStorage.setItem(
+            cacheKey,
+            JSON.stringify({
+              menuItems: menuResponse?.data || [],
+              categories: categoriesResponse?.data || [],
+            }),
+          );
+          sessionStorage.setItem(`${cacheKey}_ts`, String(Date.now()));
+        } catch {
+          // ignore cache set errors
+        }
+      }
     } catch (err) {
-      console.error('Error fetching menu data:', err);
       setError('Failed to load menu: ' + (err instanceof Error ? err.message : 'Unknown error'));
       toast.error('Failed to load menu');
     } finally {

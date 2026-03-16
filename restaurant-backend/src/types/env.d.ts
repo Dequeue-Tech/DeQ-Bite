@@ -25,6 +25,7 @@ declare global {
       ENCRYPTION_KEY: string;
       API_KEY: string;
       LOG_LEVEL: string;
+      REDIS_URL?: string;
       
       // Backblaze B2 Configuration
       B2_APPLICATION_KEY_ID: string;

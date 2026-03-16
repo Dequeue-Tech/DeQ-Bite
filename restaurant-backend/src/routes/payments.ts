@@ -10,6 +10,7 @@ import { safeCreateAuditLog } from '@/utils/audit';
 import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { emitRestaurantEvent } from '@/utils/realtime';
+import { cacheResponse } from '@/middleware/cache';
 
 const router = Router();
 
@@ -165,20 +166,33 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId: string) => {
   }
 };
 
-const buildOrderEventPayload = (order: any) => ({
-  id: order.id,
-  status: order.status,
-  paymentStatus: order.paymentStatus,
-  paymentProvider: order.paymentProvider,
-  paidAmountPaise: order.paidAmountPaise,
-  dueAmountPaise: order.dueAmountPaise,
-  totalPaise: order.totalPaise,
-  updatedAt: order.updatedAt,
-  createdAt: order.createdAt,
-});
+const buildOrderEventPayload = (order: any) => {
+  const payloadOrder: any = {
+    id: order.id,
+    userId: order.userId,
+    tableId: order.tableId,
+    status: order.status,
+    paymentStatus: order.paymentStatus,
+    paymentProvider: order.paymentProvider,
+    paidAmountPaise: order.paidAmountPaise,
+    dueAmountPaise: order.dueAmountPaise,
+    totalPaise: order.totalPaise,
+    updatedAt: order.updatedAt,
+    createdAt: order.createdAt,
+  };
+
+  if (order.table) payloadOrder.table = order.table;
+  if (order.items) payloadOrder.items = order.items;
+  if (order.user) payloadOrder.user = order.user;
+  if (typeof order.subtotalPaise === 'number') payloadOrder.subtotalPaise = order.subtotalPaise;
+  if (typeof order.taxPaise === 'number') payloadOrder.taxPaise = order.taxPaise;
+  if (typeof order.discountPaise === 'number') payloadOrder.discountPaise = order.discountPaise;
+
+  return { order: payloadOrder };
+};
 
 // GET /api/payments/providers
-router.get('/providers', requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+router.get('/providers', requireRestaurant, cacheResponse(300, 'payments:providers'), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const providers = [
     ...getEnabledProviders(),
     ...(req.restaurant?.cashPaymentEnabled ? ['CASH'] : []),
@@ -391,6 +405,7 @@ router.post('/verify', authenticate, requireRestaurant, asyncHandler(async (req:
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
+    userId: updatedOrder.userId,
     payload: buildOrderEventPayload(updatedOrder),
   });
 
@@ -482,8 +497,11 @@ router.post('/refund', authenticate, requireRestaurant, asyncHandler(async (req:
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
+    userId: order.userId,
     payload: buildOrderEventPayload({
       id: order.id,
+      userId: order.userId,
+      tableId: order.tableId,
       status: nextPaid === 0 ? 'CANCELLED' : order.status,
       paymentStatus: nextPaid === 0 ? 'REFUNDED' : computed.paymentStatus,
       paymentProvider: order.paymentProvider,
@@ -633,6 +651,7 @@ router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestauran
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
+    userId: updatedOrder.userId,
     payload: buildOrderEventPayload(updatedOrder),
   });
 
@@ -717,6 +736,7 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
+    userId: updatedOrder.userId,
     payload: buildOrderEventPayload(updatedOrder),
   });
 

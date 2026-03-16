@@ -1,4 +1,5 @@
 import { PrismaClient } from '@prisma/client';
+import { withAccelerate } from '@prisma/extension-accelerate';
 import { logger } from '@/utils/logger';
 
 const createPrismaClient = () => {
@@ -31,15 +32,7 @@ const createPrismaClient = () => {
   // Check if using Prisma Accelerate (prisma+postgres:// or prisma+mysql://)
   const databaseUrl = process.env.DATABASE_URL || '';
   if (databaseUrl.startsWith('prisma+')) {
-    try {
-      // Load accelerate extension only when explicitly needed.
-      // This prevents startup failure if the package isn't installed.
-      // eslint-disable-next-line @typescript-eslint/no-var-requires
-      const { withAccelerate } = require('@prisma/extension-accelerate');
-      client = client.$extends(withAccelerate());
-    } catch (error) {
-      logger.warn('Prisma Accelerate requested but @prisma/extension-accelerate is not installed. Falling back to regular Prisma client.');
-    }
+    client = client.$extends(withAccelerate());
   }
 
   return client;

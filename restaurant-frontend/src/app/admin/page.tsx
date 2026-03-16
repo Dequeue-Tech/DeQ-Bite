@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
+import { subscribeToOrderEvents } from '@/lib/realtime-client';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, 
   ResponsiveContainer, CartesianGrid 
@@ -47,8 +48,12 @@ export default function AdminPage() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [restaurantUsers, setRestaurantUsers] = useState<RestaurantUserEntry[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
-  const [cashOrders, setCashOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
+  const [ordersLoading, setOrdersLoading] = useState(false);
+  const [ordersPage, setOrdersPage] = useState(1);
+  const [ordersLimit] = useState(20);
+  const [ordersTotal, setOrdersTotal] = useState(0);
+  const [ordersTotalPages, setOrdersTotalPages] = useState(1);
   const [saving, setSaving] = useState(false);
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   
@@ -63,6 +68,7 @@ export default function AdminPage() {
   const [paymentPolicy, setPaymentPolicy] = useState<{ paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL'; cashPaymentEnabled: boolean } | null>(null);
   const [menuForm, setMenuForm] = useState<MenuForm>({ name: '', description: '', priceInr: '', categoryId: '' });
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
+  const [adminNotifications, setAdminNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
 
   const hasAdminAccess = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
 
@@ -71,50 +77,59 @@ export default function AdminPage() {
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;
     if (!hasAdminAccess) { router.push(homeHref); return; }
-    loadData();
+    loadBaseData();
+    setOrdersPage(1);
+    loadOrdersPage(1);
   }, [user?.restaurantRole, hasAdminAccess, router, homeHref]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     if (!('Notification' in window)) { setNotificationPermission('unsupported'); } 
     else { setNotificationPermission(Notification.permission); }
+    try {
+      const stored = localStorage.getItem('admin_order_notifications');
+      if (stored) {
+        setAdminNotifications(JSON.parse(stored));
+      }
+    } catch {
+      // ignore
+    }
   }, []);
 
   useEffect(() => {
     if (!hasAdminAccess || typeof window === 'undefined') return;
-    const token = localStorage.getItem('auth_token');
-    if (!token) return;
+    const restaurantSlug = apiClient.getActiveRestaurantSlug();
+    const cleanup = subscribeToOrderEvents({
+      restaurant: restaurantSlug,
+      scope: 'restaurant',
+      onEvent: (event) => {
+        const order = event?.payload?.order;
+        if (!order?.id) return;
+        handleRealtimeOrderUpdate(order, event?.type);
+      },
+    });
 
-    let source: EventSource | null = null;
-    try { source = new EventSource(apiClient.getEventStreamUrl(token)); } 
-    catch { source = null; }
-
-    if (!source) return;
-
-    const onOrderUpdated = () => loadData();
-    source.addEventListener('order.created', onOrderUpdated);
-    source.addEventListener('order.updated', onOrderUpdated);
-    source.onerror = () => {};
-
-    return () => source?.close();
+    return cleanup;
   }, [hasAdminAccess]);
 
-  const loadData = async () => {
+  useEffect(() => {
+    if (!hasAdminAccess) return;
+    loadOrdersPage(ordersPage);
+  }, [hasAdminAccess, ordersPage]);
+
+  const loadBaseData = async () => {
     try {
       setLoading(true);
-      const [menuRes, categoriesRes, users, orders, policy] = await Promise.all([
+      const [menuRes, categoriesRes, users, policy] = await Promise.all([
         apiClient.getAdminMenuItems(),
         apiClient.getCategories(),
         apiClient.getRestaurantUsers(),
-        apiClient.getRestaurantOrders(),
         apiClient.getRestaurantPaymentPolicy(),
       ]);
 
       setMenuItems(menuRes.data || []);
       setCategories(categoriesRes.data || []);
       setRestaurantUsers(users);
-      setOrders(orders.data || []);
-      setCashOrders((orders.data || []).filter((o) => o.paymentProvider === 'CASH' && o.paymentStatus !== 'COMPLETED' && o.status !== 'CANCELLED'));
       setPaymentPolicy(policy || null);
 
       if (!menuForm.categoryId && (categoriesRes.data || [])[0]) {
@@ -127,9 +142,161 @@ export default function AdminPage() {
     }
   };
 
+  const loadOrdersPage = async (page: number) => {
+    try {
+      setOrdersLoading(true);
+      const response = await apiClient.getRestaurantOrdersPage(page, ordersLimit);
+      if (response.success) {
+        setOrders(response.data || []);
+        setOrdersTotal(response.pagination?.total || 0);
+        setOrdersTotalPages(response.pagination?.totalPages || 1);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to load orders');
+    } finally {
+      setOrdersLoading(false);
+    }
+  };
+
+  const enqueueAdminNotifications = (newNotifs: Array<{ id: string; message: string; time: string }>) => {
+    if (!newNotifs.length) return;
+
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      newNotifs.slice(0, 3).forEach((note) => {
+        try {
+          new Notification('Order Update', {
+            body: note.message,
+            tag: note.id,
+          });
+        } catch {
+          // ignore notification errors
+        }
+      });
+    }
+
+    newNotifs.forEach((note) => toast(note.message));
+
+    setAdminNotifications((prev) => {
+      const merged = [...newNotifs, ...prev].slice(0, 20);
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('admin_order_notifications', JSON.stringify(merged));
+      }
+      return merged;
+    });
+  };
+
+  const applyOrderUpdate = (incoming: Partial<Order> & { id: string }) => {
+    let added = false;
+    setOrders((prev) => {
+      const index = prev.findIndex((order) => order.id === incoming.id);
+      const existing = index >= 0 ? prev[index] : null;
+      const nextOrder = existing
+        ? {
+            ...existing,
+            ...incoming,
+            items: incoming.items ?? existing.items,
+            table: incoming.table ?? existing.table,
+            user: incoming.user ?? existing.user,
+          }
+        : (incoming as Order);
+
+      if (index === -1) {
+        if (ordersPage !== 1) return prev;
+        added = true;
+        const next = [nextOrder, ...prev];
+        return next.slice(0, ordersLimit);
+      }
+
+      const next = [...prev];
+      next[index] = nextOrder;
+      return next;
+    });
+
+    if (added) {
+      setOrdersTotal((prev) => {
+        const nextTotal = prev + 1;
+        setOrdersTotalPages(Math.max(1, Math.ceil(nextTotal / ordersLimit)));
+        return nextTotal;
+      });
+    }
+  };
+
+  const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }, eventType?: string) => {
+    const notifications: Array<{ id: string; message: string; time: string }> = [];
+    let added = false;
+
+    setOrders((prev) => {
+      const index = prev.findIndex((order) => order.id === incoming.id);
+      const existing = index >= 0 ? prev[index] : null;
+      const nextOrder = existing
+        ? {
+            ...existing,
+            ...incoming,
+            items: incoming.items ?? existing.items,
+            table: incoming.table ?? existing.table,
+            user: incoming.user ?? existing.user,
+          }
+        : (incoming as Order);
+
+      if (!existing) {
+        const message =
+          eventType === 'order.created'
+            ? `New order #${incoming.id.slice(0, 8).toUpperCase()} placed`
+            : `Order #${incoming.id.slice(0, 8).toUpperCase()} updated`;
+        notifications.push({
+          id: `${incoming.id}-new-${Date.now()}`,
+          message,
+          time: new Date().toLocaleTimeString(),
+        });
+      } else {
+        if (incoming.status && incoming.status !== existing.status) {
+          notifications.push({
+            id: `${incoming.id}-status-${Date.now()}`,
+            message: `Order #${incoming.id.slice(0, 8).toUpperCase()} moved to ${incoming.status}`,
+            time: new Date().toLocaleTimeString(),
+          });
+        }
+        if (incoming.paymentStatus && incoming.paymentStatus !== existing.paymentStatus) {
+          notifications.push({
+            id: `${incoming.id}-payment-${Date.now()}`,
+            message: `Payment for order #${incoming.id.slice(0, 8).toUpperCase()} is ${incoming.paymentStatus}`,
+            time: new Date().toLocaleTimeString(),
+          });
+        }
+      }
+
+      if (index === -1) {
+        added = true;
+        if (ordersPage !== 1) return prev;
+        const next = [nextOrder, ...prev];
+        return next.slice(0, ordersLimit);
+      }
+
+      const next = [...prev];
+      next[index] = nextOrder as Order;
+      return next;
+    });
+
+    if (notifications.length) {
+      enqueueAdminNotifications(notifications);
+    }
+
+    if (added) {
+      setOrdersTotal((prev) => {
+        const nextTotal = prev + 1;
+        setOrdersTotalPages(Math.max(1, Math.ceil(nextTotal / ordersLimit)));
+        return nextTotal;
+      });
+    }
+  };
+
   const availableCount = useMemo(() => menuItems.filter((item) => item.available).length, [menuItems]);
   const pendingOrders = useMemo(() => orders.filter((order) => order.status === 'PENDING'), [orders]);
   const activeOrders = useMemo(() => orders.filter((order) => !['COMPLETED', 'CANCELLED'].includes(order.status)), [orders]);
+  const cashOrders = useMemo(
+    () => orders.filter((o) => o.paymentProvider === 'CASH' && o.paymentStatus !== 'COMPLETED' && o.status !== 'CANCELLED'),
+    [orders]
+  );
 
   const ordersByStatus = useMemo(() => {
     return orders.reduce((acc, order) => {
@@ -182,7 +349,9 @@ export default function AdminPage() {
       const response = await apiClient.updateOrderStatus(orderId, status);
       if (!response.success) throw new Error(response.error || 'Failed to update order status');
       toast.success(`Order updated to ${status}`);
-      await loadData();
+      if (response.data) {
+        applyOrderUpdate(response.data);
+      }
     } catch (error: any) { toast.error(error?.message || 'Failed to update order status'); } 
     finally { setUpdatingOrderId(null); }
   };
@@ -192,7 +361,7 @@ export default function AdminPage() {
     const newOrderStatus = orderStatusDraft[order.id] || order.status;
     const newPaymentStatus = paymentStatusDraft[order.id] || order.paymentStatus;
     
-    const promises = [];
+    const promises: Array<Promise<any>> = [];
     let hasChanges = false;
     
     if (newOrderStatus !== order.status) {
@@ -225,9 +394,19 @@ export default function AdminPage() {
 
     try {
       setUpdatingOrderId(order.id);
-      await Promise.all(promises);
+      const results = await Promise.all(promises);
+      let merged: Order | null = null;
+      results.forEach((result) => {
+        if (result?.success && result.data) {
+          merged = merged ? { ...merged, ...result.data } : result.data;
+        } else if (result?.id) {
+          merged = merged ? { ...merged, ...result } : result;
+        }
+      });
+      if (merged) {
+        applyOrderUpdate(merged);
+      }
       toast.success('Order successfully updated');
-      await loadData();
     } catch (error: any) { toast.error(error?.message || 'Failed to update order'); } 
     finally { setUpdatingOrderId(null); }
   };
@@ -257,7 +436,7 @@ export default function AdminPage() {
         toast.success('Dish added to menu');
         setMenuForm((prev) => ({ ...prev, name: '', description: '', priceInr: '' }));
         setIsMenuModalOpen(false);
-        await loadData();
+        await loadBaseData();
       }
     } catch (error: any) { toast.error(error?.message || 'Failed to create menu item'); } 
     finally { setSaving(false); }
@@ -267,7 +446,7 @@ export default function AdminPage() {
     try {
       await apiClient.updateMenuAvailability(item.id, !item.available);
       toast.success(`Dish marked as ${!item.available ? 'available' : 'unavailable'}`);
-      await loadData();
+      await loadBaseData();
     } catch (error: any) { toast.error(error?.message || 'Failed to update availability'); }
   };
 
@@ -275,7 +454,7 @@ export default function AdminPage() {
     try {
       await apiClient.deleteMenuItem(item.id);
       toast.success(`${item.name} removed`);
-      await loadData();
+      await loadBaseData();
     } catch (error: any) { toast.error(error?.message || 'Failed to remove dish'); }
   };
 
@@ -285,7 +464,7 @@ export default function AdminPage() {
       await apiClient.addRestaurantUser({ email: userEmail, role: userRole });
       toast.success('Restaurant user updated');
       setUserEmail('');
-      await loadData();
+      await loadBaseData();
     } catch (error: any) { toast.error(error?.message || 'Failed to add restaurant user'); }
   };
 
@@ -294,16 +473,18 @@ export default function AdminPage() {
     try {
       await apiClient.updateRestaurantPaymentPolicy(paymentPolicy);
       toast.success('Payment policy updated');
-      await loadData();
+      await loadBaseData();
     } catch (error: any) { toast.error(error?.message || 'Failed to save payment policy'); }
   };
 
   const confirmCashPayment = async (orderId: string) => {
     try {
       setConfirmingCashOrderId(orderId);
-      await apiClient.confirmCashPayment(orderId);
+      const order = await apiClient.confirmCashPayment(orderId);
       toast.success('Cash payment confirmed');
-      await loadData();
+      if (order) {
+        applyOrderUpdate(order);
+      }
     } catch (error: any) { toast.error(error?.message || 'Failed to confirm cash payment'); } 
     finally { setConfirmingCashOrderId(null); }
   };
@@ -561,9 +742,61 @@ export default function AdminPage() {
                   <input type="text" placeholder="Search ID..." className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20" />
                 </div>
               </div>
-              
-              <div className="space-y-4">
-                {orders.map((order) => (
+
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <p className="text-xs sm:text-sm text-gray-500 font-medium">
+                  Page {ordersPage} of {ordersTotalPages} - {ordersTotal} orders
+                </p>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => setOrdersPage((prev) => Math.max(1, prev - 1))}
+                    disabled={ordersPage <= 1 || ordersLoading}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
+                  <button
+                    onClick={() => setOrdersPage((prev) => Math.min(ordersTotalPages, prev + 1))}
+                    disabled={ordersPage >= ordersTotalPages || ordersLoading}
+                    className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+
+              {adminNotifications.length > 0 && (
+                <div className="mb-5 bg-gray-50 border border-gray-100 rounded-xl p-3 sm:p-4">
+                  <div className="flex items-center justify-between mb-2">
+                    <p className="text-xs sm:text-sm font-semibold text-gray-900">Recent Updates</p>
+                    <button
+                      onClick={() => {
+                        setAdminNotifications([]);
+                        if (typeof window !== 'undefined') {
+                          localStorage.removeItem('admin_order_notifications');
+                        }
+                      }}
+                      className="text-[10px] sm:text-xs text-gray-500 hover:text-gray-700"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                  <div className="space-y-1.5">
+                    {adminNotifications.slice(0, 5).map((note) => (
+                      <div key={note.id} className="text-[11px] sm:text-xs text-gray-600 flex items-center justify-between gap-3">
+                        <span className="truncate">{note.message}</span>
+                        <span className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{note.time}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {ordersLoading ? (
+                <p className="text-sm text-gray-500">Loading orders...</p>
+              ) : (
+                <div className="space-y-4">
+                  {orders.map((order) => (
                   <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 hover:border-orange-200 transition-colors">
                     <div className="flex flex-col lg:flex-row justify-between gap-5">
                       
@@ -638,7 +871,8 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
-              </div>
+                </div>
+              )}
             </div>
           </div>
         )}

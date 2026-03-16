@@ -243,7 +243,9 @@ function MenuPageContent() {
         <div className="text-center">
           <p className="text-red-600 mb-4">{error}</p>
           <button
-            onClick={fetchMenuData}
+            onClick={() => {
+              void fetchMenuData();
+            }}
             className="bg-orange-600 text-white px-4 py-2 rounded-lg hover:bg-orange-700"
           >
             Try Again

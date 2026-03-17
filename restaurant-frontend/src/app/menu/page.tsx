@@ -1,29 +1,84 @@
 'use client';
 
 import { Suspense, useState, useEffect, useRef } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { apiClient, MenuItem, Category } from '@/lib/api-client';
-import {
-  ChefHat,
-  ShoppingCart,
-  Plus,
-  Minus,
-  Filter,
-  Search,
-  Menu as MenuIcon,
-  X,
-} from 'lucide-react';
+import { ChefHat, Search, Menu as MenuIcon, X } from 'lucide-react';
 import { useCartStore, CartItem } from '@/store/cart';
 import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
-import Image from 'next/image';
+const MenuItemsSection = dynamic(() => import('./MenuItemsSection'), {
+  loading: () => <MenuItemsSkeleton />,
+});
+
+function MenuItemsSkeleton() {
+  return (
+    <div className="space-y-6">
+      {[0, 1].map((section) => (
+        <div key={section}>
+          <div className="flex items-center gap-4 mb-4">
+            <div className="h-5 w-28 rounded bg-gray-200 animate-pulse" />
+            <div className="flex-1 h-px bg-gray-200" />
+            <div className="h-4 w-16 rounded bg-gray-200 animate-pulse" />
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {[0, 1, 2].map((card) => (
+              <div
+                key={card}
+                className="bg-white rounded-lg shadow-md overflow-hidden"
+              >
+                <div className="p-3 sm:p-4">
+                  <div className="flex gap-3 sm:gap-4">
+                    <div className="flex-1 min-w-0">
+                      <div className="h-3 w-20 rounded bg-gray-200 animate-pulse mb-2" />
+                      <div className="h-4 w-3/4 rounded bg-gray-200 animate-pulse mb-2" />
+                      <div className="h-3 w-full rounded bg-gray-200 animate-pulse mb-2" />
+                      <div className="h-3 w-5/6 rounded bg-gray-200 animate-pulse mb-3" />
+                      <div className="h-5 w-24 rounded bg-gray-200 animate-pulse" />
+                    </div>
+                    <div className="flex flex-col items-center gap-2">
+                      <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-lg bg-gray-200 animate-pulse" />
+                      <div className="h-7 w-16 sm:w-20 rounded bg-gray-200 animate-pulse" />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function MenuPageSkeleton() {
+  return (
+    <div className="min-h-screen mb-20 bg-gray-50">
+      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
+        <div className="mb-4 sm:mb-8">
+          <div className="h-6 w-32 sm:w-40 rounded bg-gray-200 animate-pulse mb-3" />
+          <div className="h-3 w-56 rounded bg-gray-200 animate-pulse" />
+        </div>
+
+        <div className="flex flex-col sm:flex-row gap-2 sm:gap-4 mb-4 sm:mb-6 sticky top-14 mt-2 bg-gray-50 py-2 z-40 shadow">
+          <div className="relative flex-grow">
+            <div className="h-10 w-full rounded-lg bg-gray-200 animate-pulse" />
+          </div>
+        </div>
+
+        <MenuItemsSkeleton />
+      </div>
+    </div>
+  );
+}
 
 function MenuPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { isAuthenticated } = useAuthStore();
-  const { items, addItem, removeItem, updateQuantity, setActiveOrderId, clearCart } = useCartStore();
+  const { items, addItem, removeItem, updateQuantity, setActiveOrderId } = useCartStore();
 
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
@@ -34,7 +89,7 @@ function MenuPageContent() {
   const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
 
   // Filters
-  const [filters, setFilters] = useState({
+  const [filters] = useState({
     isVeg: false,
     isVegan: false,
     isGlutenFree: false,
@@ -219,22 +274,15 @@ function MenuPageContent() {
     const spiceMap = {
       NONE: null,
       MILD: null,
-      MEDIUM: '🌶️',
-      HOT: '🌶️🌶️',
-      EXTRA_HOT: '🌶️🌶️🌶️',
+      MEDIUM: 'SPICY',
+      HOT: 'SPICY SPICY',
+      EXTRA_HOT: 'SPICY SPICY SPICY',
     };
     return spiceMap[level as keyof typeof spiceMap] || null;
   };
 
   if (loading) {
-    return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <div className="text-center">
-          <ChefHat className="h-12 w-12 text-orange-600 mx-auto mb-4 animate-spin" />
-          <p className="text-gray-600">Loading menu...</p>
-        </div>
-      </div>
-    );
+    return <MenuPageSkeleton />;
   }
 
   if (error) {
@@ -287,180 +335,15 @@ function MenuPageContent() {
           </div>
         </div>
 
-        <div className="space-y-6">
-          {filteredItems.length === 0 ? (
-            <div className="text-center py-8 sm:py-12">
-              <ChefHat className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
-              <p className="text-gray-600 text-base sm:text-lg">
-                No items found matching your criteria
-              </p>
-            </div>
-          ) : (
-            (() => {
-              // Group items by category when showing all, respecting original category order
-              const showAllCategories = selectedCategory === 'all';
-              let itemsByCategory: Record<string, MenuItem[]> = {};
-
-              if (showAllCategories) {
-                // initialize keys in the order of categories array
-                categories.forEach((cat) => {
-                  itemsByCategory[cat.name] = [];
-                });
-
-                filteredItems.forEach((item) => {
-                  const catName =
-                    categories.find((c) => c.id === item.categoryId)?.name ||
-                    'Other';
-                  if (!itemsByCategory[catName]) {
-                    itemsByCategory[catName] = [];
-                  }
-                  itemsByCategory[catName].push(item);
-                });
-              } else {
-                itemsByCategory = { All: filteredItems };
-              }
-
-              // rotate each category list by 1 when showing all
-              if (showAllCategories) {
-                Object.keys(itemsByCategory).forEach((cat) => {
-                  const arr = itemsByCategory[cat];
-                  if (arr.length > 1) {
-                    itemsByCategory[cat] = [...arr.slice(1), arr[0]];
-                  }
-                });
-              }
-
-              return Object.entries(itemsByCategory).map(
-                ([categoryName, items]) => (
-                  <div key={categoryName}>
-                    {/* Category separator - only show when viewing all categories */}
-                    {showAllCategories && (
-                      <div className="flex items-center gap-4 mb-4">
-                        <h2 className="text-lg sm:text-xl font-bold text-gray-800 whitespace-nowrap">
-                          {categoryName}
-                        </h2>
-                        <div className="flex-1 h-px bg-gray-300"></div>
-                        <span className="text-sm text-gray-500">
-                          {items.length} items
-                        </span>
-                      </div>
-                    )}
-
-                    {/* Items grid for this category */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                      {items.map((item) => {
-                        const quantity = getCartItemQuantity(item.id);
-
-                        return (
-                          <div
-                            key={item.id}
-                            className="bg-white rounded-lg shadow-md overflow-hidden menu-item-card"
-                          >
-                            <div className="p-3 sm:p-4">
-                              <div className="flex gap-3 sm:gap-4">
-                                {/* Left side - Text content */}
-                                <div className="flex-1 min-w-0">
-                                  {/* Dietary tags */}
-                                  <div className="flex items-center gap-2 mb-2 text-xs">
-                                    <span
-                                      className={`h-2 w-2 rounded-full ${item.isVeg ? 'bg-green-600' : 'bg-red-600'}`}
-                                    ></span>
-                                    <span>{item.preparationTime} min</span>
-                                  </div>
-
-                                  <h3 className="text-sm sm:text-base font-semibold text-gray-800 line-clamp-1 mb-1">
-                                    {item.name || 'Unknown Item'}
-                                  </h3>
-                                  <p className="text-gray-600 text-xs sm:text-sm line-clamp-2 mb-2">
-                                    {item.description || ''}
-                                  </p>
-
-                                  <div className="flex items-center gap-3 mb-3">
-                                    {/* Price - Slightly larger and bolder */}
-                                    <span className="text-base sm:text-lg font-extrabold text-orange-600 tracking-tight">
-                                      {formatInr(item.pricePaise)}
-                                    </span>
-
-                                    {/* Vertical Divider */}
-                                    <div className="w-[1px] h-4 bg-gray-200" />
-
-                                    {/* Spice Level Badge */}
-                                    {getSpiceLevelDisplay(item.spiceLevel) && (
-                                      <div className="flex items-center bg-orange-50 border border-orange-100 px-2 py-1 rounded-md">
-                                        <span className="text-[10px] sm:text-xs tracking-widest">
-                                          {getSpiceLevelDisplay(item.spiceLevel)}
-                                        </span>
-                                      </div>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Right side - Image and Add button */}
-                                <div className="flex flex-col items-center gap-2">
-                                  {/* Item image (fallback to placeholder if missing) */}
-                                  <Image
-                                    src={encodeURI(
-                                      item.image ||
-                                      'https://images.unsplash.com/photo-1546069901-ba9599a7e63c?q=80&w=600',
-                                    )}
-                                    alt={item.name || ''}
-                                    width={80}
-                                    height={80}
-                                    loading="lazy"
-                                    unoptimized
-                                    className="w-16 h-16 sm:w-20 sm:h-20 object-cover rounded-lg"
-                                  />
-
-                                  {/* Add button / Quantity controls */}
-                                  {quantity === 0 ? (
-                                    <button
-                                      onClick={() => handleAddToCart(item)}
-                                      className="w-16 sm:w-20 bg-orange-600 text-white px-2 py-1.5 rounded-lg hover:bg-orange-700 transition-colors text-xs sm:text-sm font-medium"
-                                    >
-                                      Add
-                                    </button>
-                                  ) : (
-                                    <div className="flex items-center border border-gray-300 rounded-lg w-16 sm:w-20 justify-center">
-                                      <button
-                                        onClick={() =>
-                                          handleUpdateQuantity(
-                                            item,
-                                            quantity - 1,
-                                          )
-                                        }
-                                        className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
-                                      >
-                                        <Minus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                      </button>
-                                      <span className="px-1 sm:px-2 py-0.5 text-xs sm:text-sm font-medium min-w-[1rem] text-center">
-                                        {quantity}
-                                      </span>
-                                      <button
-                                        onClick={() =>
-                                          handleUpdateQuantity(
-                                            item,
-                                            quantity + 1,
-                                          )
-                                        }
-                                        className="p-1 sm:p-1.5 text-gray-600 hover:bg-gray-100"
-                                      >
-                                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                                      </button>
-                                    </div>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ),
-              );
-            })()
-          )}
-        </div>
+        <MenuItemsSection
+          filteredItems={filteredItems}
+          categories={categories}
+          selectedCategory={selectedCategory}
+          getCartItemQuantity={getCartItemQuantity}
+          onAddToCart={handleAddToCart}
+          onUpdateQuantity={handleUpdateQuantity}
+          getSpiceLevelDisplay={getSpiceLevelDisplay}
+        />
       </div>
 
       {/* Floating Categories Button - Glassy Finish */}
@@ -528,16 +411,12 @@ function MenuPageContent() {
 export default function MenuPage() {
   return (
     <Suspense
-      fallback={
-        <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-          <div className="text-center">
-            <ChefHat className="h-12 w-12 text-orange-600 mx-auto mb-4 animate-spin" />
-            <p className="text-gray-600">Loading menu...</p>
-          </div>
-        </div>
-      }
+      fallback={<MenuPageSkeleton />}
     >
       <MenuPageContent />
     </Suspense>
   );
 }
+
+
+

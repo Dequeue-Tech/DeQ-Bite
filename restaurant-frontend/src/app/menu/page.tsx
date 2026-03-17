@@ -274,9 +274,9 @@ function MenuPageContent() {
     const spiceMap = {
       NONE: null,
       MILD: null,
-      MEDIUM: 'SPICY',
-      HOT: 'SPICY SPICY',
-      EXTRA_HOT: 'SPICY SPICY SPICY',
+      MEDIUM: '🌶️',
+      HOT: '🌶️🌶️',
+      EXTRA_HOT: '🌶️🌶️🌶️',
     };
     return spiceMap[level as keyof typeof spiceMap] || null;
   };

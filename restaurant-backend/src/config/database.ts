@@ -29,7 +29,7 @@ const createPrismaClient = () => {
     });
   }
 
-  // Check if using Prisma Accelerate (prisma+postgres:// or prisma+mysql://)
+  // Prisma Accelerate/Data Proxy support (prisma+postgres:// or prisma+mysql://)
   const databaseUrl = process.env.DATABASE_URL || '';
   if (databaseUrl.startsWith('prisma+')) {
     client = client.$extends(withAccelerate());

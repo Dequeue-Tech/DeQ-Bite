@@ -17,8 +17,11 @@ const Navbar = () => {
   const { isAuthenticated, user, logout, getProfile } = useAuthStore();
   const { getTotalItems } = useCartStore();
   const cartItemsCount = getTotalItems();
+  
+  // Role definitions
   const canAccessAdmin = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
   const canAccessKitchen = canAccessAdmin || user?.restaurantRole === 'STAFF';
+  
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState<string | null>(null);
   const [selectedTableNumber, setSelectedTableNumber] = useState<string | null>(null);
@@ -70,7 +73,6 @@ const Navbar = () => {
     { name: 'Menu', href: withRestaurant('/menu') },
     ...(isAuthenticated ? [
       { name: 'Orders', href: withRestaurant('/orders') },
-      ...(canAccessAdmin ? [{name: 'Central Admin', href: withRestaurant('/central-admin')}]:[]),
       ...(canAccessAdmin ? [{ name: 'Admin', href: withRestaurant('/admin') }] : []),
       ...(canAccessKitchen ? [{ name: 'Kitchen', href: withRestaurant('/kitchen') }] : []),
     ] : []),
@@ -96,7 +98,7 @@ const Navbar = () => {
           <div className="flex justify-between h-14 sm:h-16">
             {/* Logo and brand */}
             <div className="flex items-center min-w-0">
-              <Link href="/" className="flex items-center min-w-0">
+              <div className="flex items-center min-w-0">
                 <ChefHat className="h-7 w-7 sm:h-8 sm:w-8 text-orange-600 mr-1.5 sm:mr-2 flex-shrink-0" />
                 <span className="text-lg sm:text-xl font-bold text-gray-800 truncate">Restaurant</span>
                 {selectedRestaurantSlug && (
@@ -109,7 +111,7 @@ const Navbar = () => {
                     @table-{selectedTableNumber}
                   </span>
                 )}
-              </Link>
+              </div>
             </div>
 
             {/* Desktop Navigation */}
@@ -213,6 +215,18 @@ const Navbar = () => {
                           >
                             <LayoutDashboard className="h-4 w-4" />
                             <span>Admin Dashboard</span>
+                          </Link>
+                        )}
+                        
+                        {/* Kitchen Link - Fixed condition and icon */}
+                        {canAccessKitchen && (
+                          <Link
+                            href={withRestaurant('/kitchen')}
+                            onClick={() => setShowUserDropdown(false)}
+                            className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors border-t border-orange-100/50"
+                          >
+                            <ChefHat className="h-4 w-4" />
+                            <span>Kitchen Display</span>
                           </Link>
                         )}
 

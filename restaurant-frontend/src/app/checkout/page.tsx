@@ -2,14 +2,14 @@
 
 import { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { 
-  CreditCard, 
-  MapPin, 
-  Clock, 
-  Check, 
-  Ticket, 
-  ChevronRight, 
-  User, 
+import {
+  CreditCard,
+  MapPin,
+  Clock,
+  Check,
+  Ticket,
+  ChevronRight,
+  User,
   Info,
   ArrowLeft,
   Receipt
@@ -55,8 +55,10 @@ function CheckoutPageContent() {
   const [couponCode, setCouponCode] = useState('');
   const [discountPaise, setDiscountPaise] = useState(0);
   const [restaurantPolicy, setRestaurantPolicy] = useState<{ paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL'; cashPaymentEnabled: boolean } | null>(null);
+  const [requestInvoice, setRequestInvoice] = useState(true);
 
   const selectedTableInfo = tables.find((table) => table.id === selectedTable);
+
 
   useEffect(() => {
     if (!isAuthenticated) {
@@ -173,7 +175,7 @@ function CheckoutPageContent() {
     try {
       const data = await apiClient.validateCoupon(couponCode.trim(), getSubtotalPaise());
       setDiscountPaise(data.discountPaise || 0);
-      
+
       confetti({
         particleCount: 150,
         spread: 70,
@@ -221,7 +223,7 @@ function CheckoutPageContent() {
           items: cartItems.map((item) => ({ menuItemId: item.id, quantity: item.quantity, notes: '' })),
           specialInstructions: specialInstructions || '',
           couponCode: couponCode || undefined,
-          paymentProvider,
+          paymentProvider: 'CASH',
         };
         const response = await apiClient.createOrder(orderData);
         if (!response.success || !response.data) throw new Error(response.error);
@@ -327,7 +329,7 @@ function CheckoutPageContent() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-12">
           {/* Main Content */}
           <div className="lg:col-span-7 space-y-10">
-            
+
             {/* Table Selection */}
             {!requestedOrderId && (
               <>
@@ -411,13 +413,13 @@ function CheckoutPageContent() {
               </h2>
               <div className="bg-white p-6 rounded-[32px] border border-gray-100 shadow-sm space-y-4">
                 {!requestedOrderId && (
-                   <input
-                   type="text"
-                   value={customerInfo.name}
-                   onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
-                   className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-orange-500/20"
-                   placeholder="Your Name"
-                 />
+                  <input
+                    type="text"
+                    value={customerInfo.name}
+                    onChange={(e) => setCustomerInfo({ ...customerInfo, name: e.target.value })}
+                    className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm focus:ring-2 focus:ring-orange-500/20"
+                    placeholder="Your Name"
+                  />
                 )}
                 <textarea
                   value={specialInstructions}
@@ -431,28 +433,67 @@ function CheckoutPageContent() {
 
             {/* Payment Options */}
             {!requestedOrderId && (
-              <section>
-                <h2 className="text-lg font-black mb-4 flex items-center gap-2">
-                  <CreditCard className="h-5 w-5 text-orange-600" />
-                  Payment
+              <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">
+                <h2 className="text-lg sm:text-xl font-semibold text-gray-800 mb-3 sm:mb-4 flex items-center">
+                  <CreditCard className="h-4 w-4 sm:h-5 sm:w-5 mr-2" />
+                  Payment Method
                 </h2>
-                <div className="space-y-3">
-                  {paymentProviders.map((provider) => (
-                    <button
-                      key={provider}
-                      onClick={() => setPaymentProvider(provider as any)}
-                      className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all ${
-                        paymentProvider === provider ? 'border-gray-900 bg-gray-900 text-white' : 'border-gray-100 bg-white text-gray-700'
+                <div className="space-y-2 sm:space-y-3">
+                  {/* COMMENT THIS BLOCK OUT:
+                  {(paymentProviders.length ? paymentProviders : ['RAZORPAY', 'CASH'])
+                    .filter((provider) => restaurantPolicy?.cashPaymentEnabled || provider !== 'CASH')
+                    .map((provider) => (
+                      <label key={provider} className="flex items-center text-sm sm:text-base">
+                        <input
+                          type="radio"
+                          name="payment"
+                          value={provider}
+                          checked={paymentProvider === provider}
+                          onChange={(e) => setPaymentProvider(e.target.value as any)}
+                          className="mr-2 sm:mr-3"
+                        />
+                        <span>{provider}</span>
+                      </label>
+                    ))}
+                  */}
+
+                  {/* ADD THIS CHECKBOX INSTEAD: */}
+                  {/* ADD THIS CHECKBOX INSTEAD: */}
+                  <label
+                    className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all cursor-pointer ${requestInvoice
+                        ? 'border-gray-900 bg-gray-900 text-white'
+                        : 'border-gray-100 bg-white text-gray-700'
                       }`}
+                  >
+                    {/* Visually hidden but functionally active checkbox */}
+                    <input
+                      type="checkbox"
+                      checked={requestInvoice}
+                      onChange={(e) => setRequestInvoice(e.target.checked)}
+                      className="sr-only"
+                    />
+
+                    {/* Text Content */}
+                    <div className="flex flex-col">
+                      <span className="font-bold text-base sm:text-lg">Ask for Invoice</span>
+                      <span
+                        className={`text-xs sm:text-sm mt-0.5 font-medium ${requestInvoice ? 'text-gray-300' : 'text-gray-500'
+                          }`}
+                      >
+                        Bill will be brought to your table
+                      </span>
+                    </div>
+
+                    {/* Custom Radio/Check Circle */}
+                    <div
+                      className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${requestInvoice ? 'border-white' : 'border-gray-300'
+                        }`}
                     >
-                      <span className="font-bold">{provider}</span>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${paymentProvider === provider ? 'border-white' : 'border-gray-300'}`}>
-                        {paymentProvider === provider && <div className="w-2 h-2 rounded-full bg-white" />}
-                      </div>
-                    </button>
-                  ))}
+                      {requestInvoice && <div className="w-2 h-2 rounded-full bg-white" />}
+                    </div>
+                  </label>
                 </div>
-              </section>
+              </div>
             )}
           </div>
 
@@ -488,7 +529,7 @@ function CheckoutPageContent() {
                       onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
                       className="w-full pl-11 pr-24 py-4 bg-gray-50 rounded-2xl border-none text-xs font-bold tracking-widest focus:ring-2 focus:ring-orange-500/20"
                     />
-                    <button 
+                    <button
                       onClick={handleCouponApply}
                       className="absolute right-2 top-1/2 -translate-y-1/2 bg-gray-900 text-white text-[10px] font-black px-4 py-2 rounded-xl"
                     >

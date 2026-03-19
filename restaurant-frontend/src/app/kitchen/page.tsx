@@ -4,11 +4,45 @@ import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient, Order } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
-import { ChefHat, RefreshCcw } from 'lucide-react';
+import { ChefHat, RefreshCcw, Clock, CheckCircle, Flame, ArrowRight, Utensils, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { subscribeToOrderEvents } from '@/lib/realtime-client';
 
-const statusFlow = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'];
+// We only want the kitchen to manage the active cooking flow
+const kitchenFlow = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY'];
+
+const getStatusColor = (status: Order['status']) => {
+  const colors = {
+    PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    CONFIRMED: 'bg-blue-100 text-blue-800 border-blue-200',
+    PREPARING: 'bg-purple-100 text-purple-800 border-purple-200',
+    READY: 'bg-orange-100 text-orange-800 border-orange-200',
+    SERVED: 'bg-teal-100 text-teal-800 border-teal-200',
+    COMPLETED: 'bg-green-100 text-green-800 border-green-200',
+    CANCELLED: 'bg-red-100 text-red-800 border-red-200',
+  };
+  return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+};
+
+const getStatusIcon = (status: string) => {
+  switch (status) {
+    case 'PENDING': return <Clock className="h-4 w-4" />;
+    case 'CONFIRMED': return <CheckCircle className="h-4 w-4" />;
+    case 'PREPARING': return <Flame className="h-4 w-4" />;
+    case 'READY': return <Utensils className="h-4 w-4" />;
+    default: return <Clock className="h-4 w-4" />;
+  }
+};
+
+const getStatusLabel = (status: string) => {
+  switch (status) {
+    case 'PENDING': return 'New Orders';
+    case 'CONFIRMED': return 'Up Next';
+    case 'PREPARING': return 'Cooking';
+    case 'READY': return 'Ready to Serve';
+    default: return status;
+  }
+};
 
 export default function KitchenPage() {
   const router = useRouter();
@@ -51,7 +85,7 @@ export default function KitchenPage() {
   }, [hasKitchenAccess]);
 
   const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }) => {
-    const isActive = (status?: Order['status']) => status && !['COMPLETED', 'CANCELLED'].includes(status);
+    const isActive = (status?: Order['status']) => status && !['COMPLETED', 'CANCELLED', 'SERVED'].includes(status);
 
     setOrders((prev) => {
       const index = prev.findIndex((order) => order.id === incoming.id);
@@ -67,7 +101,7 @@ export default function KitchenPage() {
         : (incoming as Order);
 
       if (existing && incoming.status && incoming.status !== existing.status) {
-        toast(`Order #${incoming.id.slice(0, 8).toUpperCase()} moved to ${incoming.status}`);
+        toast.success(`Order #${incoming.id.slice(0, 8).toUpperCase()} moved to ${incoming.status}`);
       }
 
       if (!isActive(nextOrder.status)) {
@@ -89,7 +123,8 @@ export default function KitchenPage() {
       setLoading(true);
       const response = await apiClient.getRestaurantOrders();
       if (response.success) {
-        const active = (response.data || []).filter((order) => !['COMPLETED', 'CANCELLED'].includes(order.status));
+        // Kitchen only needs to see active cooking stages
+        const active = (response.data || []).filter((order) => kitchenFlow.includes(order.status));
         setOrders(active);
 
         if (typeof window !== 'undefined') {
@@ -102,10 +137,7 @@ export default function KitchenPage() {
           nextOrders.forEach((order) => {
             const prev = snapshot[order.id];
             if (!prev && !isInitialSnapshot) {
-              newMessages.push(`New order #${order.id.slice(0, 8).toUpperCase()} awaiting confirmation`);
-            }
-            if (prev && prev.status !== order.status) {
-              newMessages.push(`Order #${order.id.slice(0, 8).toUpperCase()} moved to ${order.status}`);
+              newMessages.push(`New order #${order.id.slice(0, 8).toUpperCase()} awaiting kitchen`);
             }
           });
 
@@ -128,22 +160,23 @@ export default function KitchenPage() {
   };
 
   const groupedOrders = useMemo(() => {
-    return statusFlow.reduce((acc, status) => {
+    return kitchenFlow.reduce((acc, status) => {
       acc[status] = orders.filter((order) => order.status === status);
       return acc;
     }, {} as Record<string, Order[]>);
   }, [orders]);
 
   const advanceStatus = async (order: Order) => {
-    const currentIndex = statusFlow.indexOf(order.status);
-    const nextStatus = statusFlow[currentIndex + 1];
+    // Determine the complete flow to know what's next, even if kitchen doesn't show it
+    const completeFlow = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'];
+    const currentIndex = completeFlow.indexOf(order.status);
+    const nextStatus = completeFlow[currentIndex + 1];
     if (!nextStatus) return;
 
     try {
       setUpdatingOrderId(order.id);
-      const response = await apiClient.updateOrderStatus(order.id, nextStatus);
+      const response = await apiClient.updateOrderStatus(order.id, nextStatus as Order['status']);
       if (response.success) {
-        toast.success(`Order moved to ${nextStatus}`);
         if (response.data) {
           handleRealtimeOrderUpdate(response.data);
         }
@@ -177,104 +210,154 @@ export default function KitchenPage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 p-3 sm:p-4 md:p-6 mb-20">
-      <div className="max-w-7xl mx-auto">
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-0 mb-4 sm:mb-6">
-          <div className="flex items-center gap-2">
-            <ChefHat className="h-5 w-5 sm:h-6 sm:w-6 text-orange-600" />
-            <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Kitchen Order Preparation</h1>
-          </div>
-          <button
-            onClick={fetchOrders}
-            className="inline-flex items-center px-3 py-2 text-xs sm:text-sm rounded-lg border border-gray-300 hover:bg-gray-100"
-          >
-            <RefreshCcw className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-            Refresh
-          </button>
-        </div>
-
-        {loading ? (
-          <p className="text-gray-600 text-sm">Loading kitchen queue...</p>
-        ) : (
-          <div className="space-y-4">
-            <div className="bg-white rounded-xl border border-gray-200 p-3 sm:p-4">
-              <h2 className="font-semibold text-gray-900 text-sm sm:text-base mb-3">Pending confirmations</h2>
-              {(groupedOrders['PENDING'] || []).length === 0 ? (
-                <p className="text-xs sm:text-sm text-gray-500">No orders waiting for confirmation.</p>
-              ) : (
-                <div className="space-y-2">
-                  {(groupedOrders['PENDING'] || []).map((order) => (
-                    <div key={order.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <p className="font-semibold text-gray-900 text-sm">#{order.id.slice(0, 8).toUpperCase()}</p>
-                        <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} - Table {order.table?.number}</p>
-                      </div>
-                      <div className="flex gap-2">
-                        <button
-                          onClick={() => advanceStatus(order)}
-                          disabled={updatingOrderId === order.id}
-                          className="text-xs px-3 py-1.5 rounded bg-green-600 text-white hover:bg-green-700 disabled:opacity-60"
-                        >
-                          Confirm
-                        </button>
-                        <button
-                          onClick={() => cancelOrder(order)}
-                          disabled={updatingOrderId === order.id}
-                          className="text-xs px-3 py-1.5 rounded bg-red-50 text-red-700 border border-red-200 hover:bg-red-100 disabled:opacity-60"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
+    <div className="min-h-screen bg-[#F8FAFC] pb-24">
+      {/* Header Area */}
+      <div className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 py-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div className="flex items-center gap-3">
+              <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2.5 rounded-xl text-white shadow-lg shadow-orange-500/20">
+                <ChefHat className="h-6 w-6" />
+              </div>
+              <div>
+                <h1 className="text-2xl font-black text-gray-900 tracking-tight leading-none">Kitchen Display</h1>
+                <p className="text-sm font-medium text-gray-500 mt-1">Live order tracking</p>
+              </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-            {['PENDING', 'CONFIRMED', 'PREPARING', 'READY'].map((status) => (
-              <div key={status} className="bg-white rounded-xl border border-gray-200">
-                <div className="p-2.5 sm:p-3 border-b border-gray-200">
-                  <p className="font-semibold text-gray-800 text-sm sm:text-base">{status}</p>
-                  <p className="text-xs text-gray-500">{groupedOrders[status]?.length || 0} orders</p>
-                </div>
-                <div className="p-2.5 sm:p-3 space-y-2 sm:space-y-3 max-h-[calc(100vh-200px)] overflow-auto">
-                  {(groupedOrders[status] || []).length === 0 && (
-                    <p className="text-xs sm:text-sm text-gray-500">No orders in this stage.</p>
-                  )}
-                  {(groupedOrders[status] || []).map((order) => (
-                    <div key={order.id} className="border border-gray-200 rounded-lg p-2.5 sm:p-3">
-                      <p className="font-semibold text-gray-900 text-sm">#{order.id.slice(0, 8).toUpperCase()}</p>
-                      <p className="text-xs text-gray-600 truncate">{order.user?.name || 'Customer'} - Table {order.table?.number}</p>
-                      <div className="mt-1.5 sm:mt-2 space-y-0.5 sm:space-y-1">
-                        {order.items.map((item) => (
-                          <p key={item.id} className="text-xs sm:text-sm text-gray-700 truncate">
-                            {item.quantity}x {item.menuItem?.name}
-                          </p>
+            <button
+              onClick={fetchOrders}
+              disabled={loading}
+              className="flex items-center justify-center gap-2 text-sm font-bold text-gray-700 bg-gray-100 px-5 py-2.5 rounded-xl hover:bg-gray-200 transition-colors disabled:opacity-50"
+            >
+              <RefreshCcw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              Refresh Board
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <div className="max-w-[1400px] mx-auto px-4 sm:px-6 pt-8">
+        {loading ? (
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-10 h-10 border-4 border-orange-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-500 font-bold">Syncing Orders...</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 items-start">
+            {kitchenFlow.map((status) => {
+              const columnOrders = groupedOrders[status] || [];
+              const isPending = status === 'PENDING';
+              
+              return (
+                <div key={status} className="flex flex-col h-full max-h-[calc(100vh-140px)]">
+                  {/* Column Header */}
+                  <div className="flex items-center justify-between mb-4 px-1">
+                    <div className="flex items-center gap-2">
+                      <div className={`p-1.5 rounded-lg ${getStatusColor(status as Order['status']).split(' ')[0]} ${getStatusColor(status as Order['status']).split(' ')[1]}`}>
+                        {getStatusIcon(status)}
+                      </div>
+                      <h2 className="font-black text-gray-900">{getStatusLabel(status)}</h2>
+                    </div>
+                    <span className="bg-gray-200 text-gray-700 text-xs font-black px-2.5 py-1 rounded-full">
+                      {columnOrders.length}
+                    </span>
+                  </div>
+
+                  {/* Kanban Column */}
+                  <div className={`flex-1 rounded-[32px] p-4 sm:p-5 overflow-y-auto no-scrollbar border ${isPending ? 'bg-orange-50/50 border-orange-100' : 'bg-gray-100/50 border-gray-100'}`}>
+                    
+                    <style jsx global>{`
+                      .no-scrollbar::-webkit-scrollbar { display: none; }
+                      .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+                    `}</style>
+
+                    {columnOrders.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center h-32 text-center opacity-50">
+                        <div className="w-12 h-12 rounded-full border-2 border-dashed border-gray-300 mb-2" />
+                        <p className="text-xs font-bold text-gray-400">No tickets</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-4">
+                        {columnOrders.map((order) => (
+                          <div 
+                            key={order.id} 
+                            className="bg-white rounded-[24px] p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 group hover:border-orange-200 transition-colors"
+                          >
+                            {/* Order Ticket Header */}
+                            <div className="flex items-start justify-between mb-4 border-b border-dashed border-gray-200 pb-4">
+                              <div>
+                                <p className="font-black text-lg text-gray-900 leading-none">#{order.id.slice(0, 6).toUpperCase()}</p>
+                                <p className="text-xs font-bold text-gray-500 mt-1 uppercase tracking-widest">{order.user?.name || 'Walk-in'}</p>
+                              </div>
+                              {order.table?.number && (
+                                <div className="bg-gray-900 text-white h-10 w-10 rounded-xl flex flex-col items-center justify-center shrink-0">
+                                  <span className="text-[10px] font-bold text-gray-400 uppercase leading-none">TBL</span>
+                                  <span className="text-sm font-black leading-none mt-0.5">{order.table.number}</span>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Order Items (The "Ticket") */}
+                            <div className="space-y-3 mb-6">
+                              {order.items.map((item) => (
+                                <div key={item.id} className="flex items-start gap-3">
+                                  <div className="bg-orange-100 text-orange-700 font-black text-xs px-2 py-1 rounded-lg shrink-0">
+                                    {item.quantity}x
+                                  </div>
+                                  <div>
+                                    <p className="text-sm font-bold text-gray-800 leading-tight">{item.menuItem?.name}</p>
+                                    {item.notes && (
+                                      <p className="text-xs font-medium text-red-500 mt-0.5 flex items-center gap-1">
+                                        <X className="h-3 w-3" /> {item.notes}
+                                      </p>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                              {order.specialInstructions && (
+                                <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-4">
+                                  <p className="text-[10px] font-black text-yellow-800 uppercase tracking-widest mb-1">Notes</p>
+                                  <p className="text-xs font-bold text-yellow-900">{order.specialInstructions}</p>
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Action Buttons */}
+                            <div className="flex gap-2">
+                              <button
+                                onClick={() => advanceStatus(order)}
+                                disabled={updatingOrderId === order.id}
+                                className="flex-1 flex items-center justify-center gap-1.5 bg-gray-900 text-white py-3 rounded-xl font-bold text-xs hover:bg-black active:scale-95 transition-all disabled:opacity-50"
+                              >
+                                {updatingOrderId === order.id ? (
+                                  <div className="h-4 w-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                ) : (
+                                  <>
+                                    {isPending ? 'Accept Order' : 'Move to Next'} 
+                                    <ArrowRight className="h-3.5 w-3.5" />
+                                  </>
+                                )}
+                              </button>
+                              
+                              {isPending && (
+                                <button
+                                  onClick={() => cancelOrder(order)}
+                                  disabled={updatingOrderId === order.id}
+                                  className="px-4 py-3 bg-white text-red-600 border border-red-200 rounded-xl font-bold text-xs hover:bg-red-50 active:scale-95 transition-all disabled:opacity-50"
+                                >
+                                  Decline
+                                </button>
+                              )}
+                            </div>
+                          </div>
                         ))}
                       </div>
-                      <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2">
-                        <button
-                          onClick={() => advanceStatus(order)}
-                          disabled={updatingOrderId === order.id}
-                          className="w-full bg-orange-600 text-white py-1.5 sm:py-2 rounded-lg hover:bg-orange-700 disabled:opacity-60 text-xs sm:text-sm"
-                        >
-                          {updatingOrderId === order.id ? 'Updating...' : 'Next Stage'}
-                        </button>
-                        <button
-                          onClick={() => cancelOrder(order)}
-                          disabled={updatingOrderId === order.id}
-                          className="w-full bg-red-50 text-red-700 border border-red-200 py-1.5 sm:py-2 rounded-lg hover:bg-red-100 disabled:opacity-60 text-xs sm:text-sm"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
-                  ))}
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
-            </div>
+              );
+            })}
           </div>
         )}
       </div>

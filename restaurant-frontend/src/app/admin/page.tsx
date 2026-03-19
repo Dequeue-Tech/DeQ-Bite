@@ -70,7 +70,11 @@ export default function AdminPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [adminNotifications, setAdminNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
 
-  const hasAdminAccess = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
+  const hasAdminAccess = 
+  user?.role === 'OWNER' || 
+  user?.role === 'ADMIN' ||
+  user?.restaurantRole === 'OWNER' || 
+  user?.restaurantRole === 'ADMIN';
 
   useEffect(() => { getProfile(); }, [getProfile]);
 

@@ -384,13 +384,14 @@ export default function RestaurantLandingPage() {
             <div className="flex items-center gap-4 text-gray-500 text-sm mb-4">
               <span>{getCuisineTypes()}</span>
               <span className="w-1 h-1 bg-gray-300 rounded-full" />
-              <span>{getPriceForTwo()} for two</span>
+              {/* <span>{getPriceForTwo()} for two</span> */}
             </div>
 
             {/* Status Badge */}
-            <div className="inline-flex items-center gap-2 bg-red-50 border border-red-200 rounded-full px-4 py-2 mb-6">
-              <span className="text-sm font-medium text-red-700">
-                {restaurant.status === 'APPROVED' ? 'Open Now' : 'Closed'}
+            <div className="inline-flex items-center gap-2 bg-green-50 border border-green-200 rounded-full px-4 py-2 mb-6">
+              <span className="text-sm font-medium text-green-700">
+                {/* {restaurant.status === 'APPROVED' ? 'Open Now' : 'Closed'} */}
+                {restaurant.status = 'Open Now'}
               </span>
             </div>
 
@@ -411,7 +412,7 @@ export default function RestaurantLandingPage() {
             )}
 
             {/* More Deals */}
-            <div className="mb-6">
+            {/* <div className="mb-6">
               <h3 className="text-lg font-semibold text-gray-700 mb-3">More deals for you</h3>
               <div className="flex flex-wrap gap-2">
                 {['Pre-booking offers', 'Early bird discount', 'Weekend special', 'Flat ₹100 OFF'].map((badge) => (
@@ -423,7 +424,7 @@ export default function RestaurantLandingPage() {
                   </button>
                 ))}
               </div>
-            </div>
+            </div> */}
 
             {/* CTA */}
             <button

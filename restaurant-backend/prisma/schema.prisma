@@ -169,6 +169,15 @@ model Order {
   userId                  String
   tableId                 String
   status                  OrderStatus             @default(PENDING)
+  isDelivery              Boolean                 @default(false)
+  deliveryStatus          DeliveryStatus?
+  deliveryCustomerName    String?
+  deliveryCustomerPhone   String?
+  deliveryAddress         String?
+  deliveryLandmark        String?
+  deliveryRiderName       String?
+  deliveryRiderPhone      String?
+  deliveryApprovedAt      DateTime?
   paymentId               String?
   paymentStatus           PaymentStatus           @default(PENDING)
   specialInstructions     String?
@@ -199,6 +208,8 @@ model Order {
   @@index([restaurantId, userId, createdAt])
   @@index([restaurantId, status, createdAt])
   @@index([restaurantId, paymentStatus, createdAt])
+  @@index([restaurantId, isDelivery, deliveryStatus, createdAt])
+  @@index([restaurantId, userId, isDelivery, createdAt])
 }
 
 model OrderItem {
@@ -386,6 +397,15 @@ enum PaymentStatus {
   FAILED
   REFUNDED
   PARTIALLY_PAID
+}
+
+enum DeliveryStatus {
+  PLACED
+  CONFIRMED
+  PREPARING
+  OUT_FOR_DELIVERY
+  DELIVERED
+  CANCELLED
 }
 
 enum SpiceLevel {

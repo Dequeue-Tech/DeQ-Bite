@@ -197,6 +197,28 @@ export interface OrderItem {
   menuItem: MenuItem;
 }
 
+export type DeliveryStatus =
+  | 'PLACED'
+  | 'CONFIRMED'
+  | 'PREPARING'
+  | 'OUT_FOR_DELIVERY'
+  | 'DELIVERED'
+  | 'CANCELLED';
+
+export interface DeliveryMeta {
+  customerName: string;
+  customerPhone: string;
+  deliveryAddress: string;
+  landmark?: string;
+  riderName?: string;
+  riderPhone?: string;
+  deliveryStatus: DeliveryStatus;
+}
+
+export interface DeliveryOrder extends Order {
+  deliveryMeta: DeliveryMeta;
+}
+
 class ApiClient {
   private api: AxiosInstance;
   private blockedRootSegments = new Set([
@@ -707,6 +729,22 @@ class ApiClient {
 
   async applyCouponToOrder(orderId: string, couponCode: string): Promise<ApiResponse<Order>> {
     const response = await this.api.post<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${orderId}/apply-coupon`), { couponCode });
+    return response.data;
+  }
+
+  // Delivery methods
+  async getDeliveryOrders(): Promise<ApiResponse<DeliveryOrder[]>> {
+    const response = await this.api.get<ApiResponse<DeliveryOrder[]>>(this.buildTenantEndpoint('/delivery/orders/restaurant/all'));
+    return response.data;
+  }
+
+  async assignDeliveryRider(orderId: string, payload: { riderName: string; riderPhone: string }): Promise<ApiResponse<DeliveryOrder>> {
+    const response = await this.api.put<ApiResponse<DeliveryOrder>>(this.buildTenantEndpoint(`/delivery/orders/${orderId}/assign-rider`), payload);
+    return response.data;
+  }
+
+  async updateDeliveryOrderStatus(orderId: string, deliveryStatus: DeliveryStatus): Promise<ApiResponse<DeliveryOrder>> {
+    const response = await this.api.put<ApiResponse<DeliveryOrder>>(this.buildTenantEndpoint(`/delivery/orders/${orderId}/status`), { deliveryStatus });
     return response.data;
   }
 

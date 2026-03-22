@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
-const restaurant_1 = require("../middleware/restaurant");
-const logger_1 = require("../utils/logger");
-const realtime_1 = require("../utils/realtime");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const logger_1 = require("@/utils/logger");
+const realtime_1 = require("@/utils/realtime");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 router.use(auth_1.authenticate);
@@ -32,27 +32,45 @@ const calculateDiscountFromCoupon = (coupon, subtotalPaise) => {
     }
     return Math.min(discountPaise, subtotalPaise);
 };
-const buildOrderEventPayload = (order) => ({
-    id: order.id,
-    status: order.status,
-    paymentStatus: order.paymentStatus,
-    paymentProvider: order.paymentProvider,
-    paidAmountPaise: order.paidAmountPaise,
-    dueAmountPaise: order.dueAmountPaise,
-    totalPaise: order.totalPaise,
-    updatedAt: order.updatedAt,
-    createdAt: order.createdAt,
-});
+const buildOrderEventPayload = (order) => {
+    const payloadOrder = {
+        id: order.id,
+        userId: order.userId,
+        tableId: order.tableId,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        paymentProvider: order.paymentProvider,
+        paidAmountPaise: order.paidAmountPaise,
+        dueAmountPaise: order.dueAmountPaise,
+        totalPaise: order.totalPaise,
+        updatedAt: order.updatedAt,
+        createdAt: order.createdAt,
+    };
+    if (order.items)
+        payloadOrder.items = order.items;
+    if (order.table)
+        payloadOrder.table = order.table;
+    if (order.user)
+        payloadOrder.user = order.user;
+    if (typeof order.subtotalPaise === 'number')
+        payloadOrder.subtotalPaise = order.subtotalPaise;
+    if (typeof order.taxPaise === 'number')
+        payloadOrder.taxPaise = order.taxPaise;
+    if (typeof order.discountPaise === 'number')
+        payloadOrder.discountPaise = order.discountPaise;
+    return { order: payloadOrder };
+};
 const applyCoupon = async (restaurantId, code, subtotalPaise) => {
     const normalizedCode = normalizeCouponCode(code);
-    const coupon = await database_1.prisma.coupon.findFirst({
+    const coupon = await database_1.prisma.coupon.findUnique({
         where: {
-            restaurantId,
-            code: normalizedCode,
-            active: true,
+            restaurantId_code: {
+                restaurantId,
+                code: normalizedCode,
+            },
         },
     });
-    if (!coupon) {
+    if (!coupon || !coupon.active) {
         throw new Error('Invalid or inactive coupon code');
     }
     const now = new Date();
@@ -100,6 +118,12 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
         }
         let subtotalPaise = 0;
         const orderItemsData = [];
+        const itemIds = items.map((item) => item?.menuItemId).filter(Boolean);
+        const menuItems = await database_1.prisma.menuItem.findMany({
+            where: { id: { in: itemIds }, restaurantId: req.restaurant.id },
+            select: { id: true, pricePaise: true, name: true, available: true },
+        });
+        const menuItemById = new Map(menuItems.map((item) => [item.id, item]));
         for (const [index, item] of items.entries()) {
             if (!item?.menuItemId || !item?.quantity) {
                 return res.status(400).json({
@@ -113,9 +137,7 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
                     error: `Quantity must be a positive integer. Item at position ${index + 1} has invalid quantity.`,
                 });
             }
-            const menuItem = await database_1.prisma.menuItem.findFirst({
-                where: { id: item.menuItemId, restaurantId: req.restaurant.id },
-            });
+            const menuItem = menuItemById.get(item.menuItemId);
             if (!menuItem) {
                 return res.status(400).json({ success: false, error: `Menu item with id ${item.menuItemId} not found` });
             }
@@ -220,6 +242,7 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
         });
         (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
             type: 'order.created',
+            userId: order.userId,
             payload: buildOrderEventPayload(order),
         });
         return res.status(201).json({
@@ -264,6 +287,12 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
         }
         const additionalItems = [];
         let addedSubtotalPaise = 0;
+        const addItemIds = items.map((item) => item?.menuItemId).filter(Boolean);
+        const addMenuItems = await database_1.prisma.menuItem.findMany({
+            where: { id: { in: addItemIds }, restaurantId: req.restaurant.id },
+            select: { id: true, pricePaise: true, available: true },
+        });
+        const addMenuItemById = new Map(addMenuItems.map((item) => [item.id, item]));
         for (const [index, item] of items.entries()) {
             if (!item?.menuItemId || !item?.quantity) {
                 return res.status(400).json({
@@ -277,9 +306,7 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                     error: `Quantity must be a positive integer. Item at position ${index + 1} has invalid quantity.`,
                 });
             }
-            const menuItem = await database_1.prisma.menuItem.findFirst({
-                where: { id: item.menuItemId, restaurantId: req.restaurant.id },
-            });
+            const menuItem = addMenuItemById.get(item.menuItemId);
             if (!menuItem || !menuItem.available) {
                 return res.status(400).json({ success: false, error: `Menu item at position ${index + 1} is not available` });
             }
@@ -329,6 +356,7 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
         ]);
         (0, realtime_1.emitRestaurantEvent)(updatedOrder.restaurantId, {
             type: 'order.updated',
+            userId: updatedOrder.userId,
             payload: buildOrderEventPayload(updatedOrder),
         });
         return res.status(200).json({
@@ -419,6 +447,7 @@ router.post('/:id/apply-coupon', restaurant_1.requireRestaurant, async (req, res
             ]))[0];
         (0, realtime_1.emitRestaurantEvent)(updatedOrder.restaurantId, {
             type: 'order.updated',
+            userId: updatedOrder.userId,
             payload: buildOrderEventPayload(updatedOrder),
         });
         return res.json({
@@ -440,6 +469,49 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
             return res.status(401).json({ success: false, error: 'Unauthorized' });
         }
         const userId = req.user.id;
+        const pageRaw = Number(req.query.page);
+        const limitRaw = Number(req.query.limit);
+        const hasPaging = Number.isFinite(pageRaw) || Number.isFinite(limitRaw);
+        const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 20;
+        if (hasPaging) {
+            const skip = (page - 1) * limit;
+            const [orders, total] = await Promise.all([
+                database_1.prisma.order.findMany({
+                    where: {
+                        userId,
+                        restaurantId: req.restaurant.id,
+                    },
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                    skip,
+                    take: limit,
+                }),
+                database_1.prisma.order.count({
+                    where: {
+                        userId,
+                        restaurantId: req.restaurant.id,
+                    },
+                }),
+            ]);
+            return res.json({
+                success: true,
+                data: orders,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.max(1, Math.ceil(total / limit)),
+                },
+            });
+        }
+        const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
+        const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
         const orders = await database_1.prisma.order.findMany({
             where: {
                 userId,
@@ -452,6 +524,8 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
             orderBy: {
                 createdAt: 'desc',
             },
+            ...(typeof take === 'number' ? { take } : {}),
+            ...(cursor ? { cursor, skip: 1 } : {}),
         });
         return res.json({ success: true, data: orders });
     }
@@ -461,6 +535,49 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
 });
 router.get('/restaurant/all', restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
     try {
+        const pageRaw = Number(req.query.page);
+        const limitRaw = Number(req.query.limit);
+        const hasPaging = Number.isFinite(pageRaw) || Number.isFinite(limitRaw);
+        const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
+        const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 200) : 20;
+        if (hasPaging) {
+            const skip = (page - 1) * limit;
+            const [orders, total] = await Promise.all([
+                database_1.prisma.order.findMany({
+                    where: {
+                        restaurantId: req.restaurant.id,
+                    },
+                    include: {
+                        user: { select: { id: true, name: true, email: true } },
+                        items: { include: { menuItem: true } },
+                        table: true,
+                    },
+                    orderBy: {
+                        createdAt: 'desc',
+                    },
+                    skip,
+                    take: limit,
+                }),
+                database_1.prisma.order.count({
+                    where: {
+                        restaurantId: req.restaurant.id,
+                    },
+                }),
+            ]);
+            return res.json({
+                success: true,
+                data: orders,
+                pagination: {
+                    page,
+                    limit,
+                    total,
+                    totalPages: Math.max(1, Math.ceil(total / limit)),
+                },
+                message: 'Restaurant orders retrieved successfully',
+            });
+        }
+        const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+        const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
         const orders = await database_1.prisma.order.findMany({
             where: {
                 restaurantId: req.restaurant.id,
@@ -473,6 +590,8 @@ router.get('/restaurant/all', restaurant_1.requireRestaurant, (0, restaurant_1.a
             orderBy: {
                 createdAt: 'desc',
             },
+            ...(typeof take === 'number' ? { take } : {}),
+            ...(cursor ? { cursor, skip: 1 } : {}),
         });
         return res.json({ success: true, data: orders, message: 'Restaurant orders retrieved successfully' });
     }
@@ -542,6 +661,7 @@ router.put('/:id/status', restaurant_1.requireRestaurant, (0, restaurant_1.autho
         });
         (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
             type: 'order.updated',
+            userId: order.userId,
             payload: buildOrderEventPayload(order),
         });
         return res.json({ success: true, data: order, message: 'Order status updated' });
@@ -584,6 +704,7 @@ router.put('/:id/cancel', restaurant_1.requireRestaurant, async (req, res) => {
             },
             select: {
                 id: true,
+                userId: true,
                 restaurantId: true,
                 status: true,
                 paymentStatus: true,
@@ -597,6 +718,7 @@ router.put('/:id/cancel', restaurant_1.requireRestaurant, async (req, res) => {
         });
         (0, realtime_1.emitRestaurantEvent)(cancelled.restaurantId, {
             type: 'order.updated',
+            userId: cancelled.userId,
             payload: buildOrderEventPayload(cancelled),
         });
         return res.json({ success: true, data: cancelled, message: 'Order cancelled' });

@@ -10,7 +10,7 @@ exports.downloadPDFFromStorage = downloadPDFFromStorage;
 exports.getPDFDownloadUrl = getPDFDownloadUrl;
 exports.cleanupOldInvoices = cleanupOldInvoices;
 const jspdf_1 = __importDefault(require("jspdf"));
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 const b2_storage_1 = require("./b2-storage");
 exports.isPrivateBucket = b2_storage_1.isPrivateBucket;
 function generateInvoicePDF(invoiceData) {
@@ -21,7 +21,7 @@ function generateInvoicePDF(invoiceData) {
             format: [80, 250]
         });
         const centerX = 40;
-        let currentY = 15;
+        let currentY = 12;
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(14);
         doc.text(invoiceData.restaurantName, centerX, currentY, { align: 'center' });
@@ -33,7 +33,6 @@ function generateInvoicePDF(invoiceData) {
         }
         if (invoiceData.restaurantAddress) {
             currentY += 4;
-            doc.setFont('helvetica', 'normal');
             doc.setFontSize(8);
             const addressLines = doc.splitTextToSize(invoiceData.restaurantAddress, 65);
             doc.text(addressLines, centerX, currentY, { align: 'center' });
@@ -50,31 +49,31 @@ function generateInvoicePDF(invoiceData) {
             currentY += 4;
             doc.text(`Ph: ${invoiceData.restaurantPhone}`, centerX, currentY, { align: 'center' });
         }
-        currentY += 4;
-        doc.setLineWidth(0.5);
-        doc.line(5, currentY, 75, currentY);
         currentY += 5;
-        doc.setFont('helvetica', 'normal');
+        doc.setLineWidth(0.3);
+        doc.line(5, currentY, 75, currentY);
+        currentY += 6;
         doc.setFontSize(9);
-        doc.text(`Name: ${invoiceData.customerName || ''}`, 5, currentY);
-        currentY += 3;
+        doc.text(`Name: ${invoiceData.customerName || '-'}`, 5, currentY);
+        currentY += 4;
         doc.line(5, currentY, 75, currentY);
-        currentY += 5;
+        currentY += 6;
         doc.text(`Date: ${invoiceData.orderDate}`, 5, currentY);
         doc.setFont('helvetica', 'bold');
-        doc.text(`Dine In: ${invoiceData.tableNumber || '4'}`, 45, currentY);
-        currentY += 4;
+        doc.text(`Dine In: ${invoiceData.tableNumber || '-'}`, 45, currentY);
+        currentY += 5;
         doc.setFont('helvetica', 'normal');
         doc.text(`Cashier: ${invoiceData.cashierName || '-'}`, 5, currentY);
-        doc.text(`Bill No.: ${invoiceData.invoiceNumber}`, 45, currentY);
+        doc.text(`Bill No: ${invoiceData.invoiceNumber}`, 45, currentY);
         currentY += 4;
         doc.line(5, currentY, 75, currentY);
-        currentY += 5;
-        doc.text('No.', 5, currentY);
+        currentY += 6;
+        doc.setFontSize(9);
+        doc.text('No', 5, currentY);
         doc.text('Item', 12, currentY);
-        doc.text('Qty.', 45, currentY);
+        doc.text('Qty', 45, currentY);
         doc.text('Price', 55, currentY);
-        doc.text('Amount', 75, currentY, { align: 'right' });
+        doc.text('Amt', 75, currentY, { align: 'right' });
         currentY += 2;
         doc.line(5, currentY, 75, currentY);
         currentY += 5;
@@ -87,44 +86,54 @@ function generateInvoicePDF(invoiceData) {
             doc.text(item.quantity.toString(), 45, currentY);
             doc.text(item.price.toFixed(2), 55, currentY);
             doc.text(item.total.toFixed(2), 75, currentY, { align: 'right' });
-            currentY += (itemNameLines.length * 4) + 1;
+            currentY += (itemNameLines.length * 5) + 3;
         });
         doc.line(5, currentY, 75, currentY);
-        currentY += 5;
-        doc.text(`Total Qty: ${totalQty}`, 12, currentY);
+        currentY += 8;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(9);
+        doc.text(`Total Qty: ${totalQty}`, 5, currentY);
         doc.text('Sub Total', 45, currentY);
         doc.text(invoiceData.subtotal.toFixed(2), 75, currentY, { align: 'right' });
-        currentY += 4;
-        const taxLabel = invoiceData.taxPercent ? `GST ${invoiceData.taxPercent}%` : 'GST';
+        currentY += 8;
+        const taxLabel = invoiceData.taxPercent
+            ? `GST ${invoiceData.taxPercent}%`
+            : 'GST';
         doc.text(taxLabel, 45, currentY);
         doc.text(invoiceData.tax.toFixed(2), 75, currentY, { align: 'right' });
-        currentY += 3;
+        currentY += 7;
+        doc.setLineWidth(0.5);
         doc.line(5, currentY, 75, currentY);
-        currentY += 6;
+        currentY += 9;
         doc.setFont('helvetica', 'bold');
-        doc.setFontSize(10);
-        doc.text('Grand Total', 40, currentY);
+        doc.setFontSize(11);
+        doc.text('Grand Total', 5, currentY);
         doc.text(`INR ${invoiceData.total.toFixed(2)}`, 75, currentY, { align: 'right' });
-        currentY += 3;
+        currentY += 8;
+        doc.setLineWidth(0.5);
+        doc.line(5, currentY, 75, currentY);
+        currentY += 2;
         doc.line(5, currentY, 75, currentY);
         if (invoiceData.fssaiNumber) {
-            currentY += 5;
+            currentY += 6;
             doc.setFont('helvetica', 'bold');
             doc.setFontSize(8);
-            doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber}`, centerX, currentY, { align: 'center' });
+            doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber}`, centerX, currentY, {
+                align: 'center'
+            });
         }
         const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
         logger_1.logger.info('PDF invoice generated successfully', {
             invoiceNumber: invoiceData.invoiceNumber,
             customerName: invoiceData.customerName,
-            total: invoiceData.total,
+            total: invoiceData.total
         });
         return pdfBuffer;
     }
     catch (error) {
         logger_1.logger.error('PDF generation failed', {
             error: error instanceof Error ? error.message : 'Unknown error',
-            invoiceNumber: invoiceData.invoiceNumber,
+            invoiceNumber: invoiceData.invoiceNumber
         });
         throw new Error('Failed to generate PDF invoice');
     }

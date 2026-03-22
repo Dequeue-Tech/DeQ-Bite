@@ -2,23 +2,34 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.prisma = exports.disconnectDatabase = exports.connectDatabase = void 0;
 const client_1 = require("@prisma/client");
-const logger_1 = require("../utils/logger");
+const extension_accelerate_1 = require("@prisma/extension-accelerate");
+const logger_1 = require("@/utils/logger");
 const createPrismaClient = () => {
-    const client = new client_1.PrismaClient({
-        log: process.env.NODE_ENV === 'production'
-            ? ['error', 'warn']
-            : ['query', 'info', 'warn', 'error'],
-    });
+    const shouldLogQueries = process.env.LOG_SLOW_QUERIES !== 'false';
+    const slowQueryMs = Number(process.env.SLOW_QUERY_MS || 200);
+    const log = process.env.NODE_ENV === 'production'
+        ? ['error', 'warn']
+        : ['query', 'info', 'warn', 'error'];
+    if (shouldLogQueries) {
+        log.push({ emit: 'event', level: 'query' });
+    }
+    let client = new client_1.PrismaClient({ log });
+    if (shouldLogQueries && typeof client.$on === 'function') {
+        client.$on('query', (e) => {
+            if (e.duration >= slowQueryMs) {
+                const includeParams = process.env.LOG_SLOW_QUERY_PARAMS === 'true';
+                logger_1.logger.warn('Slow query detected', {
+                    durationMs: e.duration,
+                    query: e.query,
+                    ...(includeParams ? { params: e.params } : {}),
+                    target: e.target,
+                });
+            }
+        });
+    }
     const databaseUrl = process.env.DATABASE_URL || '';
     if (databaseUrl.startsWith('prisma+')) {
-        try {
-            const { withAccelerate } = require('@prisma/extension-accelerate');
-            return client.$extends(withAccelerate());
-        }
-        catch (error) {
-            logger_1.logger.warn('Prisma Accelerate requested but @prisma/extension-accelerate is not installed. Falling back to regular Prisma client.');
-            return client;
-        }
+        client = client.$extends((0, extension_accelerate_1.withAccelerate)());
     }
     return client;
 };

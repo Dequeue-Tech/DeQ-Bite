@@ -2,9 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
-const restaurant_1 = require("../middleware/restaurant");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const accelerate_cache_1 = require("@/utils/accelerate-cache");
+const cache_1 = require("@/middleware/cache");
+const cache_2 = require("@/utils/cache");
 const router = (0, express_1.Router)();
 const menuItemSchema = zod_1.z.object({
     name: zod_1.z.string().min(2).max(120),
@@ -22,9 +25,11 @@ const menuItemSchema = zod_1.z.object({
     spiceLevel: zod_1.z.enum(['NONE', 'MILD', 'MEDIUM', 'HOT', 'EXTRA_HOT']).optional(),
 });
 const menuItemUpdateSchema = menuItemSchema.partial();
-router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
+router.get('/', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(120, 'menu:list'), async (req, res) => {
     try {
         const { categoryId } = req.query;
+        const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
+        const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
         const menuItems = await database_1.prisma.menuItem.findMany({
             where: {
                 available: true,
@@ -36,7 +41,10 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
             },
             orderBy: {
                 name: 'asc'
-            }
+            },
+            ...(typeof take === 'number' ? { take } : {}),
+            ...(cursor ? { cursor, skip: 1 } : {}),
+            ...(0, accelerate_cache_1.accelerateCache)(300, 600),
         });
         return res.json({
             success: true,
@@ -53,8 +61,10 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
         });
     }
 });
-router.get('/admin/all', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
+router.get('/admin/all', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), (0, cache_1.cacheResponse)(30, 'menu:admin'), async (req, res) => {
     try {
+        const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+        const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
         const menuItems = await database_1.prisma.menuItem.findMany({
             where: {
                 restaurantId: req.restaurant.id,
@@ -65,6 +75,9 @@ router.get('/admin/all', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             orderBy: {
                 createdAt: 'desc',
             },
+            ...(typeof take === 'number' ? { take } : {}),
+            ...(cursor ? { cursor, skip: 1 } : {}),
+            ...(0, accelerate_cache_1.accelerateCache)(60, 120),
         });
         return res.json({
             success: true,
@@ -80,7 +93,7 @@ router.get('/admin/all', auth_1.authenticate, restaurant_1.requireRestaurant, (0
         });
     }
 });
-router.get('/:id', restaurant_1.requireRestaurant, async (req, res) => {
+router.get('/:id', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(120, 'menu:item'), async (req, res) => {
     try {
         const id = req.params['id'];
         const menuItem = await database_1.prisma.menuItem.findFirst({
@@ -90,7 +103,8 @@ router.get('/:id', restaurant_1.requireRestaurant, async (req, res) => {
             },
             include: {
                 category: true
-            }
+            },
+            ...(0, accelerate_cache_1.accelerateCache)(300, 600),
         });
         if (!menuItem) {
             return res.status(404).json({
@@ -171,6 +185,13 @@ router.post('/', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restau
             error: 'Failed to create menu item',
             message: error instanceof Error ? error.message : 'Unknown error',
         });
+    }
+    finally {
+        if (req.restaurant?.id) {
+            await (0, cache_2.invalidateCacheByPrefix)('menu:list', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:item', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:admin', req.restaurant.id);
+        }
     }
 });
 router.put('/:id', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
@@ -253,6 +274,13 @@ router.put('/:id', auth_1.authenticate, restaurant_1.requireRestaurant, (0, rest
             message: error instanceof Error ? error.message : 'Unknown error',
         });
     }
+    finally {
+        if (req.restaurant?.id) {
+            await (0, cache_2.invalidateCacheByPrefix)('menu:list', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:item', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:admin', req.restaurant.id);
+        }
+    }
 });
 router.patch('/:id/availability', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
     try {
@@ -295,6 +323,13 @@ router.patch('/:id/availability', auth_1.authenticate, restaurant_1.requireResta
             message: error instanceof Error ? error.message : 'Unknown error',
         });
     }
+    finally {
+        if (req.restaurant?.id) {
+            await (0, cache_2.invalidateCacheByPrefix)('menu:list', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:item', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:admin', req.restaurant.id);
+        }
+    }
 });
 router.delete('/:id', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
     try {
@@ -326,6 +361,13 @@ router.delete('/:id', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
             error: 'Failed to delete menu item',
             message: error instanceof Error ? error.message : 'Unknown error',
         });
+    }
+    finally {
+        if (req.restaurant?.id) {
+            await (0, cache_2.invalidateCacheByPrefix)('menu:list', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:item', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('menu:admin', req.restaurant.id);
+        }
     }
 });
 exports.default = router;

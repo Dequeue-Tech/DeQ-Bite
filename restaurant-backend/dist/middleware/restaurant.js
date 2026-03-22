@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorizeRestaurantRole = exports.requireRestaurant = exports.attachRestaurant = void 0;
-const database_1 = require("../config/database");
-const errorHandler_1 = require("./errorHandler");
+const database_1 = require("@/config/database");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const accelerate_cache_1 = require("@/utils/accelerate-cache");
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
 function pickFields(fields) {
     const out = {};
@@ -111,6 +112,7 @@ const attachRestaurant = async (req, _res, next) => {
             restaurant = await database_1.prisma.restaurant.findFirst({
                 where: baseFilter,
                 ...(basicSelect ? { select: basicSelect } : {}),
+                ...(0, accelerate_cache_1.accelerateCache)(30, 60),
             });
         }
         catch (err) {
@@ -132,6 +134,7 @@ const attachRestaurant = async (req, _res, next) => {
                     const partialRestaurant = await database_1.prisma.restaurant.findFirst({
                         where: fallbackFilter,
                         ...(fallbackSelect ? { select: fallbackSelect } : {}),
+                        ...(0, accelerate_cache_1.accelerateCache)(30, 60),
                     });
                     if (partialRestaurant) {
                         restaurant = {
@@ -173,6 +176,26 @@ exports.attachRestaurant = attachRestaurant;
 const requireRestaurant = (req, _res, next) => {
     if (!req.restaurant) {
         return next(new errorHandler_1.AppError('Restaurant context required', 400));
+    }
+    if (req.user && ['OWNER', 'ADMIN', 'STAFF', 'KITCHEN_STAFF'].includes(req.user.role)) {
+        database_1.prisma.restaurantUser
+            .findUnique({
+            where: {
+                restaurantId_userId: {
+                    restaurantId: req.restaurant.id,
+                    userId: req.user.id,
+                },
+            },
+            select: { active: true },
+        })
+            .then((membership) => {
+            if (!membership || !membership.active) {
+                return next(new errorHandler_1.AppError('Access denied. Restaurant membership required.', 403));
+            }
+            return next();
+        })
+            .catch((error) => next(error));
+        return;
     }
     return next();
 };

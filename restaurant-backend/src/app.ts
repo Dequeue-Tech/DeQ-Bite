@@ -23,6 +23,7 @@ import restaurantRoutes from '@/routes/restaurants';
 import offerRoutes from '@/routes/offers';
 import platformRoutes from '@/routes/platform';
 import realtimeRoutes from '@/routes/realtime';
+import deliveryRoutes from '@/routes/delivery';
 
 dotenv.config();
 
@@ -44,7 +45,7 @@ app.use(cors({
   origin: (origin, callback) => {
     const allowedOrigins = [
       process.env.FRONTEND_URL?.replace(/\/$/, ''),
-      'http://localhost:5174',
+      'http://localhost:5173',
       'http://localhost:3000',
       'http://localhost:3001',
       'https://de-q-restaurants-frontend.vercel.app',
@@ -125,6 +126,7 @@ tenantRouter.use('/orders', orderRoutes);
 tenantRouter.use('/coupons', couponRoutes);
 tenantRouter.use('/restaurants', restaurantRoutes);
 tenantRouter.use('/offers', offerRoutes);
+tenantRouter.use('/delivery', deliveryRoutes);
 tenantRouter.use('/', realtimeRoutes);
 
 // More-specific path MUST come before the generic /api/restaurants listing

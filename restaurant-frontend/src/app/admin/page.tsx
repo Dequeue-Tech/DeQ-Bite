@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient, Category, MenuItem, Order, RestaurantUserEntry } from '@/lib/api-client';
+import { apiClient, Category, DeliveryOrder, DeliveryStatus, MenuItem, Order, RestaurantUserEntry } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import { 
   ChefHat, Plus, Trash2, CheckCircle, TrendingUp, 
   Users, CreditCard, LayoutDashboard, BellRing, 
-  Clock, Check, X, Search, Activity, ChevronDown
+  Clock, Check, X, Search, Activity, ChevronDown, Bike, MapPin, Phone
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
@@ -37,31 +37,58 @@ const getStatusColor = (status: Order['status']) => {
   return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
 };
 
+const getDeliveryStatusColor = (status: DeliveryStatus) => {
+  const colors = {
+    PLACED: 'bg-yellow-100 text-yellow-800 border-yellow-200',
+    CONFIRMED: 'bg-blue-100 text-blue-800 border-blue-200',
+    PREPARING: 'bg-purple-100 text-purple-800 border-purple-200',
+    OUT_FOR_DELIVERY: 'bg-orange-100 text-orange-800 border-orange-200',
+    DELIVERED: 'bg-green-100 text-green-800 border-green-200',
+    CANCELLED: 'bg-red-100 text-red-800 border-red-200',
+  };
+  return colors[status] || 'bg-gray-100 text-gray-800 border-gray-200';
+};
+
+const getPlainInstructions = (specialInstructions?: string) => {
+  if (!specialInstructions) return '';
+  const marker = '[DELIVERY_META]';
+  const idx = specialInstructions.lastIndexOf(marker);
+  return (idx === -1 ? specialInstructions : specialInstructions.slice(0, idx)).trim();
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
   const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
   const homeHref = selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/';
   
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'users' | 'orders' | 'payments'>('dashboard');
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'menu' | 'users' | 'orders' | 'delivery' | 'payments'>('dashboard');
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
   const [categories, setCategories] = useState<Category[]>([]);
   const [restaurantUsers, setRestaurantUsers] = useState<RestaurantUserEntry[]>([]);
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(true);
   const [ordersLoading, setOrdersLoading] = useState(false);
+  const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const [ordersLimit] = useState(20);
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [ordersTotalPages, setOrdersTotalPages] = useState(1);
+  const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>([]);
   const [saving, setSaving] = useState(false);
   const [isMenuModalOpen, setIsMenuModalOpen] = useState(false);
   
   const [confirmingCashOrderId, setConfirmingCashOrderId] = useState<string | null>(null);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [updatingDeliveryOrderId, setUpdatingDeliveryOrderId] = useState<string | null>(null);
   const [orderStatusDraft, setOrderStatusDraft] = useState<Record<string, Order['status']>>({});
   const [paymentStatusDraft, setPaymentStatusDraft] = useState<Record<string, Order['paymentStatus']>>({});
   const [paymentAmountDraft, setPaymentAmountDraft] = useState<Record<string, string>>({});
+  const [deliveryStatusDraft, setDeliveryStatusDraft] = useState<Record<string, DeliveryStatus>>({});
+  const [deliveryPaymentStatusDraft, setDeliveryPaymentStatusDraft] = useState<Record<string, Order['paymentStatus']>>({});
+  const [deliveryPaymentAmountDraft, setDeliveryPaymentAmountDraft] = useState<Record<string, string>>({});
+  const [deliveryRiderDraft, setDeliveryRiderDraft] = useState<Record<string, { riderName: string; riderPhone: string }>>({});
+  const [deliverySearch, setDeliverySearch] = useState('');
   
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState<'OWNER' | 'ADMIN' | 'STAFF'>('STAFF');
@@ -69,6 +96,7 @@ export default function AdminPage() {
   const [menuForm, setMenuForm] = useState<MenuForm>({ name: '', description: '', priceInr: '', categoryId: '' });
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [adminNotifications, setAdminNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
+  const [adminAccessVerified, setAdminAccessVerified] = useState(false);
 
   const hasAdminAccess = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
 
@@ -76,10 +104,40 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;
-    if (!hasAdminAccess) { router.push(homeHref); return; }
-    loadBaseData();
-    setOrdersPage(1);
-    loadOrdersPage(1);
+    if (!hasAdminAccess) {
+      setAdminAccessVerified(false);
+      router.replace(homeHref);
+      return;
+    }
+
+    let isActive = true;
+    setLoading(true);
+    setAdminAccessVerified(false);
+
+    (async () => {
+      try {
+        // owner/admin-only endpoint; confirms this user can see admin console
+        await apiClient.getRestaurantUsers();
+        if (!isActive) return;
+        setAdminAccessVerified(true);
+        await loadBaseData();
+        if (!isActive) return;
+        setOrdersPage(1);
+        await Promise.all([loadOrdersPage(1), loadDeliveryOrders()]);
+      } catch {
+        if (!isActive) return;
+        setAdminAccessVerified(false);
+        toast.error('Admin access denied for this account');
+        router.replace(homeHref);
+      } finally {
+        if (!isActive) return;
+        setLoading(false);
+      }
+    })();
+
+    return () => {
+      isActive = false;
+    };
   }, [user?.restaurantRole, hasAdminAccess, router, homeHref]);
 
   useEffect(() => {
@@ -116,6 +174,11 @@ export default function AdminPage() {
     if (!hasAdminAccess) return;
     loadOrdersPage(ordersPage);
   }, [hasAdminAccess, ordersPage]);
+
+  useEffect(() => {
+    if (!hasAdminAccess || activeTab !== 'delivery') return;
+    loadDeliveryOrders();
+  }, [hasAdminAccess, activeTab]);
 
   const loadBaseData = async () => {
     try {
@@ -155,6 +218,20 @@ export default function AdminPage() {
       toast.error(error?.message || 'Failed to load orders');
     } finally {
       setOrdersLoading(false);
+    }
+  };
+
+  const loadDeliveryOrders = async () => {
+    try {
+      setDeliveryLoading(true);
+      const response = await apiClient.getDeliveryOrders();
+      if (response.success) {
+        setDeliveryOrders(response.data || []);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to load delivery orders');
+    } finally {
+      setDeliveryLoading(false);
     }
   };
 
@@ -297,6 +374,22 @@ export default function AdminPage() {
     () => orders.filter((o) => o.paymentProvider === 'CASH' && o.paymentStatus !== 'COMPLETED' && o.status !== 'CANCELLED'),
     [orders]
   );
+  const pendingDeliveryOrders = useMemo(
+    () => deliveryOrders.filter((o) => ['PLACED', 'CONFIRMED', 'PREPARING', 'OUT_FOR_DELIVERY'].includes(o.deliveryMeta?.deliveryStatus || '')),
+    [deliveryOrders]
+  );
+  const filteredDeliveryOrders = useMemo(() => {
+    const q = deliverySearch.trim().toLowerCase();
+    if (!q) return deliveryOrders;
+    return deliveryOrders.filter((order) => {
+      const id = order.id.toLowerCase();
+      const name = order.deliveryMeta?.customerName?.toLowerCase() || '';
+      const phone = order.deliveryMeta?.customerPhone?.toLowerCase() || '';
+      const address = order.deliveryMeta?.deliveryAddress?.toLowerCase() || '';
+      const rider = order.deliveryMeta?.riderName?.toLowerCase() || '';
+      return id.includes(q) || name.includes(q) || phone.includes(q) || address.includes(q) || rider.includes(q);
+    });
+  }, [deliveryOrders, deliverySearch]);
 
   const ordersByStatus = useMemo(() => {
     return orders.reduce((acc, order) => {
@@ -305,9 +398,34 @@ export default function AdminPage() {
     }, {} as Record<Order['status'], number>);
   }, [orders]);
 
-  const completedOrders = useMemo(() => orders.filter((order) => order.paymentStatus === 'COMPLETED'), [orders]);
-  const totalRevenuePaise = useMemo(() => completedOrders.reduce((sum, order) => sum + order.totalPaise, 0), [completedOrders]);
-  const avgOrderValuePaise = useMemo(() => (completedOrders.length ? Math.round(totalRevenuePaise / completedOrders.length) : 0), [completedOrders.length, totalRevenuePaise]);
+  const deliveryOrderIdSet = useMemo(() => new Set(deliveryOrders.map((order) => order.id)), [deliveryOrders]);
+  const completedDineInOrders = useMemo(
+    () => orders.filter((order) => order.paymentStatus === 'COMPLETED' && !deliveryOrderIdSet.has(order.id)),
+    [orders, deliveryOrderIdSet]
+  );
+  const completedDeliveryOrders = useMemo(
+    () =>
+      deliveryOrders.filter(
+        (order) => order.paymentStatus === 'COMPLETED' || order.deliveryMeta.deliveryStatus === 'DELIVERED'
+      ),
+    [deliveryOrders]
+  );
+  const dineInRevenuePaise = useMemo(
+    () => completedDineInOrders.reduce((sum, order) => sum + order.totalPaise, 0),
+    [completedDineInOrders]
+  );
+  const deliveryRevenuePaise = useMemo(
+    () => completedDeliveryOrders.reduce((sum, order) => sum + order.totalPaise, 0),
+    [completedDeliveryOrders]
+  );
+  const totalRevenuePaise = useMemo(
+    () => dineInRevenuePaise + deliveryRevenuePaise,
+    [dineInRevenuePaise, deliveryRevenuePaise]
+  );
+  const avgOrderValuePaise = useMemo(() => {
+    const totalCompletedOrders = completedDineInOrders.length + completedDeliveryOrders.length;
+    return totalCompletedOrders ? Math.round(totalRevenuePaise / totalCompletedOrders) : 0;
+  }, [completedDineInOrders.length, completedDeliveryOrders.length, totalRevenuePaise]);
 
   const salesByDay = useMemo(() => {
     const days: Array<{ label: string; value: number }> = [];
@@ -316,17 +434,17 @@ export default function AdminPage() {
       const date = new Date(now);
       date.setDate(now.getDate() - i);
       const label = date.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
-      const total = completedOrders
+      const total = [...completedDineInOrders, ...completedDeliveryOrders]
         .filter((order) => new Date(order.createdAt).toDateString() === date.toDateString())
         .reduce((sum, order) => sum + order.totalPaise, 0);
       days.push({ label, value: total });
     }
     return days;
-  }, [completedOrders]);
+  }, [completedDineInOrders, completedDeliveryOrders]);
 
   const topDishes = useMemo(() => {
     const map = new Map<string, { name: string; qty: number; revenue: number }>();
-    completedOrders.forEach((order) => {
+    [...completedDineInOrders, ...completedDeliveryOrders].forEach((order) => {
       order.items.forEach((item) => {
         const key = item.menuItem?.id || item.menuItemId;
         const entry = map.get(key) || { name: item.menuItem?.name || 'Item', qty: 0, revenue: 0 };
@@ -336,7 +454,7 @@ export default function AdminPage() {
       });
     });
     return Array.from(map.values()).sort((a, b) => b.revenue - a.revenue).slice(0, 5);
-  }, [completedOrders]);
+  }, [completedDineInOrders, completedDeliveryOrders]);
 
   const statusMax = useMemo(() => Math.max(1, ...Object.values(ordersByStatus)), [ordersByStatus]);
 
@@ -409,6 +527,93 @@ export default function AdminPage() {
       toast.success('Order successfully updated');
     } catch (error: any) { toast.error(error?.message || 'Failed to update order'); } 
     finally { setUpdatingOrderId(null); }
+  };
+
+  const applyDeliveryUpdate = (incoming: DeliveryOrder) => {
+    setDeliveryOrders((prev) => {
+      const index = prev.findIndex((order) => order.id === incoming.id);
+      if (index === -1) return [incoming, ...prev];
+      const next = [...prev];
+      next[index] = { ...next[index], ...incoming };
+      return next;
+    });
+  };
+
+  const saveDeliveryStatus = async (order: DeliveryOrder) => {
+    const nextStatus = deliveryStatusDraft[order.id] || order.deliveryMeta.deliveryStatus;
+    if (nextStatus === order.deliveryMeta.deliveryStatus) {
+      toast('No delivery status changes', { icon: 'i' });
+      return;
+    }
+
+    try {
+      setUpdatingDeliveryOrderId(order.id);
+      const response = await apiClient.updateDeliveryOrderStatus(order.id, nextStatus);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to update delivery status');
+      }
+      applyDeliveryUpdate(response.data);
+      toast.success(`Delivery marked as ${nextStatus}`);
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update delivery status');
+    } finally {
+      setUpdatingDeliveryOrderId(null);
+    }
+  };
+
+  const saveDeliveryPayment = async (order: DeliveryOrder) => {
+    const nextPaymentStatus = deliveryPaymentStatusDraft[order.id] || order.paymentStatus;
+    if (nextPaymentStatus === order.paymentStatus) {
+      toast('No payment status changes', { icon: 'i' });
+      return;
+    }
+
+    let paidAmountPaise: number | undefined;
+    if (nextPaymentStatus === 'PARTIALLY_PAID') {
+      const amountRaw = (deliveryPaymentAmountDraft[order.id] || '').trim();
+      if (!amountRaw) return toast.error('Enter a valid paid amount in INR');
+      const amountInr = Number(amountRaw);
+      if (!Number.isFinite(amountInr) || amountInr <= 0) return toast.error('Enter a valid paid amount in INR');
+      paidAmountPaise = Math.round(amountInr * 100);
+      if (paidAmountPaise >= order.totalPaise) return toast.error('Paid amount must be less than order total');
+    }
+
+    try {
+      setUpdatingDeliveryOrderId(order.id);
+      const updatedOrder = await apiClient.updatePaymentStatus({
+        orderId: order.id,
+        paymentStatus: nextPaymentStatus,
+        ...(nextPaymentStatus === 'PARTIALLY_PAID' ? { paidAmountPaise } : {}),
+      });
+      applyDeliveryUpdate(updatedOrder as DeliveryOrder);
+      toast.success('Delivery payment status updated');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update delivery payment');
+    } finally {
+      setUpdatingDeliveryOrderId(null);
+    }
+  };
+
+  const saveDeliveryRider = async (order: DeliveryOrder) => {
+    const rider = deliveryRiderDraft[order.id];
+    if (!rider?.riderName || !rider?.riderPhone) {
+      toast.error('Rider name and phone are required');
+      return;
+    }
+
+    try {
+      setUpdatingDeliveryOrderId(order.id);
+      const response = await apiClient.assignDeliveryRider(order.id, rider);
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to assign rider');
+      }
+      applyDeliveryUpdate(response.data);
+      toast.success('Rider assigned');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to assign rider');
+    } finally {
+      setUpdatingDeliveryOrderId(null);
+    }
   };
 
   const requestNotificationPermission = async () => {
@@ -500,11 +705,12 @@ export default function AdminPage() {
     );
   }
 
-  if (!hasAdminAccess) return null;
+  if (!hasAdminAccess || !adminAccessVerified) return null;
 
   const tabs = [
     { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
     { id: 'orders', label: 'Live Orders', icon: Activity },
+    { id: 'delivery', label: 'Delivery', icon: Bike },
     { id: 'menu', label: 'Menu', icon: ChefHat },
     { id: 'users', label: 'Team', icon: Users },
     { id: 'payments', label: 'Settings', icon: CreditCard },
@@ -598,6 +804,11 @@ export default function AdminPage() {
                         {pendingOrders.length}
                       </span>
                     )}
+                    {tab.id === 'delivery' && pendingDeliveryOrders.length > 0 && (
+                      <span className="bg-blue-500 text-white text-[10px] px-2 py-0.5 rounded-full ml-1">
+                        {pendingDeliveryOrders.length}
+                      </span>
+                    )}
                   </button>
                 );
               })}
@@ -613,10 +824,15 @@ export default function AdminPage() {
         {activeTab === 'dashboard' && (
           <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* KPI Cards */}
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
               <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100 relative overflow-hidden">
-                <p className="text-xs sm:text-sm font-bold text-gray-500 flex items-center gap-1.5"><TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" /> Revenue</p>
+                <p className="text-xs sm:text-sm font-bold text-gray-500 flex items-center gap-1.5"><TrendingUp className="h-3 w-3 sm:h-4 sm:w-4 text-green-500" /> Total Revenue</p>
                 <p className="text-xl sm:text-3xl font-black text-gray-900 mt-1 sm:mt-2 truncate">{formatInr(totalRevenuePaise)}</p>
+              </div>
+
+              <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100 relative overflow-hidden">
+                <p className="text-xs sm:text-sm font-bold text-gray-500 flex items-center gap-1.5"><Bike className="h-3 w-3 sm:h-4 sm:w-4 text-blue-500" /> Delivery Revenue</p>
+                <p className="text-xl sm:text-3xl font-black text-gray-900 mt-1 sm:mt-2 truncate">{formatInr(deliveryRevenuePaise)}</p>
               </div>
 
               <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100 relative overflow-hidden">
@@ -871,6 +1087,241 @@ export default function AdminPage() {
                     </div>
                   </div>
                 ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* DELIVERY TAB */}
+        {activeTab === 'delivery' && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+              <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100">
+                <p className="text-xs sm:text-sm font-bold text-gray-500">Total Delivery Orders</p>
+                <p className="text-xl sm:text-3xl font-black text-gray-900 mt-1 sm:mt-2">{deliveryOrders.length}</p>
+              </div>
+              <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100">
+                <p className="text-xs sm:text-sm font-bold text-gray-500">Active Delivery</p>
+                <p className="text-xl sm:text-3xl font-black text-gray-900 mt-1 sm:mt-2">{pendingDeliveryOrders.length}</p>
+              </div>
+              <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100">
+                <p className="text-xs sm:text-sm font-bold text-gray-500">Delivered</p>
+                <p className="text-xl sm:text-3xl font-black text-green-600 mt-1 sm:mt-2">
+                  {deliveryOrders.filter((o) => o.deliveryMeta.deliveryStatus === 'DELIVERED').length}
+                </p>
+              </div>
+              <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100">
+                <p className="text-xs sm:text-sm font-bold text-gray-500">Cancelled</p>
+                <p className="text-xl sm:text-3xl font-black text-red-600 mt-1 sm:mt-2">
+                  {deliveryOrders.filter((o) => o.deliveryMeta.deliveryStatus === 'CANCELLED').length}
+                </p>
+              </div>
+            </div>
+
+            <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
+                <h2 className="text-lg sm:text-xl font-black text-gray-900">Delivery Control Center</h2>
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-80">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input
+                      type="text"
+                      value={deliverySearch}
+                      onChange={(e) => setDeliverySearch(e.target.value)}
+                      placeholder="Search customer, phone, address, order..."
+                      className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20"
+                    />
+                  </div>
+                  <button
+                    onClick={loadDeliveryOrders}
+                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-black"
+                  >
+                    Refresh
+                  </button>
+                </div>
+              </div>
+
+              {deliveryLoading ? (
+                <p className="text-sm text-gray-500">Loading delivery orders...</p>
+              ) : filteredDeliveryOrders.length === 0 ? (
+                <div className="bg-gray-50 rounded-2xl p-8 text-center border border-gray-100 border-dashed">
+                  <p className="text-sm font-semibold text-gray-500">No delivery orders found.</p>
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {filteredDeliveryOrders.map((order) => {
+                    const instructions = getPlainInstructions(order.specialInstructions);
+                    const riderDraft = deliveryRiderDraft[order.id];
+                    const riderName = riderDraft?.riderName ?? order.deliveryMeta?.riderName ?? '';
+                    const riderPhone = riderDraft?.riderPhone ?? order.deliveryMeta?.riderPhone ?? '';
+                    const selectedStatus = deliveryStatusDraft[order.id] || order.deliveryMeta.deliveryStatus;
+                    const selectedPaymentStatus = deliveryPaymentStatusDraft[order.id] || order.paymentStatus;
+
+                    return (
+                      <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 hover:border-blue-200 transition-colors">
+                        <div className="flex flex-col xl:flex-row justify-between gap-5">
+                          <div className="flex-1 space-y-3">
+                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+                              <span className="font-black text-base sm:text-lg text-gray-900">#{order.id.slice(0, 8).toUpperCase()}</span>
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border ${getDeliveryStatusColor(order.deliveryMeta.deliveryStatus)}`}>
+                                {order.deliveryMeta.deliveryStatus.replace(/_/g, ' ')}
+                              </span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border border-gray-200 text-gray-600 bg-gray-50">
+                                {order.paymentProvider || 'NA'} | {order.paymentStatus}
+                              </span>
+                            </div>
+
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-100">
+                              <div>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Customer</p>
+                                <p className="text-sm font-black text-gray-900">{order.deliveryMeta.customerName || order.user?.name || 'Unknown'}</p>
+                                <p className="text-xs font-semibold text-gray-600 flex items-center gap-1 mt-1"><Phone className="h-3 w-3" /> {order.deliveryMeta.customerPhone || 'NA'}</p>
+                                <p className="text-xs text-gray-500 mt-1">{order.user?.email || 'Guest checkout'}</p>
+                              </div>
+                              <div>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Address</p>
+                                <p className="text-sm font-semibold text-gray-900 flex items-start gap-1"><MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {order.deliveryMeta.deliveryAddress || 'NA'}</p>
+                                {order.deliveryMeta.landmark && (
+                                  <p className="text-xs text-gray-600 mt-1">Landmark: {order.deliveryMeta.landmark}</p>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-100">
+                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Total</p><p className="text-sm font-black text-gray-900 mt-0.5">{formatInr(order.totalPaise)}</p></div>
+                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Paid</p><p className="text-sm font-black text-green-600 mt-0.5">{formatInr(order.paidAmountPaise || 0)}</p></div>
+                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Due</p><p className="text-sm font-black text-orange-600 mt-0.5">{formatInr(order.dueAmountPaise || 0)}</p></div>
+                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Placed At</p><p className="text-sm font-black text-gray-900 mt-0.5">{new Date(order.createdAt).toLocaleString('en-IN')}</p></div>
+                            </div>
+
+                            <div>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Items</p>
+                              <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-1">
+                                {order.items.map((item) => (
+                                  <p key={item.id} className="text-xs sm:text-sm text-gray-700 font-semibold">
+                                    {item.menuItem?.name || 'Item'} x {item.quantity}
+                                  </p>
+                                ))}
+                              </div>
+                            </div>
+
+                            {instructions && (
+                              <div>
+                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Special Instructions</p>
+                                <p className="text-xs sm:text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-xl p-3">{instructions}</p>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="w-full xl:w-80 shrink-0 bg-gray-50 rounded-[20px] p-4 border border-gray-100">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Delivery Actions</p>
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Delivery Status</label>
+                                <div className="relative">
+                                  <select
+                                    value={selectedStatus}
+                                    onChange={(e) => setDeliveryStatusDraft((p) => ({ ...p, [order.id]: e.target.value as DeliveryStatus }))}
+                                    className="w-full bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 appearance-none"
+                                  >
+                                    {(['PLACED', 'CONFIRMED', 'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'] as DeliveryStatus[]).map((status) => (
+                                      <option key={status} value={status}>
+                                        {status.replace(/_/g, ' ')}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                                </div>
+                              </div>
+
+                              <button
+                                onClick={() => saveDeliveryStatus(order)}
+                                disabled={updatingDeliveryOrderId === order.id}
+                                className="w-full bg-gray-900 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-black transition-colors disabled:opacity-50"
+                              >
+                                {updatingDeliveryOrderId === order.id ? 'Saving...' : 'Save Status'}
+                              </button>
+
+                              <div className="pt-2 border-t border-gray-200">
+                                <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Payment Update</p>
+                                <div className="relative mb-2">
+                                  <select
+                                    value={selectedPaymentStatus}
+                                    onChange={(e) =>
+                                      setDeliveryPaymentStatusDraft((p) => ({
+                                        ...p,
+                                        [order.id]: e.target.value as Order['paymentStatus'],
+                                      }))
+                                    }
+                                    className="w-full bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 appearance-none"
+                                  >
+                                    {(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED', 'PARTIALLY_PAID'] as Order['paymentStatus'][]).map((status) => (
+                                      <option key={status} value={status}>{status}</option>
+                                    ))}
+                                  </select>
+                                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                                </div>
+                                {selectedPaymentStatus === 'PARTIALLY_PAID' && (
+                                  <input
+                                    value={deliveryPaymentAmountDraft[order.id] || ''}
+                                    onChange={(e) =>
+                                      setDeliveryPaymentAmountDraft((p) => ({
+                                        ...p,
+                                        [order.id]: e.target.value,
+                                      }))
+                                    }
+                                    placeholder="Paid Amount INR"
+                                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 mb-2"
+                                  />
+                                )}
+                                <button
+                                  onClick={() => saveDeliveryPayment(order)}
+                                  disabled={updatingDeliveryOrderId === order.id}
+                                  className="w-full bg-emerald-600 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                >
+                                  {updatingDeliveryOrderId === order.id ? 'Saving...' : 'Save Payment'}
+                                </button>
+                              </div>
+
+                              <div className="pt-2 border-t border-gray-200">
+                                <p className="text-[10px] font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Bike className="h-3 w-3" /> Rider Assignment</p>
+                                <input
+                                  value={riderName}
+                                  onChange={(e) =>
+                                    setDeliveryRiderDraft((p) => ({
+                                      ...p,
+                                      [order.id]: { riderName: e.target.value, riderPhone },
+                                    }))
+                                  }
+                                  placeholder="Rider name"
+                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 mb-2"
+                                />
+                                <input
+                                  value={riderPhone}
+                                  onChange={(e) =>
+                                    setDeliveryRiderDraft((p) => ({
+                                      ...p,
+                                      [order.id]: { riderName, riderPhone: e.target.value },
+                                    }))
+                                  }
+                                  placeholder="Rider phone"
+                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 mb-2"
+                                />
+                                <button
+                                  onClick={() => saveDeliveryRider(order)}
+                                  disabled={updatingDeliveryOrderId === order.id}
+                                  className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                >
+                                  {updatingDeliveryOrderId === order.id ? 'Assigning...' : 'Assign Rider'}
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
                 </div>
               )}
             </div>

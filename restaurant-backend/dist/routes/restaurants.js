@@ -2,11 +2,14 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
+const database_1 = require("@/config/database");
 const client_1 = require("@prisma/client");
-const auth_1 = require("../middleware/auth");
-const restaurant_1 = require("../middleware/restaurant");
-const audit_1 = require("../utils/audit");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const audit_1 = require("@/utils/audit");
+const accelerate_cache_1 = require("@/utils/accelerate-cache");
+const cache_1 = require("@/middleware/cache");
+const cache_2 = require("@/utils/cache");
 const router = (0, express_1.Router)();
 const hasRestaurantStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
@@ -27,6 +30,16 @@ function buildSelect(fields) {
     const out = pickFields(fields);
     return Object.keys(out).length > 0 ? out : undefined;
 }
+const STAFF_ROLES = new Set(['OWNER', 'ADMIN', 'STAFF', 'KITCHEN_STAFF']);
+const isStaffAccount = async (user) => {
+    if (STAFF_ROLES.has(user.role))
+        return true;
+    const membership = await database_1.prisma.restaurantUser.findFirst({
+        where: { userId: user.id, active: true },
+        select: { id: true },
+    });
+    return !!membership;
+};
 const slugify = (value) => value
     .toLowerCase()
     .trim()
@@ -68,7 +81,13 @@ const addRestaurantUserSchema = zod_1.z.object({
     email: zod_1.z.string().email(),
     role: zod_1.z.enum(['OWNER', 'ADMIN', 'STAFF']),
 });
-router.get('/public/search', async (req, res) => {
+router.get('/public/search', (0, cache_1.cacheResponse)(60, 'restaurants:public:search', { skip: (req) => !!req.user }), async (req, res) => {
+    if (req.user && (await isStaffAccount(req.user))) {
+        return res.status(403).json({
+            success: false,
+            error: 'Access denied for restaurant staff accounts.',
+        });
+    }
     const query = req.query['query']?.trim() || '';
     const cuisine = req.query['cuisine']?.trim();
     const location = req.query['location']?.trim();
@@ -106,6 +125,7 @@ router.get('/public/search', async (req, res) => {
             select: searchSelect,
             orderBy: { name: 'asc' },
             take: 50,
+            ...(0, accelerate_cache_1.accelerateCache)(60, 120),
         });
     }
     catch (err) {
@@ -120,6 +140,7 @@ router.get('/public/search', async (req, res) => {
                 select: searchSelect,
                 orderBy: { name: 'asc' },
                 take: 50,
+                ...(0, accelerate_cache_1.accelerateCache)(60, 120),
             });
         }
         else {
@@ -134,7 +155,7 @@ router.get('/public/search', async (req, res) => {
     };
     res.json(response);
 });
-router.get('/public/:identifier', async (req, res) => {
+router.get('/public/:identifier', (0, cache_1.cacheResponse)(120, 'restaurants:public:detail', { skip: (req) => !!req.user }), async (req, res) => {
     const identifier = req.params['identifier'];
     if (!identifier) {
         return res.status(400).json({ success: false, error: 'Restaurant identifier is required' });
@@ -182,6 +203,7 @@ router.get('/public/:identifier', async (req, res) => {
         restaurant = await database_1.prisma.restaurant.findFirst({
             where: baseFilter,
             select: detailSelect,
+            ...(0, accelerate_cache_1.accelerateCache)(120, 240),
         });
     }
     catch (err) {
@@ -194,6 +216,7 @@ router.get('/public/:identifier', async (req, res) => {
             restaurant = await database_1.prisma.restaurant.findFirst({
                 where: fallback,
                 select: detailSelect,
+                ...(0, accelerate_cache_1.accelerateCache)(120, 240),
             });
         }
         else {
@@ -203,6 +226,23 @@ router.get('/public/:identifier', async (req, res) => {
     if (!restaurant) {
         return res.status(404).json({ success: false, error: 'Restaurant not found' });
     }
+    if (req.user && (await isStaffAccount(req.user))) {
+        const membership = await database_1.prisma.restaurantUser.findUnique({
+            where: {
+                restaurantId_userId: {
+                    restaurantId: restaurant.id,
+                    userId: req.user.id,
+                },
+            },
+            select: { active: true },
+        });
+        if (!membership || !membership.active) {
+            return res.status(403).json({
+                success: false,
+                error: 'Access denied for restaurant staff accounts.',
+            });
+        }
+    }
     return res.json({
         success: true,
         data: {
@@ -210,7 +250,7 @@ router.get('/public/:identifier', async (req, res) => {
         },
     });
 });
-router.get('/current', restaurant_1.requireRestaurant, async (req, res) => {
+router.get('/current', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(60, 'restaurants:current'), async (req, res) => {
     const response = {
         success: true,
         data: { restaurant: req.restaurant },
@@ -229,6 +269,8 @@ router.get('/mine', auth_1.authenticate, async (req, res) => {
     if (hasRestaurantStatus) {
         mineSelect.status = true;
     }
+    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
+    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
     const restaurants = await database_1.prisma.restaurantUser.findMany({
         where: {
             userId: req.user.id,
@@ -239,6 +281,9 @@ router.get('/mine', auth_1.authenticate, async (req, res) => {
                 select: mineSelect,
             },
         },
+        ...(typeof take === 'number' ? { take } : {}),
+        ...(cursor ? { cursor, skip: 1 } : {}),
+        ...(0, accelerate_cache_1.accelerateCache)(120, 300),
     });
     const response = {
         success: true,
@@ -320,7 +365,7 @@ router.post('/', auth_1.authenticate, async (req, res) => {
     };
     res.status(201).json(response);
 });
-router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
+router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, cache_1.cacheResponse)(60, 'restaurants:payment-policy'), async (req, res) => {
     const policySelect = buildSelect([
         'id',
         'name',
@@ -330,6 +375,7 @@ router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.require
     const restaurant = await database_1.prisma.restaurant.findUnique({
         where: { id: req.restaurant.id },
         select: policySelect,
+        ...(0, accelerate_cache_1.accelerateCache)(120, 300),
     });
     return res.json({
         success: true,
@@ -337,36 +383,46 @@ router.get('/settings/payment-policy', auth_1.authenticate, restaurant_1.require
     });
 });
 router.put('/settings/payment-policy', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
-    const payload = updatePaymentPolicySchema.parse(req.body);
-    const policySelect = buildSelect([
-        'id',
-        'name',
-        'paymentCollectionTiming',
-        'cashPaymentEnabled',
-    ]);
-    const restaurant = await database_1.prisma.restaurant.update({
-        where: { id: req.restaurant.id },
-        data: {
-            paymentCollectionTiming: payload.paymentCollectionTiming,
-            cashPaymentEnabled: payload.cashPaymentEnabled,
-        },
-        select: policySelect,
-    });
-    await (0, audit_1.safeCreateAuditLog)({
-        actorUserId: req.user.id,
-        restaurantId: req.restaurant.id,
-        action: 'PAYMENT_POLICY_UPDATED',
-        entityType: 'restaurant',
-        entityId: req.restaurant.id,
-        metadata: payload,
-    });
-    return res.json({
-        success: true,
-        message: 'Payment policy updated',
-        data: { paymentPolicy: restaurant },
-    });
+    try {
+        const payload = updatePaymentPolicySchema.parse(req.body);
+        const policySelect = buildSelect([
+            'id',
+            'name',
+            'paymentCollectionTiming',
+            'cashPaymentEnabled',
+        ]);
+        const restaurant = await database_1.prisma.restaurant.update({
+            where: { id: req.restaurant.id },
+            data: {
+                paymentCollectionTiming: payload.paymentCollectionTiming,
+                cashPaymentEnabled: payload.cashPaymentEnabled,
+            },
+            select: policySelect,
+        });
+        await (0, audit_1.safeCreateAuditLog)({
+            actorUserId: req.user.id,
+            restaurantId: req.restaurant.id,
+            action: 'PAYMENT_POLICY_UPDATED',
+            entityType: 'restaurant',
+            entityId: req.restaurant.id,
+            metadata: payload,
+        });
+        return res.json({
+            success: true,
+            message: 'Payment policy updated',
+            data: { paymentPolicy: restaurant },
+        });
+    }
+    finally {
+        if (req.restaurant?.id) {
+            await (0, cache_2.invalidateCacheByPrefix)('restaurants:payment-policy', req.restaurant.id);
+            await (0, cache_2.invalidateCacheByPrefix)('restaurants:current', req.restaurant.id);
+        }
+    }
 });
-router.get('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
+router.get('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, cache_1.cacheResponse)(60, 'restaurants:users'), async (req, res) => {
+    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
+    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
     const users = await database_1.prisma.restaurantUser.findMany({
         where: {
             restaurantId: req.restaurant.id,
@@ -387,6 +443,9 @@ router.get('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, re
         orderBy: {
             createdAt: 'desc',
         },
+        ...(typeof take === 'number' ? { take } : {}),
+        ...(cursor ? { cursor, skip: 1 } : {}),
+        ...(0, accelerate_cache_1.accelerateCache)(120, 300),
     });
     const response = {
         success: true,
@@ -402,68 +461,75 @@ router.get('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, re
     res.json(response);
 });
 router.post('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
-    const payload = addRestaurantUserSchema.parse(req.body);
-    const user = await database_1.prisma.user.findUnique({
-        where: { email: payload.email },
-        select: { id: true },
-    });
-    if (!user) {
-        return res.status(404).json({
-            success: false,
-            error: 'User not found. Ask them to sign up first.',
+    try {
+        const payload = addRestaurantUserSchema.parse(req.body);
+        const user = await database_1.prisma.user.findUnique({
+            where: { email: payload.email },
+            select: { id: true },
         });
-    }
-    const membership = await database_1.prisma.restaurantUser.upsert({
-        where: {
-            restaurantId_userId: {
-                restaurantId: req.restaurant.id,
-                userId: user.id,
-            },
-        },
-        update: {
-            role: payload.role,
-            active: true,
-        },
-        create: {
-            restaurantId: req.restaurant.id,
-            userId: user.id,
-            role: payload.role,
-            active: true,
-        },
-        include: {
-            user: {
-                select: {
-                    id: true,
-                    name: true,
-                    email: true,
-                    phone: true,
+        if (!user) {
+            return res.status(404).json({
+                success: false,
+                error: 'User not found. Ask them to sign up first.',
+            });
+        }
+        const membership = await database_1.prisma.restaurantUser.upsert({
+            where: {
+                restaurantId_userId: {
+                    restaurantId: req.restaurant.id,
+                    userId: user.id,
                 },
             },
-        },
-    });
-    await (0, audit_1.safeCreateAuditLog)({
-        actorUserId: req.user.id,
-        restaurantId: req.restaurant.id,
-        action: 'RESTAURANT_USER_UPSERT',
-        entityType: 'restaurant_user',
-        entityId: membership.id,
-        metadata: {
-            userId: membership.userId,
-            role: membership.role,
-        },
-    });
-    return res.status(201).json({
-        success: true,
-        data: {
-            membership: {
-                id: membership.id,
-                role: membership.role,
-                active: membership.active,
-                user: membership.user,
+            update: {
+                role: payload.role,
+                active: true,
             },
-        },
-        message: 'Restaurant user added/updated successfully',
-    });
+            create: {
+                restaurantId: req.restaurant.id,
+                userId: user.id,
+                role: payload.role,
+                active: true,
+            },
+            include: {
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                        phone: true,
+                    },
+                },
+            },
+        });
+        await (0, audit_1.safeCreateAuditLog)({
+            actorUserId: req.user.id,
+            restaurantId: req.restaurant.id,
+            action: 'RESTAURANT_USER_UPSERT',
+            entityType: 'restaurant_user',
+            entityId: membership.id,
+            metadata: {
+                userId: membership.userId,
+                role: membership.role,
+            },
+        });
+        return res.status(201).json({
+            success: true,
+            data: {
+                membership: {
+                    id: membership.id,
+                    role: membership.role,
+                    active: membership.active,
+                    user: membership.user,
+                },
+            },
+            message: 'Restaurant user added/updated successfully',
+        });
+    }
+    finally {
+        if (req.restaurant?.id) {
+            await (0, cache_2.invalidateCacheByPrefix)('restaurants:users', req.restaurant.id);
+        }
+    }
 });
 exports.default = router;
 //# sourceMappingURL=restaurants.js.map

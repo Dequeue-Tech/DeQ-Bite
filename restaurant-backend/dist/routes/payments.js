@@ -2,15 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
-const errorHandler_1 = require("../middleware/errorHandler");
-const payments_1 = require("../lib/payments");
-const logger_1 = require("../utils/logger");
-const audit_1 = require("../utils/audit");
-const pdf_1 = require("../lib/pdf");
-const restaurant_1 = require("../middleware/restaurant");
-const realtime_1 = require("../utils/realtime");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const payments_1 = require("@/lib/payments");
+const logger_1 = require("@/utils/logger");
+const audit_1 = require("@/utils/audit");
+const pdf_1 = require("@/lib/pdf");
+const restaurant_1 = require("@/middleware/restaurant");
+const realtime_1 = require("@/utils/realtime");
+const cache_1 = require("@/middleware/cache");
 const router = (0, express_1.Router)();
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
@@ -147,18 +148,35 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
         });
     }
 };
-const buildOrderEventPayload = (order) => ({
-    id: order.id,
-    status: order.status,
-    paymentStatus: order.paymentStatus,
-    paymentProvider: order.paymentProvider,
-    paidAmountPaise: order.paidAmountPaise,
-    dueAmountPaise: order.dueAmountPaise,
-    totalPaise: order.totalPaise,
-    updatedAt: order.updatedAt,
-    createdAt: order.createdAt,
-});
-router.get('/providers', restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+const buildOrderEventPayload = (order) => {
+    const payloadOrder = {
+        id: order.id,
+        userId: order.userId,
+        tableId: order.tableId,
+        status: order.status,
+        paymentStatus: order.paymentStatus,
+        paymentProvider: order.paymentProvider,
+        paidAmountPaise: order.paidAmountPaise,
+        dueAmountPaise: order.dueAmountPaise,
+        totalPaise: order.totalPaise,
+        updatedAt: order.updatedAt,
+        createdAt: order.createdAt,
+    };
+    if (order.table)
+        payloadOrder.table = order.table;
+    if (order.items)
+        payloadOrder.items = order.items;
+    if (order.user)
+        payloadOrder.user = order.user;
+    if (typeof order.subtotalPaise === 'number')
+        payloadOrder.subtotalPaise = order.subtotalPaise;
+    if (typeof order.taxPaise === 'number')
+        payloadOrder.taxPaise = order.taxPaise;
+    if (typeof order.discountPaise === 'number')
+        payloadOrder.discountPaise = order.discountPaise;
+    return { order: payloadOrder };
+};
+router.get('/providers', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(300, 'payments:providers'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const providers = [
         ...(0, payments_1.getEnabledProviders)(),
         ...(req.restaurant?.cashPaymentEnabled ? ['CASH'] : []),
@@ -345,6 +363,7 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
+        userId: updatedOrder.userId,
         payload: buildOrderEventPayload(updatedOrder),
     });
     const response = {
@@ -419,8 +438,11 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
     });
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
+        userId: order.userId,
         payload: buildOrderEventPayload({
             id: order.id,
+            userId: order.userId,
+            tableId: order.tableId,
             status: nextPaid === 0 ? 'CANCELLED' : order.status,
             paymentStatus: nextPaid === 0 ? 'REFUNDED' : computed.paymentStatus,
             paymentProvider: order.paymentProvider,
@@ -551,6 +573,7 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
+        userId: updatedOrder.userId,
         payload: buildOrderEventPayload(updatedOrder),
     });
     return res.json({
@@ -626,6 +649,7 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
     }
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
+        userId: updatedOrder.userId,
         payload: buildOrderEventPayload(updatedOrder),
     });
     return res.json({

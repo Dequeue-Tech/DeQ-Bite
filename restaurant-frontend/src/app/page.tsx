@@ -2,6 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import dynamic from 'next/dynamic';
+import { useRouter } from 'next/navigation';
+import { apiClient } from '@/lib/api-client';
+import { useAuthStore } from '@/store/auth';
 import { RestaurantCardProps } from './_components/RestaurantCard';
 
 const RestaurantGrid = dynamic(() => import('./_components/RestaurantGrid'), {
@@ -92,8 +95,50 @@ async function getRestaurants(): Promise<RestaurantCardProps[]> {
 }
 
 export default function HomePage() {
+  const router = useRouter();
+  const { isAuthenticated, user, getProfile } = useAuthStore();
   const [restaurants, setRestaurants] = useState<RestaurantCardProps[]>([]);
   const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (isAuthenticated && user && typeof user.restaurantRole === 'undefined') {
+      getProfile();
+    }
+  }, [isAuthenticated, user, getProfile]);
+
+  useEffect(() => {
+    const hasAdminAccess =
+      user?.role === 'OWNER' ||
+      user?.role === 'ADMIN' ||
+      user?.restaurantRole === 'OWNER' ||
+      user?.restaurantRole === 'ADMIN';
+
+    if (!isAuthenticated || !hasAdminAccess) return;
+
+    const redirectToAdmin = async () => {
+      const selectedSlug = apiClient.getSelectedRestaurantSlug();
+      if (selectedSlug) {
+        router.replace(`/${selectedSlug}/admin`);
+        return;
+      }
+
+      try {
+        const restaurants = await apiClient.getMyRestaurants();
+        const adminRestaurant = restaurants.find(
+          (r) => r.role === 'OWNER' || r.role === 'ADMIN'
+        );
+        const slug = adminRestaurant?.slug || adminRestaurant?.subdomain || adminRestaurant?.id;
+        if (slug) {
+          apiClient.setSelectedRestaurantSlug(slug);
+          router.replace(`/${slug}/admin`);
+        }
+      } catch {
+        // ignore errors while trying to resolve admin restaurant
+      }
+    };
+
+    redirectToAdmin();
+  }, [isAuthenticated, user, router]);
 
   useEffect(() => {
     let isActive = true;

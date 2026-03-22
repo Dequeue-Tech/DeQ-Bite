@@ -4,6 +4,7 @@ import { prisma } from '@/config/database';
 import { Prisma } from '@prisma/client';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
+import { AppError } from '@/middleware/errorHandler';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { safeCreateAuditLog } from '@/utils/audit';
 import { accelerateCache } from '@/utils/accelerate-cache';
@@ -100,7 +101,7 @@ const updatePaymentPolicySchema = z.object({
 
 const addRestaurantUserSchema = z.object({
   email: z.string().email(),
-  role: z.enum(['OWNER', 'ADMIN', 'STAFF']),
+  role: z.enum(['STAFF', 'ADMIN', 'OWNER']),
 });
 
 // GET /api/restaurants/public/search?query=abc&cuisine=indian&location=city
@@ -547,6 +548,30 @@ router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('O
 router.post('/users', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), async (req: AuthenticatedRequest, res: Response) => {
   try {
     const payload = addRestaurantUserSchema.parse(req.body);
+
+    // Only OWNER can add/promote to ADMIN. ADMIN/OWNER can add STAFF.
+    // (We intentionally disallow setting OWNER via this endpoint.)
+    const actorMembership = await prisma.restaurantUser.findUnique({
+      where: {
+        restaurantId_userId: {
+          restaurantId: req.restaurant!.id,
+          userId: req.user!.id,
+        },
+      },
+      select: { role: true, active: true },
+    });
+
+    if (!actorMembership || !actorMembership.active) {
+      throw new AppError('Access denied. Restaurant membership required.', 403);
+    }
+
+    if (payload.role === 'ADMIN' && actorMembership.role !== 'OWNER') {
+      throw new AppError('Only the restaurant owner can add an admin.', 403);
+    }
+
+    if (payload.role === 'OWNER') {
+      throw new AppError('OWNER role cannot be assigned via this endpoint.', 400);
+    }
 
     const user = await prisma.user.findUnique({
       where: { email: payload.email },

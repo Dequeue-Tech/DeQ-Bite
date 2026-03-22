@@ -9,6 +9,7 @@ import { ChefHat, Search, Menu as MenuIcon, X } from 'lucide-react';
 import { useCartStore, CartItem } from '@/store/cart';
 import { formatInr } from '@/lib/currency';
 import toast from 'react-hot-toast';
+
 const MenuItemsSection = dynamic(() => import('./MenuItemsSection'), {
   loading: () => <MenuItemsSkeleton />,
 });
@@ -139,7 +140,7 @@ function MenuPageContent() {
         throw err;
       });
 
-      // Check if responses are valid and have success=true
+      // Passing the exact DB data through directly without overrides
       if (menuResponse && menuResponse.success && Array.isArray(menuResponse.data)) {
         setMenuItems(menuResponse.data);
       } else {
@@ -201,13 +202,12 @@ function MenuPageContent() {
       return;
     }
 
-    // Add error handling for cart operations
     try {
       addItem({
         id: item.id,
         name: item.name || '',
         pricePaise: item.pricePaise,
-        image: item.image,
+        image: item.image, // Properly pushes the DB image (or null) to the cart
         quantity: 1,
       });
 
@@ -216,7 +216,6 @@ function MenuPageContent() {
         hasShownFirstAddToast.current = true;
       }
 
-      // Enhanced toast notification with item details
       toast.success(
         <div className="flex items-center gap-2">
           <span className="font-semibold text-gray-900">{item.name || 'Item'}</span>
@@ -226,8 +225,8 @@ function MenuPageContent() {
           </span>
         </div>,
         {
-          duration: 1500, // Slightly faster for a "snappier" feel
-          position: 'top-center', // Perfectly centered at the top
+          duration: 1500,
+          position: 'top-center',
           style: {
             borderRadius: '999px',
             background: 'rgba(255, 255, 255, 0.9)',
@@ -254,10 +253,8 @@ function MenuPageContent() {
     try {
       if (newQuantity <= 0) {
         removeItem(item.id);
-        //toast.success(`${item.name || 'Item'} removed from cart`);
       } else {
         updateQuantity(item.id, newQuantity);
-        //toast.success(`Quantity updated to ${newQuantity}`);
       }
     } catch (err) {
       console.error('Error updating item quantity:', err);
@@ -273,10 +270,10 @@ function MenuPageContent() {
   const getSpiceLevelDisplay = (level: string) => {
     const spiceMap = {
       NONE: null,
-      MILD: null,
-      MEDIUM: '🌶️',
-      HOT: '🌶️🌶️',
-      EXTRA_HOT: '🌶️🌶️🌶️',
+      MILD: '🌶️ Mild',
+      MEDIUM: '🌶️🌶️ Medium',
+      HOT: '🌶️🌶️🌶️ Hot',
+      EXTRA_HOT: '🔥 Extra Hot',
     };
     return spiceMap[level as keyof typeof spiceMap] || null;
   };
@@ -417,6 +414,3 @@ export default function MenuPage() {
     </Suspense>
   );
 }
-
-
-

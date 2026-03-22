@@ -2,21 +2,49 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import { Clock, MapPin, CreditCard, FileText, RefreshCw, Download, Mail, PlusCircle } from 'lucide-react';
+import { 
+  Clock, MapPin, CreditCard, FileText, 
+  RefreshCw, Download, Mail, PlusCircle,
+  ArrowLeft, Receipt, CheckCircle, ChefHat, 
+  ShoppingBag, ChevronRight, Ticket, Info,
+  BellRing, X
+} from 'lucide-react';
 import { apiClient, Order } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
 import { subscribeToOrderEvents } from '@/lib/realtime-client';
 
-const statusColors: Record<string, string> = {
-  PENDING: 'bg-yellow-100 text-yellow-800',
-  CONFIRMED: 'bg-blue-100 text-blue-800',
-  PREPARING: 'bg-orange-100 text-orange-800',
-  READY: 'bg-green-100 text-green-800',
-  SERVED: 'bg-green-100 text-green-800',
-  COMPLETED: 'bg-gray-100 text-gray-800',
-  CANCELLED: 'bg-red-100 text-red-800',
+// Helper to format dates nicely
+const formatOrderDate = (dateString: string) => {
+  const date = new Date(dateString);
+  const today = new Date();
+  const isToday = date.getDate() === today.getDate() && date.getMonth() === today.getMonth() && date.getFullYear() === today.getFullYear();
+  
+  if (isToday) {
+    return `Today at ${date.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true })}`;
+  }
+  return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+};
+
+// Premium Status Badge styling
+const getStatusBadge = (status: string) => {
+  switch (status) {
+    case 'PENDING':
+    case 'CONFIRMED':
+      return { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock, label: 'In Queue' };
+    case 'PREPARING':
+      return { color: 'bg-purple-100 text-purple-800 border-purple-200', icon: ChefHat, label: 'Preparing' };
+    case 'READY':
+      return { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: ShoppingBag, label: 'Ready' };
+    case 'SERVED':
+    case 'COMPLETED':
+      return { color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle, label: 'Completed' };
+    case 'CANCELLED':
+      return { color: 'bg-red-100 text-red-800 border-red-200', icon: X, label: 'Cancelled' };
+    default:
+      return { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: Receipt, label: status };
+  }
 };
 
 export default function OrdersPage() {
@@ -36,6 +64,7 @@ export default function OrdersPage() {
   const [sendingInvoice, setSendingInvoice] = useState<string | null>(null);
   const [notifications, setNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
+  const [activeTab, setActiveTab] = useState<'ACTIVE' | 'PAST'>('ACTIVE');
 
   useEffect(() => {
     if (isAuthenticated && user) {
@@ -316,8 +345,6 @@ export default function OrdersPage() {
     }
   };
 
-  const formatDate = (dateString: string) => new Date(dateString).toLocaleString();
-
   const requestNotificationPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
       toast.error('Browser notifications are not supported');
@@ -357,256 +384,324 @@ export default function OrdersPage() {
     }
   };
 
+  // Filter logic based on your custom status categories
+  const activeOrders = orders.filter(o => !['COMPLETED', 'CANCELLED'].includes(o.status));
+  const pastOrders = orders.filter(o => ['COMPLETED', 'CANCELLED'].includes(o.status));
+  const displayOrders = activeTab === 'ACTIVE' ? activeOrders : pastOrders;
+
   return (
-    <div className="min-h-screen bg-gray-50 mb-20">
-      <div className="max-w-7xl mx-auto px-3 sm:px-4 py-4 sm:py-8">
-        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3 sm:gap-0 mb-4 sm:mb-6">
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Your Orders</h1>
+    <div className="min-h-screen bg-[#FDFDFD] pb-32">
+      <div className="max-w-3xl mx-auto px-4 pt-8">
+        
+        {/* Header */}
+        <div className="flex items-center justify-between mb-8">
+          <button onClick={() => router.back()} className="p-3 -ml-3 hover:bg-gray-50 rounded-full transition-colors active:scale-95">
+            <ArrowLeft className="h-6 w-6 text-gray-900" />
+          </button>
+          <h1 className="text-2xl font-black tracking-tight text-gray-900">My Orders</h1>
           <button
             onClick={() => fetchOrders(ordersPage)}
             disabled={loading}
-            className="flex items-center px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-xl hover:bg-orange-700 disabled:opacity-50 text-sm sm:text-base"
+            className="p-3 -mr-3 hover:bg-gray-50 rounded-full transition-colors disabled:opacity-50 text-orange-600"
           >
-            <RefreshCw className={`h-4 w-4 sm:h-5 sm:w-5 mr-2 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
           </button>
         </div>
 
-        <div className="bg-white rounded-lg border border-gray-200 p-3 sm:p-4 mb-4 sm:mb-6">
-          <div className="flex items-center justify-between mb-2">
-            <h2 className="text-sm sm:text-base font-semibold text-gray-900">Notifications</h2>
-            <div className="flex items-center gap-2">
-              {notificationPermission === 'default' && (
-                <button
-                  onClick={requestNotificationPermission}
-                  className="text-xs text-orange-600 hover:text-orange-700"
-                >
-                  Enable Browser Alerts
-                </button>
-              )}
-              {notificationPermission === 'denied' && (
-                <span className="text-[10px] sm:text-xs text-gray-500">Notifications blocked</span>
-              )}
+        {/* High-End Pill Navigation */}
+        <div className="relative mb-6">
+          <div className="flex p-1.5 bg-gray-100/80 rounded-2xl border border-gray-200/50">
+            <button
+              onClick={() => setActiveTab('ACTIVE')}
+              className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${
+                activeTab === 'ACTIVE' 
+                ? 'bg-white text-orange-600 shadow-[0_2px_10px_rgb(0,0,0,0.06)]' 
+                : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              Active ({activeOrders.length})
+            </button>
+            <button
+              onClick={() => setActiveTab('PAST')}
+              className={`flex-1 py-3 text-sm font-black rounded-xl transition-all ${
+                activeTab === 'PAST' 
+                ? 'bg-white text-gray-900 shadow-[0_2px_10px_rgb(0,0,0,0.06)]' 
+                : 'text-gray-500 hover:text-gray-900'
+              }`}
+            >
+              Past Orders
+            </button>
+          </div>
+        </div>
+
+        {/* Notifications Card */}
+        {activeTab === 'ACTIVE' && notifications.length > 0 && (
+          <div className="bg-orange-50/50 rounded-2xl border border-orange-100 p-4 mb-6 shadow-sm">
+            <div className="flex items-center justify-between mb-3">
+              <h2 className="text-sm font-black text-orange-900 flex items-center gap-2">
+                <BellRing className="h-4 w-4 text-orange-600" />
+                Live Updates
+              </h2>
               <button
                 onClick={() => {
                   setNotifications([]);
-                  if (typeof window !== 'undefined') {
-                    localStorage.removeItem('order_notifications');
-                  }
+                  if (typeof window !== 'undefined') localStorage.removeItem('order_notifications');
                 }}
-                className="text-xs text-gray-500 hover:text-gray-700"
+                className="text-xs font-bold text-orange-700 hover:text-orange-900 bg-orange-100 px-3 py-1 rounded-lg transition-colors"
               >
                 Clear
               </button>
             </div>
-          </div>
-          {notifications.length === 0 ? (
-            <p className="text-xs sm:text-sm text-gray-500">No updates yet. We will notify you as your order progresses.</p>
-          ) : (
             <div className="space-y-2">
-              {notifications.map((note) => (
-                <div key={note.id} className="text-xs sm:text-sm text-gray-700 flex items-center justify-between">
-                  <span className="truncate">{note.message}</span>
-                  <span className="text-[10px] sm:text-xs text-gray-500 ml-3 whitespace-nowrap">{note.time}</span>
+              {notifications.slice(0, 3).map((note) => (
+                <div key={note.id} className="text-xs text-orange-800 flex items-center justify-between bg-white/60 p-2.5 rounded-xl border border-orange-100/50">
+                  <span className="font-medium truncate pr-4">{note.message}</span>
+                  <span className="text-[10px] font-bold opacity-60 whitespace-nowrap">{note.time}</span>
                 </div>
               ))}
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
-          <p className="text-xs sm:text-sm text-gray-500 font-medium">
-            Page {ordersPage} of {ordersTotalPages} - {ordersTotal} orders
+        {/* Pagination Controls */}
+        <div className="flex items-center justify-between mb-6">
+          <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
+            Page {ordersPage} of {ordersTotalPages} <span className="mx-1">•</span> {ordersTotal} Total
           </p>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setOrdersPage((prev) => Math.max(1, prev - 1))}
               disabled={ordersPage <= 1 || loading}
-              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              className="px-4 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-30 transition-colors"
             >
               Prev
             </button>
             <button
               onClick={() => setOrdersPage((prev) => Math.min(ordersTotalPages, prev + 1))}
               disabled={ordersPage >= ordersTotalPages || loading}
-              className="px-3 py-1.5 text-xs font-bold rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 disabled:opacity-50"
+              className="px-4 py-2 text-xs font-bold rounded-xl border border-gray-200 text-gray-700 hover:bg-gray-50 disabled:opacity-30 transition-colors"
             >
               Next
             </button>
           </div>
         </div>
 
+        {/* Main Content Area */}
         {loading ? (
-          <div className="flex justify-center items-center h-48 sm:h-64">
-            <RefreshCw className="h-6 w-6 sm:h-8 sm:w-8 animate-spin text-orange-600" />
+          <div className="flex flex-col items-center justify-center py-20 gap-4">
+            <div className="w-10 h-10 border-4 border-orange-600 border-t-transparent rounded-full animate-spin" />
+            <p className="text-gray-500 font-bold text-sm">Syncing orders...</p>
           </div>
-        ) : orders.length === 0 ? (
-          <div className="text-center py-12 sm:py-16">
-            <FileText className="h-12 w-12 sm:h-16 sm:w-16 text-gray-400 mx-auto mb-3 sm:mb-4" />
-            <h2 className="text-xl sm:text-2xl font-bold text-gray-800 mb-3 sm:mb-4">No Orders Yet</h2>
-            <button onClick={() => router.push(apiClient.buildRestaurantPath('/menu'))} className="bg-orange-600 text-white px-6 sm:px-8 py-2.5 sm:py-3 rounded-lg hover:bg-orange-700 text-sm sm:text-base">
+        ) : displayOrders.length === 0 ? (
+          <div className="bg-white rounded-[32px] border border-gray-100 p-10 text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] mt-4">
+            <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
+              <Receipt className="h-8 w-8 text-gray-300" />
+            </div>
+            <h3 className="text-xl font-black text-gray-900 mb-2">No {activeTab.toLowerCase()} orders</h3>
+            <p className="text-sm font-medium text-gray-500 mb-8">Looks like you haven't placed any orders here yet.</p>
+            <button 
+              onClick={() => router.push(apiClient.buildRestaurantPath('/menu'))}
+              className="bg-orange-600 text-white px-8 py-3.5 rounded-xl font-black shadow-lg shadow-orange-500/20 active:scale-95 transition-transform"
+            >
               Browse Menu
             </button>
           </div>
         ) : (
-          <div className="space-y-4 sm:space-y-6">
-            {orders.map((order) => {
+          <div className="space-y-6">
+            {displayOrders.map((order) => {
+              const badge = getStatusBadge(order.status);
+              const BadgeIcon = badge.icon;
               const isOngoing = !['COMPLETED', 'CANCELLED'].includes(order.status);
               const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';
+              
+              // Ensure order.items exists before mapping to avoid crashes
+              const itemsList = Array.isArray(order.items) ? order.items : [];
+              const itemSummary = itemsList.length > 0 
+                ? itemsList.map(i => `${i.quantity}x ${i.menuItem?.name || 'Item'}`).join(', ')
+                : 'No items detailed';
 
               return (
-                <div key={order.id} className="bg-white rounded-lg shadow-md overflow-hidden">
-                  <div className="p-4 sm:p-6">
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-0 mb-3 sm:mb-4">
-                      <div>
-                        <h3 className="text-base sm:text-lg font-semibold text-gray-800">Order #{order.id.substring(0, 8).toUpperCase()}</h3>
-                        <p className="text-gray-600 text-xs sm:text-sm">{formatDate(order.createdAt)}</p>
+                <div key={order.id} className="bg-white rounded-[32px] p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 transition-all hover:border-orange-200 group">
+                  
+                  {/* Card Header */}
+                  <div className="flex items-start justify-between mb-4 border-b border-dashed border-gray-200 pb-4">
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-1">
+                        {formatOrderDate(order.createdAt || new Date().toISOString())}
+                      </p>
+                      <p className="font-black text-xl text-gray-900">
+                        #{order.id.slice(0, 8).toUpperCase()}
+                      </p>
+                    </div>
+                    <div className={`flex flex-col items-end gap-2`}>
+                      <div className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl border ${badge.color}`}>
+                        <BadgeIcon className="h-3.5 w-3.5" />
+                        <span className="text-[10px] font-black uppercase tracking-wider">{badge.label}</span>
                       </div>
-                      <div className="flex items-center gap-2 sm:gap-4">
-                        <span className={`px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium ${statusColors[order.status] || 'bg-gray-100 text-gray-800'}`}>
-                          {order.status}
+                      <div className="text-xs font-bold text-gray-500 flex items-center gap-1">
+                        <CreditCard className="h-3 w-3" />
+                        {order.paymentStatus}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Order Details */}
+                  <div className="mb-5">
+                    <p className="text-sm font-bold text-gray-700 line-clamp-2 leading-relaxed bg-gray-50 p-4 rounded-2xl">
+                      {itemSummary}
+                    </p>
+                    <div className="flex items-center gap-4 mt-4 text-xs font-bold text-gray-400 uppercase tracking-widest">
+                      {order.table?.number && (
+                        <span className="flex items-center gap-1.5 bg-gray-100 px-3 py-1.5 rounded-lg text-gray-700">
+                          <MapPin className="h-3.5 w-3.5" /> TBL {order.table.number}
                         </span>
-                        <span className="text-lg sm:text-xl font-bold text-orange-600">{formatInr(order.totalPaise)}</span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4 mb-3 sm:mb-4 text-xs sm:text-sm text-gray-600">
-                      <div className="flex items-center"><MapPin className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />Table {order.table?.number || order.tableId}</div>
-                      <div className="flex items-center"><Clock className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />Est. {order.estimatedTime || 30} min</div>
-                      <div className="flex items-center"><CreditCard className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />{order.paymentProvider} | {order.paymentStatus}</div>
-                    </div>
-
-                    <div className="border-t border-gray-200 pt-4">
-                      <div className="flex justify-between items-center mb-2">
-                        <h4 className="font-medium text-gray-800">Items Ordered</h4>
-                        <button onClick={() => setSelectedOrder(selectedOrder === order.id ? null : order.id)} className="text-orange-600 text-sm">
-                          {selectedOrder === order.id ? 'Hide Details' : 'View Details'}
-                        </button>
-                      </div>
-
-                      {selectedOrder === order.id && (
-                        <div className="space-y-2 mb-4">
-                          {order.items.map((item, index) => (
-                            <div key={index} className="flex justify-between items-center py-2">
-                              <div>
-                                <span className="font-medium">{item.menuItem?.name || 'Item'}</span>
-                                <span className="text-gray-600 ml-2">x{item.quantity}</span>
-                              </div>
-                              <span className="font-semibold">{formatInr(item.pricePaise * item.quantity)}</span>
-                            </div>
-                          ))}
-                        </div>
+                      )}
+                      {order.estimatedTime && isOngoing && (
+                        <span className="flex items-center gap-1.5 bg-orange-50 text-orange-700 px-3 py-1.5 rounded-lg border border-orange-100">
+                          <Clock className="h-3.5 w-3.5" /> ~{order.estimatedTime} MIN
+                        </span>
                       )}
                     </div>
+                  </div>
 
-                    <div className="flex flex-wrap gap-2 mt-3 sm:mt-4">
+                  {/* Details Toggle Button */}
+                  <button 
+                    onClick={() => setSelectedOrder(selectedOrder === order.id ? null : order.id)} 
+                    className="w-full py-3 mb-4 flex items-center justify-between text-sm font-bold text-gray-500 hover:text-gray-900 transition-colors"
+                  >
+                    <span>{selectedOrder === order.id ? 'Hide Details' : 'View Full Receipt'}</span>
+                    <ChevronRight className={`h-4 w-4 transition-transform ${selectedOrder === order.id ? 'rotate-90' : ''}`} />
+                  </button>
+
+                  {/* Expanded Receipt Details */}
+                  {selectedOrder === order.id && (
+                    <div className="bg-gray-900 text-white rounded-[24px] p-5 mb-5 shadow-inner">
+                      <div className="space-y-3 mb-4">
+                        {itemsList.map((item, index) => (
+                          <div key={index} className="flex justify-between items-center text-sm">
+                            <div className="flex items-center gap-3">
+                              <span className="bg-white/10 px-2 py-1 rounded text-xs font-bold text-gray-300">{item.quantity}x</span>
+                              <span className="font-medium text-gray-200">{item.menuItem?.name || 'Item'}</span>
+                            </div>
+                            <span className="font-bold">{formatInr(item.pricePaise * item.quantity)}</span>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="border-t border-dashed border-gray-700 pt-3 space-y-2 text-xs font-medium text-gray-400">
+                         <div className="flex justify-between">
+                            <span>Subtotal</span>
+                            <span>{formatInr(order.subtotalPaise || 0)}</span>
+                          </div>
+                          {order.discountPaise ? (
+                            <div className="flex justify-between text-green-400">
+                              <span>Discount</span>
+                              <span>- {formatInr(order.discountPaise)}</span>
+                            </div>
+                          ) : null}
+                          <div className="flex justify-between">
+                            <span>Tax</span>
+                            <span>{formatInr(order.taxPaise || 0)}</span>
+                          </div>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Pay Now Expanded Section */}
+                  {payNowOrderId === order.id && canPayNow && (
+                    <div className="mt-2 mb-5 rounded-[24px] border-2 border-orange-500 bg-orange-50 p-5 shadow-lg shadow-orange-500/10">
+                      <h4 className="font-black text-gray-900 mb-4 flex items-center gap-2">
+                        <CreditCard className="h-5 w-5 text-orange-600" />
+                        Complete Payment
+                      </h4>
+                      
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <div className="relative flex-1">
+                          <Ticket className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-orange-400" />
+                          <input
+                            value={couponByOrder[order.id] || ''}
+                            onChange={(e) => setCouponByOrder((prev) => ({ ...prev, [order.id]: e.target.value }))}
+                            placeholder="Promo code"
+                            className="w-full pl-10 pr-4 py-3 bg-white border border-orange-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-orange-500/20"
+                          />
+                        </div>
+                        <button
+                          onClick={() => handleApplyCouponToOrder(order.id)}
+                          disabled={applyingCouponOrderId === order.id}
+                          className="px-6 py-3 bg-orange-200 text-orange-900 font-bold rounded-xl hover:bg-orange-300 disabled:opacity-60 text-sm whitespace-nowrap active:scale-95 transition-transform"
+                        >
+                          {applyingCouponOrderId === order.id ? 'Applying...' : 'Apply'}
+                        </button>
+                        <button
+                          onClick={() => router.push(apiClient.buildRestaurantPath(`/checkout?orderId=${order.id}&payNow=1`))}
+                          className="px-8 py-3 bg-orange-600 text-white font-black rounded-xl hover:bg-orange-700 text-sm whitespace-nowrap shadow-md shadow-orange-500/20 active:scale-95 transition-transform"
+                        >
+                          Pay {formatInr(order.totalPaise)}
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Card Footer Actions */}
+                  <div className="flex flex-wrap items-center justify-between pt-2 gap-4">
+                    <div>
+                      <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Total</p>
+                      <p className="text-2xl font-black text-gray-900">{formatInr(order.totalPaise)}</p>
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-2">
                       {isOngoing && (
                         <button
                           onClick={() => router.push(apiClient.buildRestaurantPath(`/menu?orderId=${order.id}`))}
-                          className="px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center text-xs sm:text-sm"
+                          className="px-4 py-2.5 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-100 font-bold flex items-center text-sm transition-colors"
                         >
-                          <PlusCircle className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-                          Add Dishes
+                          <PlusCircle className="h-4 w-4 mr-2" />
+                          Add Items
                         </button>
                       )}
 
                       {canPayNow && (
                         <button
                           onClick={() => setPayNowOrderId(payNowOrderId === order.id ? null : order.id)}
-                          className="px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-xs sm:text-sm"
+                          className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-colors border-2 ${
+                            payNowOrderId === order.id 
+                            ? 'bg-gray-900 text-white border-gray-900' 
+                            : 'bg-white text-orange-600 border-orange-600 hover:bg-orange-50'
+                          }`}
                         >
-                          {payNowOrderId === order.id ? 'Hide' : 'Pay Now'}
+                          {payNowOrderId === order.id ? 'Cancel' : 'Pay Now'}
                         </button>
                       )}
 
                       {order.paymentProvider === 'CASH' && order.paymentStatus !== 'COMPLETED' && (
-                        <div className="px-3 sm:px-4 py-2 bg-yellow-50 text-yellow-800 rounded-lg border border-yellow-200 text-xs">
-                          Cash payment pending confirmation.
+                        <div className="px-4 py-2.5 bg-orange-50 text-orange-800 rounded-xl border border-orange-200 text-xs font-bold flex items-center">
+                          <Info className="h-4 w-4 mr-2" /> Cash pending confirmation
                         </div>
                       )}
 
+                      {/* Download/Send Invoices for Completed Orders */}
                       {order.paymentStatus === 'COMPLETED' && (
                         <>
                           <button
                             onClick={() => handleDownloadInvoice(order.id)}
                             disabled={downloadingInvoice === order.id}
-                            className="px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center text-xs sm:text-sm"
+                            className="px-4 py-2.5 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 font-bold flex items-center text-sm transition-colors"
                           >
-                            <Download className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-                            {downloadingInvoice === order.id ? '...' : 'Download'}
+                            <Download className="h-4 w-4 mr-2" />
+                            {downloadingInvoice === order.id ? '...' : 'PDF'}
                           </button>
                           <button
                             onClick={() => handleSendInvoice(order.id)}
                             disabled={sendingInvoice === order.id}
-                            className="px-3 sm:px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 flex items-center text-xs sm:text-sm"
+                            className="px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-black font-bold flex items-center text-sm transition-colors"
                           >
-                            <Mail className="h-3.5 w-3.5 sm:h-4 sm:w-4 mr-1.5 sm:mr-2" />
-                            {sendingInvoice === order.id ? '...' : 'Send'}
+                            <Mail className="h-4 w-4 mr-2" />
+                            {sendingInvoice === order.id ? '...' : 'Email'}
                           </button>
                         </>
                       )}
                     </div>
-
-                    {payNowOrderId === order.id && canPayNow && (
-                      <div className="mt-3 sm:mt-4 rounded-lg border border-orange-200 bg-orange-50 p-3 sm:p-4">
-                        <h4 className="font-semibold text-gray-900 mb-2 sm:mb-3 text-sm sm:text-base">Pay Now Details</h4>
-
-                        <div className="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4">
-                          {order.items.map((item) => (
-                            <div key={item.id} className="flex items-center justify-between text-xs sm:text-sm">
-                              <div className="text-gray-700 truncate flex-1 mr-2">
-                                {item.menuItem?.name || 'Item'} x{item.quantity}
-                              </div>
-                              <div className="font-medium text-gray-900 whitespace-nowrap">
-                                {formatInr(item.pricePaise * item.quantity)}
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-
-                        <div className="border-t border-orange-200 pt-2 sm:pt-3 space-y-1 text-xs sm:text-sm">
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Subtotal</span>
-                            <span>{formatInr(order.subtotalPaise)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Discount</span>
-                            <span className="text-green-700">- {formatInr(order.discountPaise || 0)}</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-gray-600">Tax</span>
-                            <span>{formatInr(order.taxPaise)}</span>
-                          </div>
-                          <div className="flex justify-between text-sm sm:text-base font-semibold pt-1">
-                            <span>Total</span>
-                            <span className="text-orange-700">{formatInr(order.totalPaise)}</span>
-                          </div>
-                        </div>
-
-                        <div className="mt-3 sm:mt-4 flex flex-col sm:flex-row gap-2">
-                          <input
-                            value={couponByOrder[order.id] || ''}
-                            onChange={(e) => setCouponByOrder((prev) => ({ ...prev, [order.id]: e.target.value }))}
-                            placeholder="Coupon code"
-                            className="flex-1 px-3 py-2 border border-orange-200 rounded-lg text-sm"
-                          />
-                          <button
-                            onClick={() => handleApplyCouponToOrder(order.id)}
-                            disabled={applyingCouponOrderId === order.id}
-                            className="px-3 sm:px-4 py-2 border border-orange-300 text-orange-800 rounded-lg hover:bg-orange-100 disabled:opacity-60 text-sm whitespace-nowrap"
-                          >
-                            {applyingCouponOrderId === order.id ? '...' : 'Apply'}
-                          </button>
-                          <button
-                            onClick={() => router.push(apiClient.buildRestaurantPath(`/checkout?orderId=${order.id}&payNow=1`))}
-                            className="px-3 sm:px-4 py-2 bg-orange-600 text-white rounded-lg hover:bg-orange-700 text-sm whitespace-nowrap"
-                          >
-                            Pay
-                          </button>
-                        </div>
-                      </div>
-                    )}
                   </div>
+
                 </div>
               );
             })}

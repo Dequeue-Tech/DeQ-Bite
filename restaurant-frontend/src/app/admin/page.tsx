@@ -98,7 +98,11 @@ export default function AdminPage() {
   const [adminNotifications, setAdminNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
   const [adminAccessVerified, setAdminAccessVerified] = useState(false);
 
-  const hasAdminAccess = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
+  const hasAdminAccess = 
+  user?.role === 'OWNER' || 
+  user?.role === 'ADMIN' ||
+  user?.restaurantRole === 'OWNER' || 
+  user?.restaurantRole === 'ADMIN';
 
   useEffect(() => { getProfile(); }, [getProfile]);
 

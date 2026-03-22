@@ -29,8 +29,8 @@ const offerUpdateSchema = offerSchema.partial();
 const normalizeCode = (code?: string) => (code ? code.trim().toUpperCase() : undefined);
 
 router.get('/', requireRestaurant, cacheResponse(120, 'offers:list'), async (req: AuthenticatedRequest, res) => {
-  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+  const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+  const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
   const offers = await prisma.offer.findMany({
     where: {
@@ -181,3 +181,4 @@ router.delete('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('
 });
 
 export default router;
+

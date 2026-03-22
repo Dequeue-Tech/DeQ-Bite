@@ -40,8 +40,8 @@ const resolveRestaurantId = async (identifier?: string | null) => {
 const authenticateSocket = async (socket: Socket, next: (err?: Error) => void) => {
   try {
     const token =
-      (socket.handshake.auth?.token as string | undefined) ||
-      (socket.handshake.query?.token as string | undefined);
+      (socket.handshake.auth?.['token'] as string | undefined) ||
+      (socket.handshake.query?.['token'] as string | undefined);
 
     if (!token) {
       return next(new Error('Unauthorized'));

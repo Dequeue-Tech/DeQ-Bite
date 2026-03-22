@@ -229,13 +229,13 @@ export const requireRestaurant = (
         },
         select: { active: true },
       })
-      .then((membership) => {
+      .then((membership: { active: boolean } | null) => {
         if (!membership || !membership.active) {
           return next(new AppError('Access denied. Restaurant membership required.', 403));
         }
         return next();
       })
-      .catch((error) => next(error));
+      .catch((error: unknown) => next(error));
     return;
   }
   return next();

@@ -1,17 +1,63 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const realtime_1 = require("@/utils/realtime");
-const sms_1 = require("@/lib/sms");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const realtime_1 = require("../utils/realtime");
+const sms_1 = require("../lib/sms");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
-const DELIVERY_META_PREFIX = '[DELIVERY_META]';
+const LEGACY_DELIVERY_META_PREFIX = '[DELIVERY_META]';
 router.use(auth_1.authenticate);
 router.use(restaurant_1.requireRestaurant);
 const toInr = (paise) => (paise / 100).toFixed(2);
+const normalizeCouponCode = (code) => code.trim().toUpperCase();
+const calculateDiscountFromCoupon = (coupon, subtotalPaise) => {
+    if (!coupon || !coupon.active)
+        return 0;
+    const now = new Date();
+    if (coupon.startsAt && coupon.startsAt > now)
+        return 0;
+    if (coupon.endsAt && coupon.endsAt < now)
+        return 0;
+    if (coupon.minOrderPaise && subtotalPaise < coupon.minOrderPaise)
+        return 0;
+    let discountPaise = 0;
+    if (coupon.type === 'PERCENT')
+        discountPaise = Math.floor((subtotalPaise * coupon.value) / 100);
+    else
+        discountPaise = coupon.value;
+    if (coupon.maxDiscountPaise && discountPaise > coupon.maxDiscountPaise) {
+        discountPaise = coupon.maxDiscountPaise;
+    }
+    return Math.min(discountPaise, subtotalPaise);
+};
+const applyCoupon = async (restaurantId, code, subtotalPaise) => {
+    const normalizedCode = normalizeCouponCode(code);
+    const coupon = await database_1.prisma.coupon.findUnique({
+        where: {
+            restaurantId_code: {
+                restaurantId,
+                code: normalizedCode,
+            },
+        },
+    });
+    if (!coupon || !coupon.active) {
+        throw new Error('Invalid or inactive coupon code');
+    }
+    const now = new Date();
+    if (coupon.startsAt && coupon.startsAt > now)
+        throw new Error('Coupon is not active yet');
+    if (coupon.endsAt && coupon.endsAt < now)
+        throw new Error('Coupon has expired');
+    if (coupon.usageLimit && coupon.usageCount >= coupon.usageLimit)
+        throw new Error('Coupon usage limit reached');
+    if (coupon.minOrderPaise && subtotalPaise < coupon.minOrderPaise)
+        throw new Error('Order total does not meet coupon minimum');
+    const discountPaise = calculateDiscountFromCoupon(coupon, subtotalPaise);
+    return { couponId: coupon.id, discountPaise };
+};
 const buildOrderEventPayload = (order) => ({
     order: {
         id: order.id,
@@ -33,13 +79,13 @@ const buildOrderEventPayload = (order) => ({
         ...(typeof order.discountPaise === 'number' ? { discountPaise: order.discountPaise } : {}),
     },
 });
-const parseDeliveryMeta = (specialInstructions) => {
+const parseLegacyDeliveryMeta = (specialInstructions) => {
     if (!specialInstructions)
         return null;
-    const idx = specialInstructions.lastIndexOf(DELIVERY_META_PREFIX);
+    const idx = specialInstructions.lastIndexOf(LEGACY_DELIVERY_META_PREFIX);
     if (idx === -1)
         return null;
-    const raw = specialInstructions.slice(idx + DELIVERY_META_PREFIX.length).trim();
+    const raw = specialInstructions.slice(idx + LEGACY_DELIVERY_META_PREFIX.length).trim();
     if (!raw)
         return null;
     try {
@@ -48,13 +94,6 @@ const parseDeliveryMeta = (specialInstructions) => {
     catch {
         return null;
     }
-};
-const withDeliveryMeta = (specialInstructions, meta) => {
-    const raw = (specialInstructions || '').trim();
-    const idx = raw.lastIndexOf(DELIVERY_META_PREFIX);
-    const cleanInstructions = (idx === -1 ? raw : raw.slice(0, idx)).trim();
-    const encoded = `${DELIVERY_META_PREFIX}${JSON.stringify(meta)}`;
-    return cleanInstructions ? `${cleanInstructions}\n${encoded}` : encoded;
 };
 const mapDeliveryToOrderStatus = (deliveryStatus) => {
     switch (deliveryStatus) {
@@ -73,6 +112,28 @@ const mapDeliveryToOrderStatus = (deliveryStatus) => {
         default:
             return 'PENDING';
     }
+};
+const getOrderDeliveryMeta = (order) => {
+    if (order.deliveryStatus && order.deliveryCustomerName && order.deliveryCustomerPhone && order.deliveryAddress) {
+        return {
+            customerName: order.deliveryCustomerName,
+            customerPhone: order.deliveryCustomerPhone,
+            deliveryAddress: order.deliveryAddress,
+            ...(order.deliveryLandmark ? { landmark: order.deliveryLandmark } : {}),
+            ...(order.deliveryRiderName ? { riderName: order.deliveryRiderName } : {}),
+            ...(order.deliveryRiderPhone ? { riderPhone: order.deliveryRiderPhone } : {}),
+            deliveryStatus: order.deliveryStatus,
+        };
+    }
+    const legacy = parseLegacyDeliveryMeta(order.specialInstructions);
+    if (legacy)
+        return legacy;
+    return {
+        customerName: 'Unknown',
+        customerPhone: '',
+        deliveryAddress: '',
+        deliveryStatus: 'PLACED',
+    };
 };
 const ensureDeliveryTable = async (restaurantId) => {
     const existing = await database_1.prisma.table.findFirst({
@@ -103,7 +164,7 @@ const notifyRestaurantOnOrderPlaced = async (restaurantId, payload) => {
     try {
         const restaurant = await database_1.prisma.restaurant.findUnique({
             where: { id: restaurantId },
-            select: { name: true, phone: true },
+            select: { phone: true },
         });
         if (!restaurant?.phone)
             return;
@@ -142,7 +203,7 @@ router.post('/orders', async (req, res) => {
         const userId = req.user?.id;
         if (!userId)
             return res.status(401).json({ success: false, error: 'Unauthorized' });
-        const { items, customerName, customerPhone, deliveryAddress, landmark, specialInstructions, paymentProvider } = req.body;
+        const { items, customerName, customerPhone, deliveryAddress, landmark, specialInstructions, paymentProvider, couponCode } = req.body;
         if (!customerName || !customerPhone || !deliveryAddress) {
             return res.status(400).json({
                 success: false,
@@ -192,8 +253,21 @@ router.post('/orders', async (req, res) => {
                 notes: item.notes || '',
             });
         }
-        const taxPaise = Math.round(subtotalPaise * TAX_RATE);
-        const totalPaise = subtotalPaise + taxPaise;
+        let discountPaise = 0;
+        let appliedCouponId = null;
+        if (couponCode) {
+            try {
+                const couponResult = await applyCoupon(req.restaurant.id, couponCode, subtotalPaise);
+                discountPaise = couponResult.discountPaise;
+                appliedCouponId = couponResult.couponId;
+            }
+            catch (couponError) {
+                return res.status(400).json({ success: false, error: couponError?.message || 'Invalid coupon code' });
+            }
+        }
+        const taxablePaise = Math.max(subtotalPaise - discountPaise, 0);
+        const taxPaise = Math.round(taxablePaise * TAX_RATE);
+        const totalPaise = taxablePaise + taxPaise;
         const deliveryMeta = {
             customerName: String(customerName).trim(),
             customerPhone: String(customerPhone).trim(),
@@ -201,32 +275,55 @@ router.post('/orders', async (req, res) => {
             ...(landmark ? { landmark: String(landmark).trim() } : {}),
             deliveryStatus: 'PLACED',
         };
-        const order = await database_1.prisma.order.create({
-            data: {
-                userId,
-                restaurantId: req.restaurant.id,
-                tableId: deliveryTable.id,
-                subtotalPaise,
-                taxPaise,
-                totalPaise,
-                discountPaise: 0,
-                status: 'PENDING',
-                paymentStatus: selectedProvider === 'CASH' ? 'PROCESSING' : 'PENDING',
-                paymentProvider: selectedProvider,
-                paidAmountPaise: 0,
-                dueAmountPaise: totalPaise,
-                paymentCollectionTiming: req.restaurant.paymentCollectionTiming,
-                specialInstructions: withDeliveryMeta(specialInstructions, deliveryMeta),
-                items: {
-                    create: orderItemsData,
+        const createOrderData = {
+            userId,
+            restaurantId: req.restaurant.id,
+            tableId: deliveryTable.id,
+            isDelivery: true,
+            deliveryStatus: deliveryMeta.deliveryStatus,
+            deliveryCustomerName: deliveryMeta.customerName,
+            deliveryCustomerPhone: deliveryMeta.customerPhone,
+            deliveryAddress: deliveryMeta.deliveryAddress,
+            deliveryLandmark: deliveryMeta.landmark || null,
+            subtotalPaise,
+            taxPaise,
+            totalPaise,
+            discountPaise,
+            couponId: appliedCouponId,
+            status: 'PENDING',
+            paymentStatus: selectedProvider === 'CASH' ? 'PROCESSING' : 'PENDING',
+            paymentProvider: selectedProvider,
+            paidAmountPaise: 0,
+            dueAmountPaise: totalPaise,
+            paymentCollectionTiming: req.restaurant.paymentCollectionTiming,
+            specialInstructions: specialInstructions || '',
+            items: {
+                create: orderItemsData,
+            },
+        };
+        const order = appliedCouponId
+            ? (await database_1.prisma.$transaction([
+                database_1.prisma.coupon.update({
+                    where: { id: appliedCouponId },
+                    data: { usageCount: { increment: 1 } },
+                }),
+                database_1.prisma.order.create({
+                    data: createOrderData,
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                        user: { select: { id: true, name: true, email: true } },
+                    },
+                }),
+            ]))[1]
+            : await database_1.prisma.order.create({
+                data: createOrderData,
+                include: {
+                    items: { include: { menuItem: true } },
+                    table: true,
+                    user: { select: { id: true, name: true, email: true } },
                 },
-            },
-            include: {
-                items: { include: { menuItem: true } },
-                table: true,
-                user: { select: { id: true, name: true, email: true } },
-            },
-        });
+            });
         (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
             type: 'order.created',
             userId: order.userId,
@@ -253,9 +350,7 @@ router.get('/orders/restaurant/all', (0, restaurant_1.authorizeRestaurantRole)('
         const orders = await database_1.prisma.order.findMany({
             where: {
                 restaurantId: req.restaurant.id,
-                table: {
-                    location: { equals: 'DELIVERY', mode: 'insensitive' },
-                },
+                isDelivery: true,
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -264,15 +359,7 @@ router.get('/orders/restaurant/all', (0, restaurant_1.authorizeRestaurantRole)('
             },
             orderBy: { createdAt: 'desc' },
         });
-        const enriched = orders.map((order) => {
-            const deliveryMeta = parseDeliveryMeta(order.specialInstructions) || {
-                customerName: 'Unknown',
-                customerPhone: '',
-                deliveryAddress: '',
-                deliveryStatus: 'PLACED',
-            };
-            return { ...order, deliveryMeta };
-        });
+        const enriched = orders.map((order) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }));
         return res.json({
             success: true,
             data: enriched,
@@ -291,9 +378,7 @@ router.get('/orders/my', async (req, res) => {
             where: {
                 userId: req.user.id,
                 restaurantId: req.restaurant.id,
-                table: {
-                    location: { equals: 'DELIVERY', mode: 'insensitive' },
-                },
+                isDelivery: true,
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -301,15 +386,7 @@ router.get('/orders/my', async (req, res) => {
             },
             orderBy: { createdAt: 'desc' },
         });
-        const enriched = orders.map((order) => {
-            const deliveryMeta = parseDeliveryMeta(order.specialInstructions) || {
-                customerName: 'Unknown',
-                customerPhone: '',
-                deliveryAddress: '',
-                deliveryStatus: 'PLACED',
-            };
-            return { ...order, deliveryMeta };
-        });
+        const enriched = orders.map((order) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }));
         return res.json({
             success: true,
             data: enriched,
@@ -333,7 +410,7 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
             where: {
                 id,
                 restaurantId: req.restaurant.id,
-                table: { location: { equals: 'DELIVERY', mode: 'insensitive' } },
+                isDelivery: true,
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -343,21 +420,16 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
         });
         if (!existingOrder)
             return res.status(404).json({ success: false, error: 'Delivery order not found' });
-        const parsedMeta = parseDeliveryMeta(existingOrder.specialInstructions);
-        if (!parsedMeta) {
-            return res.status(400).json({ success: false, error: 'Delivery metadata missing on this order' });
-        }
-        const updatedMeta = {
-            ...parsedMeta,
-            riderName: riderName.trim(),
-            riderPhone: riderPhone.trim(),
-            deliveryStatus: parsedMeta.deliveryStatus === 'PLACED' ? 'CONFIRMED' : parsedMeta.deliveryStatus,
-        };
+        const currentDeliveryStatus = existingOrder.deliveryStatus || 'PLACED';
+        const nextDeliveryStatus = currentDeliveryStatus === 'PLACED' ? 'CONFIRMED' : currentDeliveryStatus;
         const updated = await database_1.prisma.order.update({
             where: { id: existingOrder.id },
             data: {
-                status: mapDeliveryToOrderStatus(updatedMeta.deliveryStatus),
-                specialInstructions: withDeliveryMeta(existingOrder.specialInstructions || '', updatedMeta),
+                deliveryRiderName: riderName.trim(),
+                deliveryRiderPhone: riderPhone.trim(),
+                deliveryStatus: nextDeliveryStatus,
+                deliveryApprovedAt: nextDeliveryStatus === 'CONFIRMED' ? new Date() : existingOrder.deliveryApprovedAt,
+                status: mapDeliveryToOrderStatus(nextDeliveryStatus),
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -370,17 +442,18 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
             userId: updated.userId,
             payload: buildOrderEventPayload(updated),
         });
-        if (updatedMeta.deliveryStatus === 'CONFIRMED') {
+        const deliveryMeta = getOrderDeliveryMeta(updated);
+        if (nextDeliveryStatus === 'CONFIRMED') {
             await notifyOnDeliveryApproval(updated.restaurantId, {
                 orderId: updated.id,
-                customerName: updatedMeta.customerName,
-                customerPhone: updatedMeta.customerPhone,
+                customerName: deliveryMeta.customerName,
+                customerPhone: deliveryMeta.customerPhone,
                 totalPaise: updated.totalPaise,
             });
         }
         return res.json({
             success: true,
-            data: { ...updated, deliveryMeta: updatedMeta },
+            data: { ...updated, deliveryMeta },
             message: 'Rider assigned successfully',
         });
     }
@@ -409,7 +482,7 @@ router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNE
             where: {
                 id,
                 restaurantId: req.restaurant.id,
-                table: { location: { equals: 'DELIVERY', mode: 'insensitive' } },
+                isDelivery: true,
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -419,18 +492,13 @@ router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNE
         });
         if (!existingOrder)
             return res.status(404).json({ success: false, error: 'Delivery order not found' });
-        const parsedMeta = parseDeliveryMeta(existingOrder.specialInstructions);
-        if (!parsedMeta) {
-            return res.status(400).json({ success: false, error: 'Delivery metadata missing on this order' });
-        }
-        const updatedMeta = { ...parsedMeta, deliveryStatus };
-        const updatedOrderStatus = mapDeliveryToOrderStatus(deliveryStatus);
         const updated = await database_1.prisma.order.update({
             where: { id: existingOrder.id },
             data: {
-                status: updatedOrderStatus,
+                deliveryStatus: deliveryStatus,
+                deliveryApprovedAt: deliveryStatus === 'CONFIRMED' ? (existingOrder.deliveryApprovedAt || new Date()) : existingOrder.deliveryApprovedAt,
+                status: mapDeliveryToOrderStatus(deliveryStatus),
                 paymentStatus: deliveryStatus === 'DELIVERED' ? 'COMPLETED' : existingOrder.paymentStatus,
-                specialInstructions: withDeliveryMeta(existingOrder.specialInstructions || '', updatedMeta),
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -443,17 +511,18 @@ router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNE
             userId: updated.userId,
             payload: buildOrderEventPayload(updated),
         });
+        const deliveryMeta = getOrderDeliveryMeta(updated);
         if (deliveryStatus === 'CONFIRMED') {
             await notifyOnDeliveryApproval(updated.restaurantId, {
                 orderId: updated.id,
-                customerName: updatedMeta.customerName,
-                customerPhone: updatedMeta.customerPhone,
+                customerName: deliveryMeta.customerName,
+                customerPhone: deliveryMeta.customerPhone,
                 totalPaise: updated.totalPaise,
             });
         }
         return res.json({
             success: true,
-            data: { ...updated, deliveryMeta: updatedMeta },
+            data: { ...updated, deliveryMeta },
             message: 'Delivery status updated successfully',
         });
     }

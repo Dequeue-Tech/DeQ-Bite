@@ -2,14 +2,15 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
+const database_1 = require("../config/database");
 const client_1 = require("@prisma/client");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const audit_1 = require("@/utils/audit");
-const accelerate_cache_1 = require("@/utils/accelerate-cache");
-const cache_1 = require("@/middleware/cache");
-const cache_2 = require("@/utils/cache");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const errorHandler_1 = require("../middleware/errorHandler");
+const audit_1 = require("../utils/audit");
+const accelerate_cache_1 = require("../utils/accelerate-cache");
+const cache_1 = require("../middleware/cache");
+const cache_2 = require("../utils/cache");
 const router = (0, express_1.Router)();
 const hasRestaurantStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
@@ -79,7 +80,7 @@ const updatePaymentPolicySchema = zod_1.z.object({
 });
 const addRestaurantUserSchema = zod_1.z.object({
     email: zod_1.z.string().email(),
-    role: zod_1.z.enum(['OWNER', 'ADMIN', 'STAFF']),
+    role: zod_1.z.enum(['STAFF', 'ADMIN', 'OWNER']),
 });
 router.get('/public/search', (0, cache_1.cacheResponse)(60, 'restaurants:public:search', { skip: (req) => !!req.user }), async (req, res) => {
     if (req.user && (await isStaffAccount(req.user))) {
@@ -153,7 +154,7 @@ router.get('/public/search', (0, cache_1.cacheResponse)(60, 'restaurants:public:
             restaurants,
         },
     };
-    res.json(response);
+    return res.json(response);
 });
 router.get('/public/:identifier', (0, cache_1.cacheResponse)(120, 'restaurants:public:detail', { skip: (req) => !!req.user }), async (req, res) => {
     const identifier = req.params['identifier'];
@@ -269,8 +270,8 @@ router.get('/mine', auth_1.authenticate, async (req, res) => {
     if (hasRestaurantStatus) {
         mineSelect.status = true;
     }
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 100) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
     const restaurants = await database_1.prisma.restaurantUser.findMany({
         where: {
             userId: req.user.id,
@@ -421,8 +422,8 @@ router.put('/settings/payment-policy', auth_1.authenticate, restaurant_1.require
     }
 });
 router.get('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, cache_1.cacheResponse)(60, 'restaurants:users'), async (req, res) => {
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
     const users = await database_1.prisma.restaurantUser.findMany({
         where: {
             restaurantId: req.restaurant.id,
@@ -463,6 +464,24 @@ router.get('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, re
 router.post('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), async (req, res) => {
     try {
         const payload = addRestaurantUserSchema.parse(req.body);
+        const actorMembership = await database_1.prisma.restaurantUser.findUnique({
+            where: {
+                restaurantId_userId: {
+                    restaurantId: req.restaurant.id,
+                    userId: req.user.id,
+                },
+            },
+            select: { role: true, active: true },
+        });
+        if (!actorMembership || !actorMembership.active) {
+            throw new errorHandler_1.AppError('Access denied. Restaurant membership required.', 403);
+        }
+        if (payload.role === 'ADMIN' && actorMembership.role !== 'OWNER') {
+            throw new errorHandler_1.AppError('Only the restaurant owner can add an admin.', 403);
+        }
+        if (payload.role === 'OWNER') {
+            throw new errorHandler_1.AppError('OWNER role cannot be assigned via this endpoint.', 400);
+        }
         const user = await database_1.prisma.user.findUnique({
             where: { email: payload.email },
             select: { id: true },

@@ -110,7 +110,7 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId: string) => {
       customerPhone: order.user.phone || '',
       invoiceNumber,
       orderDate: order.createdAt.toLocaleDateString('en-IN'),
-      items: order.items.map((item) => ({
+      items: order.items.map((item: any) => ({
         name: item.menuItem.name,
         quantity: item.quantity,
         price: item.pricePaise / 100,

@@ -9,6 +9,19 @@ import { emitRestaurantEvent } from '@/utils/realtime';
 const router = Router();
 const TAX_RATE = 0.08;
 
+type CreateOrderItemInput = {
+  menuItemId: string;
+  quantity: number;
+  notes?: string;
+};
+
+type MenuLookupItem = {
+  id: string;
+  name: string;
+  pricePaise: number;
+  available: boolean;
+};
+
 router.use(authenticate);
 
 const normalizeCouponCode = (code: string) => code.trim().toUpperCase();
@@ -132,14 +145,17 @@ router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
     let subtotalPaise = 0;
     const orderItemsData: Array<{ menuItemId: string; quantity: number; pricePaise: number; notes: string }> = [];
 
-    const itemIds = items.map((item: any) => item?.menuItemId).filter(Boolean);
+    const requestItems = items as CreateOrderItemInput[];
+    const itemIds = requestItems.map((item) => item?.menuItemId).filter(Boolean);
     const menuItems = await prisma.menuItem.findMany({
       where: { id: { in: itemIds }, restaurantId: req.restaurant!.id },
       select: { id: true, pricePaise: true, name: true, available: true },
     });
-    const menuItemById = new Map(menuItems.map((item) => [item.id, item]));
+    const menuItemById = new Map<string, MenuLookupItem>(
+      menuItems.map((item: MenuLookupItem) => [item.id, item])
+    );
 
-    for (const [index, item] of items.entries()) {
+    for (const [index, item] of requestItems.entries()) {
       if (!item?.menuItemId || !item?.quantity) {
         return res.status(400).json({
           success: false,
@@ -326,14 +342,17 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
     const additionalItems: Array<{ menuItemId: string; quantity: number; pricePaise: number; notes: string }> = [];
     let addedSubtotalPaise = 0;
 
-    const addItemIds = items.map((item: any) => item?.menuItemId).filter(Boolean);
+    const addRequestItems = items as CreateOrderItemInput[];
+    const addItemIds = addRequestItems.map((item) => item?.menuItemId).filter(Boolean);
     const addMenuItems = await prisma.menuItem.findMany({
       where: { id: { in: addItemIds }, restaurantId: req.restaurant!.id },
       select: { id: true, pricePaise: true, available: true },
     });
-    const addMenuItemById = new Map(addMenuItems.map((item) => [item.id, item]));
+    const addMenuItemById = new Map<string, Pick<MenuLookupItem, 'id' | 'pricePaise' | 'available'>>(
+      addMenuItems.map((item: Pick<MenuLookupItem, 'id' | 'pricePaise' | 'available'>) => [item.id, item])
+    );
 
-    for (const [index, item] of items.entries()) {
+    for (const [index, item] of addRequestItems.entries()) {
       if (!item?.menuItemId || !item?.quantity) {
         return res.status(400).json({
           success: false,
@@ -528,8 +547,8 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
     }
     const userId = req.user.id;
 
-    const pageRaw = Number(req.query.page);
-    const limitRaw = Number(req.query.limit);
+    const pageRaw = Number(req.query['page']);
+    const limitRaw = Number(req.query['limit']);
     const hasPaging = Number.isFinite(pageRaw) || Number.isFinite(limitRaw);
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 20;
@@ -572,8 +591,8 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
       });
     }
 
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 100) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
     const orders = await prisma.order.findMany({
       where: {
@@ -599,8 +618,8 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 
 router.get('/restaurant/all', requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
   try {
-    const pageRaw = Number(req.query.page);
-    const limitRaw = Number(req.query.limit);
+    const pageRaw = Number(req.query['page']);
+    const limitRaw = Number(req.query['limit']);
     const hasPaging = Number.isFinite(pageRaw) || Number.isFinite(limitRaw);
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 200) : 20;
@@ -643,8 +662,8 @@ router.get('/restaurant/all', requireRestaurant, authorizeRestaurantRole('OWNER'
       });
     }
 
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
     const orders = await prisma.order.findMany({
       where: {
@@ -817,3 +836,4 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
 });
 
 export default router;
+

@@ -1,15 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("@/config/database");
-const restaurant_1 = require("@/middleware/restaurant");
-const accelerate_cache_1 = require("@/utils/accelerate-cache");
-const cache_1 = require("@/middleware/cache");
+const database_1 = require("../config/database");
+const restaurant_1 = require("../middleware/restaurant");
+const accelerate_cache_1 = require("../utils/accelerate-cache");
+const cache_1 = require("../middleware/cache");
 const router = (0, express_1.Router)();
 router.get('/', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(120, 'tables:list'), async (req, res) => {
     try {
-        const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-        const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+        const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+        const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
         const tables = await database_1.prisma.table.findMany({
             where: { restaurantId: req.restaurant.id },
             ...(typeof take === 'number' ? { take } : {}),
@@ -32,8 +32,8 @@ router.get('/', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(120, 
 });
 router.get('/available', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(60, 'tables:available'), async (req, res) => {
     try {
-        const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-        const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+        const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+        const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
         const availableTables = await database_1.prisma.table.findMany({
             where: {
                 active: true,

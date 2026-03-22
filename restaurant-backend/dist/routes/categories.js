@@ -1,15 +1,15 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("@/config/database");
-const restaurant_1 = require("@/middleware/restaurant");
-const accelerate_cache_1 = require("@/utils/accelerate-cache");
-const cache_1 = require("@/middleware/cache");
+const database_1 = require("../config/database");
+const restaurant_1 = require("../middleware/restaurant");
+const accelerate_cache_1 = require("../utils/accelerate-cache");
+const cache_1 = require("../middleware/cache");
 const router = (0, express_1.Router)();
 router.get('/', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(300, 'categories:list'), async (req, res) => {
     try {
-        const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-        const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+        const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+        const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
         const categories = await database_1.prisma.category.findMany({
             where: {
                 active: true,

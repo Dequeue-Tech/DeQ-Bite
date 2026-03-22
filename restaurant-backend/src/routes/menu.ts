@@ -33,8 +33,8 @@ router.get('/', requireRestaurant, cacheResponse(120, 'menu:list'), async (req: 
   try {
     const { categoryId } = req.query;
     
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 100) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
     const menuItems = await prisma.menuItem.findMany({
       where: {
@@ -71,8 +71,8 @@ router.get('/', requireRestaurant, cacheResponse(120, 'menu:list'), async (req: 
 // Get all menu items for admin/staff including unavailable items
 router.get('/admin/all', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), cacheResponse(30, 'menu:admin'), async (req: AuthenticatedRequest, res) => {
   try {
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
     const menuItems = await prisma.menuItem.findMany({
       where: {
@@ -393,3 +393,4 @@ router.delete('/:id', authenticate, requireRestaurant, authorizeRestaurantRole('
 });
 
 export default router;
+

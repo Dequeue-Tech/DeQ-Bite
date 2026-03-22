@@ -223,7 +223,7 @@ function CheckoutPageContent() {
           items: cartItems.map((item) => ({ menuItemId: item.id, quantity: item.quantity, notes: '' })),
           specialInstructions: specialInstructions || '',
           couponCode: couponCode || undefined,
-          paymentProvider: 'CASH',
+          paymentProvider: 'CASH' as const,
         };
         const response = await apiClient.createOrder(orderData);
         if (!response.success || !response.data) throw new Error(response.error);

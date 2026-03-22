@@ -2,12 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const accelerate_cache_1 = require("@/utils/accelerate-cache");
-const cache_1 = require("@/middleware/cache");
-const cache_2 = require("@/utils/cache");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const accelerate_cache_1 = require("../utils/accelerate-cache");
+const cache_1 = require("../middleware/cache");
+const cache_2 = require("../utils/cache");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 const createCouponSchema = zod_1.z.object({
@@ -45,8 +45,8 @@ const computeDiscountPaise = (coupon, subtotalPaise) => {
     return discountPaise;
 };
 router.get('/', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), (0, cache_1.cacheResponse)(120, 'coupons:list'), async (req, res) => {
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
     const coupons = await database_1.prisma.coupon.findMany({
         where: { restaurantId: req.restaurant.id },
         orderBy: { createdAt: 'desc' },

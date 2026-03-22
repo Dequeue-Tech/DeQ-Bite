@@ -10,8 +10,8 @@ const router = Router();
 // Get all categories
 router.get('/', requireRestaurant, cacheResponse(300, 'categories:list'), async (req: AuthenticatedRequest, res) => {
   try {
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
     const categories = await prisma.category.findMany({
       where: {
@@ -93,3 +93,4 @@ router.get('/:id', requireRestaurant, cacheResponse(300, 'categories:item'), asy
 });
 
 export default router;
+

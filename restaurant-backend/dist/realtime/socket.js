@@ -6,9 +6,9 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.initSocketServer = void 0;
 const socket_io_1 = require("socket.io");
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const database_1 = require("@/config/database");
-const logger_1 = require("@/utils/logger");
-const realtime_1 = require("@/utils/realtime");
+const database_1 = require("../config/database");
+const logger_1 = require("../utils/logger");
+const realtime_1 = require("../utils/realtime");
 const getAllowedOrigins = () => {
     return [
         process.env.FRONTEND_URL?.replace(/\/$/, ''),
@@ -37,8 +37,8 @@ const resolveRestaurantId = async (identifier) => {
 };
 const authenticateSocket = async (socket, next) => {
     try {
-        const token = socket.handshake.auth?.token ||
-            socket.handshake.query?.token;
+        const token = socket.handshake.auth?.['token'] ||
+            socket.handshake.query?.['token'];
         if (!token) {
             return next(new Error('Unauthorized'));
         }

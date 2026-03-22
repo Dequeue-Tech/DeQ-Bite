@@ -12,7 +12,7 @@ exports.fetchPaymentDetails = fetchPaymentDetails;
 exports.validateWebhookSignature = validateWebhookSignature;
 const razorpay_1 = __importDefault(require("razorpay"));
 const crypto_1 = __importDefault(require("crypto"));
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 let razorpayInstance = null;
 function getRazorpayInstance() {
     if (!razorpayInstance) {

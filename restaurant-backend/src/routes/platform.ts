@@ -37,8 +37,8 @@ router.use(authorize('OWNER'));
 router.get('/restaurants', cacheResponse(60, 'platform:restaurants'), async (req: AuthenticatedRequest, res: Response) => {
   const status = req.query['status'] as string | undefined;
 
-  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+  const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+  const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
   const restaurants = await prisma.restaurant.findMany({
     where: status && ['PENDING_APPROVAL', 'APPROVED', 'SUSPENDED'].includes(status)
@@ -231,8 +231,8 @@ router.patch('/restaurants/:id/details', async (req: AuthenticatedRequest, res: 
 router.get('/orders', cacheResponse(30, 'platform:orders'), async (req: AuthenticatedRequest, res: Response) => {
   const restaurantId = req.query['restaurantId'] as string | undefined;
 
-  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 500) : undefined;
-  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+  const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 500) : undefined;
+  const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
   const orders = await prisma.order.findMany({
     where: {
@@ -342,3 +342,4 @@ router.get('/earnings', cacheResponse(30, 'platform:earnings'), async (_req: Aut
 });
 
 export default router;
+

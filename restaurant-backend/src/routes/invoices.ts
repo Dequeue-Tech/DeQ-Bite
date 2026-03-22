@@ -311,8 +311,8 @@ router.get('/:orderId', authenticate, requireRestaurant, asyncHandler(async (req
 
 // GET /api/invoices/user/list - Get all invoices for authenticated user
 router.get('/user/list', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
-  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+  const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 100) : undefined;
+  const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
   const invoices = await prisma.invoice.findMany({
     where: {
@@ -679,3 +679,4 @@ function generateWarnings(
 }
 
 export default router;
+

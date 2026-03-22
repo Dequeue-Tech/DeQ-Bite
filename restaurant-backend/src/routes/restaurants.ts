@@ -184,7 +184,7 @@ router.get('/public/search', cacheResponse(60, 'restaurants:public:search', { sk
     },
   };
 
-  res.json(response);
+  return res.json(response);
 });
 
 // GET /api/restaurants/public/:identifier
@@ -318,8 +318,8 @@ router.get('/mine', authenticate, async (req: AuthenticatedRequest, res: Respons
     mineSelect.status = true;
   }
 
-  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 100) : undefined;
-  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+  const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 100) : undefined;
+  const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
   const restaurants = await prisma.restaurantUser.findMany({
     where: {
@@ -489,8 +489,8 @@ router.put('/settings/payment-policy', authenticate, requireRestaurant, authoriz
 
 // GET /api/restaurants/users
 router.get('/users', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), cacheResponse(60, 'restaurants:users'), async (req: AuthenticatedRequest, res: Response) => {
-  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+  const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+  const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
   const users = await prisma.restaurantUser.findMany({
     where: {
@@ -646,3 +646,4 @@ router.post('/users', authenticate, requireRestaurant, authorizeRestaurantRole('
 });
 
 export default router;
+

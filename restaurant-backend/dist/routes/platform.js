@@ -2,12 +2,12 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const audit_1 = require("@/utils/audit");
-const accelerate_cache_1 = require("@/utils/accelerate-cache");
-const cache_1 = require("@/middleware/cache");
-const cache_2 = require("@/utils/cache");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const audit_1 = require("../utils/audit");
+const accelerate_cache_1 = require("../utils/accelerate-cache");
+const cache_1 = require("../middleware/cache");
+const cache_2 = require("../utils/cache");
 const router = (0, express_1.Router)();
 const updateRestaurantStatusSchema = zod_1.z.object({
     status: zod_1.z.enum(['APPROVED', 'SUSPENDED']),
@@ -30,8 +30,8 @@ router.use(auth_1.authenticate);
 router.use((0, auth_1.authorize)('OWNER'));
 router.get('/restaurants', (0, cache_1.cacheResponse)(60, 'platform:restaurants'), async (req, res) => {
     const status = req.query['status'];
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
     const restaurants = await database_1.prisma.restaurant.findMany({
         where: status && ['PENDING_APPROVAL', 'APPROVED', 'SUSPENDED'].includes(status)
             ? { status }
@@ -204,8 +204,8 @@ router.patch('/restaurants/:id/details', async (req, res) => {
 });
 router.get('/orders', (0, cache_1.cacheResponse)(30, 'platform:orders'), async (req, res) => {
     const restaurantId = req.query['restaurantId'];
-    const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 500) : undefined;
-    const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+    const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 500) : undefined;
+    const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
     const orders = await database_1.prisma.order.findMany({
         where: {
             ...(restaurantId ? { restaurantId } : {}),

@@ -54,8 +54,8 @@ const computeDiscountPaise = (coupon: any, subtotalPaise: number) => {
 
 // GET /api/coupons - list coupons (admin/owner)
 router.get('/', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), cacheResponse(120, 'coupons:list'), async (req: AuthenticatedRequest, res) => {
-  const take = typeof req.query.take !== 'undefined' ? Math.min(Number(req.query.take) || 0, 200) : undefined;
-  const cursor = req.query.cursor ? { id: String(req.query.cursor) } : undefined;
+  const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
+  const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
   const coupons = await prisma.coupon.findMany({
     where: { restaurantId: req.restaurant!.id },
@@ -215,3 +215,4 @@ router.post('/validate', requireRestaurant, async (req: AuthenticatedRequest, re
 });
 
 export default router;
+

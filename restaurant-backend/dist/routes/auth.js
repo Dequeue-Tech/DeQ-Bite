@@ -7,9 +7,9 @@ const express_1 = require("express");
 const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const errorHandler_1 = require("../middleware/errorHandler");
 const router = (0, express_1.Router)();
 const registerSchema = zod_1.z.object({
     name: zod_1.z.string().min(2, 'Name must be at least 2 characters').max(50),

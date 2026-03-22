@@ -3,8 +3,8 @@ import { withAccelerate } from '@prisma/extension-accelerate';
 import { logger } from '@/utils/logger';
 
 const createPrismaClient = () => {
-  const shouldLogQueries = process.env.LOG_SLOW_QUERIES !== 'false';
-  const slowQueryMs = Number(process.env.SLOW_QUERY_MS || 200);
+  const shouldLogQueries = process.env['LOG_SLOW_QUERIES'] !== 'false';
+  const slowQueryMs = Number(process.env['SLOW_QUERY_MS'] || 200);
   const log: any[] = process.env.NODE_ENV === 'production'
     ? ['error', 'warn']
     : ['query', 'info', 'warn', 'error'];
@@ -18,7 +18,7 @@ const createPrismaClient = () => {
   if (shouldLogQueries && typeof client.$on === 'function') {
     client.$on('query', (e: any) => {
       if (e.duration >= slowQueryMs) {
-        const includeParams = process.env.LOG_SLOW_QUERY_PARAMS === 'true';
+        const includeParams = process.env['LOG_SLOW_QUERY_PARAMS'] === 'true';
         logger.warn('Slow query detected', {
           durationMs: e.duration,
           query: e.query,

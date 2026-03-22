@@ -2,11 +2,14 @@ import { io, Socket } from 'socket.io-client';
 import { apiClient, Order } from '@/lib/api-client';
 
 export type OrderRealtimeEvent = {
+  eventId?: string;
+  sourceInstanceId?: string;
   type: string;
   restaurantId: string;
   userId?: string;
   payload: {
     order?: Partial<Order> & { id: string };
+    [key: string]: any;
   };
 };
 
@@ -109,6 +112,33 @@ export const subscribeToOrderEvents = (options: {
     next.off('order.created', handler);
     next.off('order.updated', handler);
     if ((scope === 'restaurant' || scope === 'both') && restaurant) {
+      leaveRestaurant(restaurant);
+    }
+  };
+};
+
+export const subscribeToRestaurantEvents = (options: {
+  restaurant?: string | null;
+  eventTypes: string[];
+  onEvent: OrderEventHandler;
+}) => {
+  const next = ensureSocket();
+  if (!next) return () => {};
+
+  const restaurant = options.restaurant?.trim().toLowerCase() || null;
+  if (restaurant) {
+    joinRestaurant(restaurant);
+  }
+
+  const handler = (event: OrderRealtimeEvent) => {
+    options.onEvent(event);
+  };
+
+  options.eventTypes.forEach((eventName) => next.on(eventName, handler));
+
+  return () => {
+    options.eventTypes.forEach((eventName) => next.off(eventName, handler));
+    if (restaurant) {
       leaveRestaurant(restaurant);
     }
   };

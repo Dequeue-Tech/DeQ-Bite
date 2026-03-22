@@ -21,6 +21,7 @@ const Navbar = () => {
   // Role definitions
   const canAccessAdmin = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
   const canAccessKitchen = canAccessAdmin || user?.restaurantRole === 'STAFF';
+  const canAccessPos = canAccessKitchen;
   
   const [showUserDropdown, setShowUserDropdown] = useState(false);
   const [selectedRestaurantSlug, setSelectedRestaurantSlug] = useState<string | null>(null);
@@ -75,6 +76,7 @@ const Navbar = () => {
       { name: 'Orders', href: withRestaurant('/orders') },
       ...(canAccessAdmin ? [{ name: 'Admin', href: withRestaurant('/admin') }] : []),
       ...(canAccessKitchen ? [{ name: 'Kitchen', href: withRestaurant('/kitchen') }] : []),
+      ...(canAccessPos ? [{ name: 'POS Ops', href: withRestaurant('/pos') }] : []),
     ] : []),
   ];
 
@@ -227,6 +229,17 @@ const Navbar = () => {
                           >
                             <ChefHat className="h-4 w-4" />
                             <span>Kitchen Display</span>
+                          </Link>
+                        )}
+
+                        {canAccessPos && (
+                          <Link
+                            href={withRestaurant('/pos')}
+                            onClick={() => setShowUserDropdown(false)}
+                            className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors border-t border-orange-100/50"
+                          >
+                            <LayoutDashboard className="h-4 w-4" />
+                            <span>POS Operations</span>
                           </Link>
                         )}
 

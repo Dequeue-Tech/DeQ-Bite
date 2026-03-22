@@ -1,0 +1,1 @@
+{"version":3,"file":"tenant-context.d.ts","sourceRoot":"","sources":["../../src/context/tenant-context.ts"],"names":[],"mappings":"AAEA,MAAM,MAAM,aAAa,GAAG;IAC1B,YAAY,EAAE,MAAM,GAAG,IAAI,CAAC;IAC5B,eAAe,EAAE,OAAO,CAAC;CAC1B,CAAC;AASF,eAAO,MAAM,oBAAoB,GAAI,CAAC,EAAE,SAAS,OAAO,CAAC,aAAa,CAAC,EAAE,UAAU,MAAM,CAAC,KAAG,CAO5F,CAAC;AAEF,eAAO,MAAM,gBAAgB,QAAO,aAEnC,CAAC"}

@@ -13,6 +13,7 @@ const errorHandler_1 = require("./middleware/errorHandler");
 const logger_1 = require("./utils/logger");
 const restaurant_1 = require("./middleware/restaurant");
 const auth_1 = require("./middleware/auth");
+const tenantContext_1 = require("./middleware/tenantContext");
 const auth_2 = __importDefault(require("./routes/auth"));
 const payments_1 = __importDefault(require("./routes/payments"));
 const invoices_1 = __importDefault(require("./routes/invoices"));
@@ -27,6 +28,11 @@ const offers_1 = __importDefault(require("./routes/offers"));
 const platform_1 = __importDefault(require("./routes/platform"));
 const realtime_1 = __importDefault(require("./routes/realtime"));
 const delivery_1 = __importDefault(require("./routes/delivery"));
+const kot_routes_1 = __importDefault(require("./modules/kot/kot.routes"));
+const inventory_routes_1 = __importDefault(require("./modules/inventory/inventory.routes"));
+const crm_routes_1 = __importDefault(require("./modules/crm/crm.routes"));
+const analytics_routes_1 = __importDefault(require("./modules/analytics/analytics.routes"));
+const pos_routes_1 = __importDefault(require("./modules/pos/pos.routes"));
 dotenv_1.default.config();
 if (process.env.NODE_ENV === 'production') {
     if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
@@ -78,6 +84,7 @@ app.use(express_1.default.json({ limit: '10mb' }));
 app.use(express_1.default.urlencoded({ extended: true }));
 app.use(restaurant_1.attachRestaurant);
 app.use(auth_1.optionalAuth);
+app.use(tenantContext_1.attachTenantContext);
 app.use((0, morgan_1.default)('combined', {
     stream: {
         write: (message) => {
@@ -112,6 +119,11 @@ tenantRouter.use('/coupons', coupons_1.default);
 tenantRouter.use('/restaurants', restaurants_1.default);
 tenantRouter.use('/offers', offers_1.default);
 tenantRouter.use('/delivery', delivery_1.default);
+tenantRouter.use('/kot', kot_routes_1.default);
+tenantRouter.use('/inventory', inventory_routes_1.default);
+tenantRouter.use('/crm', crm_routes_1.default);
+tenantRouter.use('/analytics', analytics_routes_1.default);
+tenantRouter.use('/pos', pos_routes_1.default);
 tenantRouter.use('/', realtime_1.default);
 app.use('/api/restaurants/:restaurantId', tenantRouter);
 app.use('/api/restaurants', restaurants_1.default);

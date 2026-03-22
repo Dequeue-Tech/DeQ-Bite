@@ -20,6 +20,7 @@ model User {
   updatedAt       DateTime         @updatedAt
   orders          Order[]
   restaurantUsers RestaurantUser[]
+  customerProfiles CustomerProfile[]
 
   @@map("users")
 }
@@ -68,6 +69,18 @@ model Restaurant {
   users                   RestaurantUser[]
   tables                  Table[]
   earnings                Earning[]              @relation("earnings")
+  rawMaterials            RawMaterial[]
+  menuItemRecipes         MenuItemRecipe[]
+  inventoryTransactions   InventoryTransaction[]
+  inventoryAlerts         InventoryAlert[]
+  purchaseOrders          PurchaseOrder[]
+  customerProfiles        CustomerProfile[]
+  loyaltyLedgerEntries    LoyaltyLedger[]
+  couponRedemptions       CouponRedemption[]
+  kotTickets              KOTTicket[]
+  kotTicketEvents         KOTTicketEvent[]
+  analyticsSnapshots      AnalyticsSnapshot[]
+  posSyncLogs             PosSyncLog[]
 
   @@map("restaurants")
 }
@@ -128,6 +141,7 @@ model MenuItem {
   restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orderItems      OrderItem[]
   popularDishes   PopularDish[]
+  recipes         MenuItemRecipe[]
 
   @@map("menu_items")
   @@index([restaurantId, available])
@@ -202,6 +216,10 @@ model Order {
   table                   Table                   @relation(fields: [tableId], references: [id])
   user                    User                    @relation(fields: [userId], references: [id])
   payments                Payment[]
+  kotTicket               KOTTicket?
+  inventoryTransactions   InventoryTransaction[]
+  couponRedemptions       CouponRedemption[]
+  loyaltyLedgerEntries    LoyaltyLedger[]
 
   @@map("orders")
   @@index([restaurantId, createdAt])
@@ -260,6 +278,7 @@ model Coupon {
   restaurantId     String
   restaurant       Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
   orders           Order[]
+  redemptions      CouponRedemption[]
 
   @@unique([restaurantId, code])
   @@map("coupons")
@@ -348,6 +367,258 @@ model AuditLog {
   @@map("audit_logs")
 }
 
+model RawMaterial {
+  id                    String                 @id @default(cuid())
+  restaurantId          String
+  name                  String
+  sku                   String?
+  unit                  String
+  currentStock          Float                  @default(0)
+  reorderLevel          Float                  @default(0)
+  costPerUnitPaise      Int                    @default(0)
+  active                Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  restaurant            Restaurant             @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  recipeMappings        MenuItemRecipe[]
+  transactions          InventoryTransaction[]
+  alerts                InventoryAlert[]
+  purchaseOrderItems    PurchaseOrderItem[]
+
+  @@unique([restaurantId, name])
+  @@index([restaurantId, active, currentStock])
+  @@map("raw_materials")
+}
+
+model MenuItemRecipe {
+  id             String      @id @default(cuid())
+  restaurantId   String
+  menuItemId     String
+  rawMaterialId  String
+  quantity       Float
+  wasteFactorPct Float       @default(0)
+  createdAt      DateTime    @default(now())
+  updatedAt      DateTime    @updatedAt
+  restaurant     Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  menuItem       MenuItem    @relation(fields: [menuItemId], references: [id], onDelete: Cascade)
+  rawMaterial    RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+
+  @@unique([menuItemId, rawMaterialId])
+  @@index([restaurantId, menuItemId])
+  @@map("menu_item_recipes")
+}
+
+model InventoryTransaction {
+  id               String                    @id @default(cuid())
+  restaurantId     String
+  rawMaterialId    String
+  orderId          String?
+  type             InventoryTransactionType
+  referenceType    InventoryReferenceType
+  referenceId      String?
+  quantityDelta    Float
+  stockBefore      Float
+  stockAfter       Float
+  unitCostPaise    Int?
+  totalCostPaise   Int?
+  notes            String?
+  createdAt        DateTime                  @default(now())
+  createdByUserId  String?
+  restaurant       Restaurant                @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  rawMaterial      RawMaterial               @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+  order            Order?                    @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId, createdAt])
+  @@index([restaurantId, rawMaterialId, createdAt])
+  @@map("inventory_transactions")
+}
+
+model InventoryAlert {
+  id                 String      @id @default(cuid())
+  restaurantId       String
+  rawMaterialId      String
+  type               String
+  thresholdValue     Float?
+  currentValue       Float
+  acknowledged       Boolean     @default(false)
+  acknowledgedAt     DateTime?
+  acknowledgedByUserId String?
+  createdAt          DateTime    @default(now())
+  restaurant         Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  rawMaterial        RawMaterial @relation(fields: [rawMaterialId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, acknowledged, createdAt])
+  @@map("inventory_alerts")
+}
+
+model PurchaseOrder {
+  id                   String               @id @default(cuid())
+  restaurantId         String
+  vendorName           String
+  status               PurchaseOrderStatus  @default(DRAFT)
+  notes                String?
+  expectedDeliveryAt   DateTime?
+  receivedAt           DateTime?
+  totalCostPaise       Int                  @default(0)
+  createdAt            DateTime             @default(now())
+  updatedAt            DateTime             @updatedAt
+  createdByUserId      String?
+  restaurant           Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  items                PurchaseOrderItem[]
+
+  @@index([restaurantId, status, createdAt])
+  @@map("purchase_orders")
+}
+
+model PurchaseOrderItem {
+  id                 String        @id @default(cuid())
+  purchaseOrderId    String
+  rawMaterialId      String
+  quantityOrdered    Float
+  quantityReceived   Float         @default(0)
+  unitCostPaise      Int
+  purchaseOrder      PurchaseOrder @relation(fields: [purchaseOrderId], references: [id], onDelete: Cascade)
+  rawMaterial        RawMaterial   @relation(fields: [rawMaterialId], references: [id], onDelete: Restrict)
+
+  @@unique([purchaseOrderId, rawMaterialId])
+  @@map("purchase_order_items")
+}
+
+model CustomerProfile {
+  id              String          @id @default(cuid())
+  restaurantId    String
+  userId          String
+  loyaltyPoints   Int             @default(0)
+  totalOrders     Int             @default(0)
+  totalSpendPaise Int             @default(0)
+  lastOrderAt     DateTime?
+  tier            String          @default("BRONZE")
+  notes           String?
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  restaurant      Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  loyaltyLedger   LoyaltyLedger[]
+  couponRedemptions CouponRedemption[]
+
+  @@unique([restaurantId, userId])
+  @@index([restaurantId, loyaltyPoints])
+  @@map("customer_profiles")
+}
+
+model LoyaltyLedger {
+  id                 String                  @id @default(cuid())
+  restaurantId       String
+  customerProfileId  String
+  orderId            String?
+  points             Int
+  type               LoyaltyTransactionType
+  reason             String?
+  createdAt          DateTime                @default(now())
+  createdByUserId    String?
+  restaurant         Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customerProfile    CustomerProfile         @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  order              Order?                  @relation(fields: [orderId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId, customerProfileId, createdAt])
+  @@map("loyalty_ledger")
+}
+
+model CouponRedemption {
+  id                 String          @id @default(cuid())
+  restaurantId       String
+  customerProfileId  String
+  orderId            String?
+  couponId           String?
+  couponCode         String
+  discountPaise      Int             @default(0)
+  redeemedAt         DateTime        @default(now())
+  restaurant         Restaurant      @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  customerProfile    CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+  order              Order?          @relation(fields: [orderId], references: [id], onDelete: SetNull)
+  coupon             Coupon?         @relation(fields: [couponId], references: [id], onDelete: SetNull)
+
+  @@index([restaurantId, redeemedAt])
+  @@map("coupon_redemptions")
+}
+
+model KOTTicket {
+  id                String      @id @default(cuid())
+  restaurantId      String
+  orderId           String      @unique
+  status            KOTStatus   @default(PLACED)
+  priority          Int         @default(0)
+  notes             String?
+  placedAt          DateTime    @default(now())
+  preparingAt       DateTime?
+  readyAt           DateTime?
+  servedAt          DateTime?
+  createdAt         DateTime    @default(now())
+  updatedAt         DateTime    @updatedAt
+  createdByUserId   String?
+  restaurant        Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  order             Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  events            KOTTicketEvent[]
+
+  @@index([restaurantId, status, updatedAt])
+  @@map("kot_tickets")
+}
+
+model KOTTicketEvent {
+  id              String      @id @default(cuid())
+  restaurantId    String
+  kotTicketId     String
+  fromStatus      KOTStatus?
+  toStatus        KOTStatus
+  changedByUserId String?
+  changedAt       DateTime    @default(now())
+  note            String?
+  restaurant      Restaurant  @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  kotTicket       KOTTicket   @relation(fields: [kotTicketId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, changedAt])
+  @@map("kot_ticket_events")
+}
+
+model AnalyticsSnapshot {
+  id                String               @id @default(cuid())
+  restaurantId      String
+  periodType        AnalyticsPeriodType
+  periodStart       DateTime
+  periodEnd         DateTime
+  revenuePaise      Int
+  orderCount        Int
+  avgOrderValuePaise Int
+  topItems          Json
+  peakHours         Json
+  metrics           Json
+  insights          String
+  recommendations   String
+  generatedAt       DateTime             @default(now())
+  restaurant        Restaurant           @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, periodType, periodStart, periodEnd])
+  @@index([restaurantId, periodType, generatedAt])
+  @@map("analytics_snapshots")
+}
+
+model PosSyncLog {
+  id               String     @id @default(cuid())
+  restaurantId     String
+  sourceSystem     String
+  eventType        String
+  externalOrderId  String?
+  payload          Json?
+  status           String
+  errorMessage     String?
+  createdAt        DateTime   @default(now())
+  updatedAt        DateTime   @updatedAt
+  restaurant       Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, sourceSystem, createdAt])
+  @@map("pos_sync_logs")
+}
+
 enum UserRole {
   CUSTOMER
   ADMIN
@@ -432,4 +703,42 @@ enum OnboardingStatus {
   PENDING_APPROVAL
   APPROVED
   SUSPENDED
+}
+
+enum InventoryTransactionType {
+  DEDUCTION
+  RESTOCK
+  ADJUSTMENT
+}
+
+enum InventoryReferenceType {
+  ORDER
+  PURCHASE
+  MANUAL
+}
+
+enum PurchaseOrderStatus {
+  DRAFT
+  ORDERED
+  PARTIALLY_RECEIVED
+  RECEIVED
+  CANCELLED
+}
+
+enum LoyaltyTransactionType {
+  EARN
+  REDEEM
+  ADJUST
+}
+
+enum KOTStatus {
+  PLACED
+  PREPARING
+  READY
+  SERVED
+}
+
+enum AnalyticsPeriodType {
+  DAILY
+  WEEKLY
 }

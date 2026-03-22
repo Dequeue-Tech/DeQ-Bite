@@ -8,6 +8,7 @@ import { errorHandler } from '@/middleware/errorHandler';
 import { logger } from '@/utils/logger';
 import { attachRestaurant } from '@/middleware/restaurant';
 import { optionalAuth } from '@/middleware/auth';
+import { attachTenantContext } from '@/middleware/tenantContext';
 
 
 import authRoutes from '@/routes/auth';
@@ -24,6 +25,11 @@ import offerRoutes from '@/routes/offers';
 import platformRoutes from '@/routes/platform';
 import realtimeRoutes from '@/routes/realtime';
 import deliveryRoutes from '@/routes/delivery';
+import kotRoutes from '@/modules/kot/kot.routes';
+import inventoryRoutes from '@/modules/inventory/inventory.routes';
+import crmRoutes from '@/modules/crm/crm.routes';
+import analyticsRoutes from '@/modules/analytics/analytics.routes';
+import posRoutes from '@/modules/pos/pos.routes';
 
 dotenv.config();
 
@@ -85,6 +91,7 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use(attachRestaurant);
 app.use(optionalAuth);
+app.use(attachTenantContext);
 
 app.use(morgan('combined', {
   stream: {
@@ -127,6 +134,11 @@ tenantRouter.use('/coupons', couponRoutes);
 tenantRouter.use('/restaurants', restaurantRoutes);
 tenantRouter.use('/offers', offerRoutes);
 tenantRouter.use('/delivery', deliveryRoutes);
+tenantRouter.use('/kot', kotRoutes);
+tenantRouter.use('/inventory', inventoryRoutes);
+tenantRouter.use('/crm', crmRoutes);
+tenantRouter.use('/analytics', analyticsRoutes);
+tenantRouter.use('/pos', posRoutes);
 tenantRouter.use('/', realtimeRoutes);
 
 // More-specific path MUST come before the generic /api/restaurants listing

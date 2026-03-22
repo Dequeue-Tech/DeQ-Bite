@@ -6,6 +6,9 @@ const auth_1 = require("../middleware/auth");
 const restaurant_1 = require("../middleware/restaurant");
 const logger_1 = require("../utils/logger");
 const realtime_1 = require("../utils/realtime");
+const kot_service_1 = require("../modules/kot/kot.service");
+const inventory_service_1 = require("../modules/inventory/inventory.service");
+const crm_service_1 = require("../modules/crm/crm.service");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 router.use(auth_1.authenticate);
@@ -234,6 +237,51 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
                     },
                 }),
             ]))[0];
+        try {
+            await database_1.prisma.$transaction(async (tx) => {
+                await (0, inventory_service_1.deductInventoryForOrder)(tx, {
+                    restaurantId: req.restaurant.id,
+                    orderId: order.id,
+                    createdByUserId: userId,
+                    items: orderItemsData.map((item) => ({
+                        menuItemId: item.menuItemId,
+                        quantity: item.quantity,
+                    })),
+                });
+                await (0, kot_service_1.createKOTTicketForOrder)(tx, {
+                    restaurantId: req.restaurant.id,
+                    orderId: order.id,
+                    createdByUserId: userId,
+                    note: 'KOT created from order placement',
+                });
+                await (0, crm_service_1.syncCustomerOrderProfile)(tx, {
+                    restaurantId: req.restaurant.id,
+                    userId,
+                    orderId: order.id,
+                    totalPaise: order.totalPaise,
+                    couponId: appliedCouponId,
+                    couponCode: couponCode ? normalizeCouponCode(couponCode) : null,
+                    discountPaise,
+                    createdByUserId: userId,
+                });
+            });
+        }
+        catch (workflowError) {
+            if (workflowError instanceof inventory_service_1.InventoryError) {
+                await database_1.prisma.order.update({
+                    where: { id: order.id },
+                    data: {
+                        status: 'CANCELLED',
+                    },
+                });
+                return res.status(workflowError.statusCode).json({
+                    success: false,
+                    error: workflowError.message,
+                    details: workflowError.details,
+                });
+            }
+            throw workflowError;
+        }
         logger_1.logger.info('New order created and awaiting confirmation', {
             orderId: order.id,
             restaurantId: order.restaurantId,
@@ -245,6 +293,12 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
             type: 'order.created',
             userId: order.userId,
             payload: buildOrderEventPayload(order),
+        });
+        (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+            type: 'kot.created',
+            payload: {
+                orderId: order.id,
+            },
         });
         return res.status(201).json({
             success: true,

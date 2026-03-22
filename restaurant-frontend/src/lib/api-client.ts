@@ -219,6 +219,222 @@ export interface DeliveryOrder extends Order {
   deliveryMeta: DeliveryMeta;
 }
 
+export type KOTStatus = 'PLACED' | 'PREPARING' | 'READY' | 'SERVED';
+
+export interface KOTTicket {
+  id: string;
+  restaurantId: string;
+  orderId: string;
+  status: KOTStatus;
+  priority: number;
+  notes?: string | null;
+  placedAt: string;
+  preparingAt?: string | null;
+  readyAt?: string | null;
+  servedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  order?: Order;
+  events?: Array<{
+    id: string;
+    fromStatus?: KOTStatus | null;
+    toStatus: KOTStatus;
+    changedByUserId?: string | null;
+    changedAt: string;
+    note?: string | null;
+  }>;
+}
+
+export interface KOTOperationalSummary {
+  generatedAt: string;
+  thresholdMinutes: number;
+  queue: {
+    totalActive: number;
+    byStatus: Record<KOTStatus, number>;
+    overdueCount: number;
+    avgTicketAgeMinutes: number;
+    throughputLastHour: number;
+    avgPrepMinutesToday: number;
+    avgFulfillmentMinutesToday: number;
+  };
+  topAgingTickets: Array<{
+    id: string;
+    orderId: string;
+    status: KOTStatus;
+    priority: number;
+    placedAt: string;
+    tableNumber: number;
+    customerName: string;
+    itemCount: number;
+    minutesOpen: number;
+    minutesInStage: number;
+    overdue: boolean;
+  }>;
+}
+
+export interface RawMaterial {
+  id: string;
+  restaurantId: string;
+  name: string;
+  sku?: string | null;
+  unit: string;
+  currentStock: number;
+  reorderLevel: number;
+  costPerUnitPaise: number;
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface InventoryAlert {
+  id: string;
+  restaurantId: string;
+  rawMaterialId: string;
+  type: string;
+  thresholdValue?: number | null;
+  currentValue: number;
+  acknowledged: boolean;
+  acknowledgedAt?: string | null;
+  createdAt: string;
+  rawMaterial?: RawMaterial;
+}
+
+export interface PurchaseOrder {
+  id: string;
+  restaurantId: string;
+  vendorName: string;
+  status: 'DRAFT' | 'ORDERED' | 'PARTIALLY_RECEIVED' | 'RECEIVED' | 'CANCELLED';
+  notes?: string | null;
+  expectedDeliveryAt?: string | null;
+  receivedAt?: string | null;
+  totalCostPaise: number;
+  createdAt: string;
+  updatedAt: string;
+  items: Array<{
+    id: string;
+    purchaseOrderId: string;
+    rawMaterialId: string;
+    quantityOrdered: number;
+    quantityReceived: number;
+    unitCostPaise: number;
+    rawMaterial?: RawMaterial;
+  }>;
+}
+
+export interface CustomerProfile {
+  id: string;
+  restaurantId: string;
+  userId: string;
+  loyaltyPoints: number;
+  totalOrders: number;
+  totalSpendPaise: number;
+  lastOrderAt?: string | null;
+  tier: string;
+  notes?: string | null;
+  segment?: 'NEW' | 'LOYAL' | 'HIGH_VALUE' | 'AT_RISK' | 'REGULAR';
+  health?: {
+    score: number;
+    risk: 'LOW' | 'MEDIUM' | 'HIGH';
+    inactiveDays?: number | null;
+  };
+  createdAt: string;
+  updatedAt: string;
+  user?: {
+    id: string;
+    name: string;
+    email: string;
+    phone?: string;
+  };
+}
+
+export interface AnalyticsSnapshot {
+  id: string;
+  restaurantId: string;
+  periodType: 'DAILY' | 'WEEKLY';
+  periodStart: string;
+  periodEnd: string;
+  revenuePaise: number;
+  orderCount: number;
+  avgOrderValuePaise: number;
+  topItems: Array<{ menuItemId: string; name: string; quantity: number; revenuePaise: number }>;
+  peakHours: Array<{ hour: number; orders: number }>;
+  metrics: Record<string, unknown>;
+  insights: string;
+  recommendations: string;
+  generatedAt: string;
+}
+
+export interface AnalyticsOverview {
+  period: {
+    start: string;
+    end: string;
+    previousStart: string;
+    previousEnd: string;
+    days: number;
+  };
+  summary: {
+    revenuePaise: number;
+    completedOrders: number;
+    totalOrders: number;
+    cancelledOrders: number;
+    avgOrderValuePaise: number;
+    uniqueCustomers: number;
+    repeatCustomers: number;
+    cancellationRatePct: number;
+    paymentCompletionRatePct: number;
+    repeatCustomerRatePct: number;
+    topItems: Array<{ menuItemId: string; name: string; quantity: number; revenuePaise: number }>;
+    peakHours: Array<{ hour: number; orders: number }>;
+  };
+  deltas: {
+    revenuePct: number;
+    completedOrdersPct: number;
+    avgOrderValuePct: number;
+    uniqueCustomersPct: number;
+    repeatCustomerRatePct: number;
+  };
+  previous: {
+    revenuePaise: number;
+    completedOrders: number;
+    totalOrders: number;
+    cancelledOrders: number;
+    avgOrderValuePaise: number;
+    uniqueCustomers: number;
+    repeatCustomers: number;
+    cancellationRatePct: number;
+    paymentCompletionRatePct: number;
+    repeatCustomerRatePct: number;
+    topItems: Array<{ menuItemId: string; name: string; quantity: number; revenuePaise: number }>;
+    peakHours: Array<{ hour: number; orders: number }>;
+  };
+}
+
+export interface CrmOverview {
+  summary: {
+    totalCustomers: number;
+    segments: Array<{
+      segment: 'NEW' | 'LOYAL' | 'HIGH_VALUE' | 'AT_RISK' | 'REGULAR';
+      count: number;
+      sharePct: number;
+    }>;
+  };
+  atRisk: CustomerProfile[];
+  highValue: CustomerProfile[];
+}
+
+export interface PosSyncLog {
+  id: string;
+  restaurantId: string;
+  sourceSystem: string;
+  eventType: string;
+  externalOrderId?: string | null;
+  payload?: Record<string, unknown> | null;
+  status: string;
+  errorMessage?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 class ApiClient {
   private api: AxiosInstance;
   private blockedRootSegments = new Set([
@@ -779,6 +995,299 @@ class ApiClient {
       return response.data.data;
     }
     throw new Error(response.data.error || 'Failed to update coupon');
+  }
+
+  // KOT methods
+  async getKotTickets(status?: KOTStatus): Promise<KOTTicket[]> {
+    const query = status ? `?status=${status}` : '';
+    const response = await this.api.get<ApiResponse<KOTTicket[]>>(this.buildTenantEndpoint(`/kot/tickets${query}`));
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch KOT tickets');
+  }
+
+  async getKotTicketByOrder(orderId: string): Promise<KOTTicket> {
+    const response = await this.api.get<ApiResponse<KOTTicket>>(this.buildTenantEndpoint(`/kot/tickets/order/${orderId}`));
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch KOT ticket');
+  }
+
+  async updateKotStatus(orderId: string, status: KOTStatus, note?: string): Promise<KOTTicket> {
+    const response = await this.api.patch<ApiResponse<KOTTicket>>(this.buildTenantEndpoint(`/kot/tickets/order/${orderId}/status`), {
+      status,
+      note,
+    });
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to update KOT status');
+  }
+
+  async updateKotPriority(orderId: string, priority: number, note?: string): Promise<KOTTicket> {
+    const response = await this.api.patch<ApiResponse<KOTTicket>>(this.buildTenantEndpoint(`/kot/tickets/order/${orderId}/priority`), {
+      priority,
+      note,
+    });
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to update KOT priority');
+  }
+
+  async getKotSummary(overdueMinutes?: number): Promise<KOTOperationalSummary> {
+    const query = typeof overdueMinutes === 'number' ? `?overdueMinutes=${encodeURIComponent(String(overdueMinutes))}` : '';
+    const response = await this.api.get<ApiResponse<KOTOperationalSummary>>(this.buildTenantEndpoint(`/kot/summary${query}`));
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch KOT summary');
+  }
+
+  // Inventory methods
+  async getRawMaterials(): Promise<RawMaterial[]> {
+    const response = await this.api.get<ApiResponse<RawMaterial[]>>(this.buildTenantEndpoint('/inventory/raw-materials'));
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch raw materials');
+  }
+
+  async createRawMaterial(payload: {
+    name: string;
+    sku?: string;
+    unit: string;
+    currentStock?: number;
+    reorderLevel?: number;
+    costPerUnitPaise?: number;
+  }): Promise<RawMaterial> {
+    const response = await this.api.post<ApiResponse<RawMaterial>>(this.buildTenantEndpoint('/inventory/raw-materials'), payload);
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to create raw material');
+  }
+
+  async saveMenuRecipe(payload: {
+    menuItemId: string;
+    ingredients: Array<{ rawMaterialId: string; quantity: number; wasteFactorPct?: number }>;
+  }): Promise<void> {
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/inventory/recipes'), payload);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to save recipe mapping');
+    }
+  }
+
+  async getMenuRecipe(menuItemId: string): Promise<any[]> {
+    const response = await this.api.get<ApiResponse<any[]>>(this.buildTenantEndpoint(`/inventory/recipes/menu/${menuItemId}`));
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch recipe mapping');
+  }
+
+  async getInventoryAlerts(openOnly = true): Promise<InventoryAlert[]> {
+    const response = await this.api.get<ApiResponse<InventoryAlert[]>>(
+      this.buildTenantEndpoint(`/inventory/alerts?open=${openOnly ? 'true' : 'false'}`)
+    );
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch inventory alerts');
+  }
+
+  async acknowledgeInventoryAlert(alertId: string): Promise<InventoryAlert> {
+    const response = await this.api.patch<ApiResponse<InventoryAlert>>(this.buildTenantEndpoint(`/inventory/alerts/${alertId}/ack`));
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to acknowledge inventory alert');
+  }
+
+  async getPurchaseOrders(): Promise<PurchaseOrder[]> {
+    const response = await this.api.get<ApiResponse<PurchaseOrder[]>>(this.buildTenantEndpoint('/inventory/purchase-orders'));
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch purchase orders');
+  }
+
+  async createPurchaseOrder(payload: {
+    vendorName: string;
+    notes?: string;
+    expectedDeliveryAt?: string;
+    items: Array<{ rawMaterialId: string; quantityOrdered: number; unitCostPaise: number }>;
+  }): Promise<PurchaseOrder> {
+    const response = await this.api.post<ApiResponse<PurchaseOrder>>(this.buildTenantEndpoint('/inventory/purchase-orders'), payload);
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to create purchase order');
+  }
+
+  async receivePurchaseOrderStock(
+    purchaseOrderId: string,
+    payload: { items: Array<{ rawMaterialId: string; quantityReceived: number; unitCostPaise?: number }> }
+  ): Promise<void> {
+    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint(`/inventory/purchase-orders/${purchaseOrderId}/receive`), payload);
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to receive purchase order stock');
+    }
+  }
+
+  // CRM methods
+  async getCustomers(query?: string): Promise<CustomerProfile[]> {
+    const queryString = query ? `?q=${encodeURIComponent(query)}` : '';
+    const response = await this.api.get<ApiResponse<CustomerProfile[]>>(this.buildTenantEndpoint(`/crm/customers${queryString}`));
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch customers');
+  }
+
+  async getCustomersAdvanced(params?: {
+    q?: string;
+    tier?: 'BRONZE' | 'SILVER' | 'GOLD' | 'PLATINUM';
+    segment?: 'NEW' | 'LOYAL' | 'HIGH_VALUE' | 'AT_RISK' | 'REGULAR';
+    minPoints?: number;
+    sortBy?: 'LOYALTY' | 'SPEND' | 'LAST_ORDER';
+    direction?: 'asc' | 'desc';
+    page?: number;
+    limit?: number;
+  }): Promise<{ data: CustomerProfile[]; pagination?: ApiResponse['pagination'] }> {
+    const search = new URLSearchParams();
+    if (params?.q) search.set('q', params.q);
+    if (params?.tier) search.set('tier', params.tier);
+    if (params?.segment) search.set('segment', params.segment);
+    if (typeof params?.minPoints === 'number') search.set('minPoints', String(params.minPoints));
+    if (params?.sortBy) search.set('sortBy', params.sortBy);
+    if (params?.direction) search.set('direction', params.direction);
+    if (typeof params?.page === 'number') search.set('page', String(params.page));
+    if (typeof params?.limit === 'number') search.set('limit', String(params.limit));
+
+    const suffix = search.toString() ? `?${search.toString()}` : '';
+    const response = await this.api.get<ApiResponse<CustomerProfile[]>>(this.buildTenantEndpoint(`/crm/customers${suffix}`));
+    if (response.data.success) {
+      return {
+        data: response.data.data || [],
+        pagination: response.data.pagination,
+      };
+    }
+    throw new Error(response.data.error || 'Failed to fetch customers');
+  }
+
+  async getCrmOverview(): Promise<CrmOverview> {
+    const response = await this.api.get<ApiResponse<CrmOverview>>(this.buildTenantEndpoint('/crm/customers/overview'));
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch CRM overview');
+  }
+
+  async getCustomerDetails(userId: string): Promise<{ profile: CustomerProfile; orderHistory: Order[] }> {
+    const response = await this.api.get<ApiResponse<{ profile: CustomerProfile; orderHistory: Order[] }>>(
+      this.buildTenantEndpoint(`/crm/customers/${userId}`)
+    );
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch customer profile');
+  }
+
+  async getMyCustomerProfile(): Promise<any> {
+    const response = await this.api.get<ApiResponse<any>>(this.buildTenantEndpoint('/crm/me'));
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch loyalty profile');
+  }
+
+  async redeemCustomerPoints(userId: string, points: number, reason?: string): Promise<CustomerProfile> {
+    const response = await this.api.post<ApiResponse<CustomerProfile>>(
+      this.buildTenantEndpoint(`/crm/customers/${userId}/redeem-points`),
+      { points, reason }
+    );
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to redeem points');
+  }
+
+  async updateCustomerNotes(userId: string, notes: string | null): Promise<CustomerProfile> {
+    const response = await this.api.patch<ApiResponse<CustomerProfile>>(this.buildTenantEndpoint(`/crm/customers/${userId}/notes`), {
+      notes,
+    });
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to update customer notes');
+  }
+
+  // Analytics methods
+  async getDailyAnalytics(date?: string): Promise<AnalyticsSnapshot> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const response = await this.api.get<ApiResponse<AnalyticsSnapshot>>(this.buildTenantEndpoint(`/analytics/daily${query}`));
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch daily analytics');
+  }
+
+  async getWeeklyAnalytics(date?: string): Promise<AnalyticsSnapshot> {
+    const query = date ? `?date=${encodeURIComponent(date)}` : '';
+    const response = await this.api.get<ApiResponse<AnalyticsSnapshot>>(this.buildTenantEndpoint(`/analytics/weekly${query}`));
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch weekly analytics');
+  }
+
+  async getAnalyticsHistory(): Promise<AnalyticsSnapshot[]> {
+    const response = await this.api.get<ApiResponse<AnalyticsSnapshot[]>>(this.buildTenantEndpoint('/analytics/history'));
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch analytics history');
+  }
+
+  async getAnalyticsOverview(params?: { start?: string; end?: string }): Promise<AnalyticsOverview> {
+    const search = new URLSearchParams();
+    if (params?.start) search.set('start', params.start);
+    if (params?.end) search.set('end', params.end);
+    const suffix = search.toString() ? `?${search.toString()}` : '';
+    const response = await this.api.get<ApiResponse<AnalyticsOverview>>(this.buildTenantEndpoint(`/analytics/overview${suffix}`));
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to fetch analytics overview');
+  }
+
+  // POS integration methods
+  async syncPosOrder(payload: {
+    sourceSystem: string;
+    externalOrderId?: string;
+    userId: string;
+    tableId: string;
+    items: Array<{ menuItemId: string; quantity: number; notes?: string }>;
+    specialInstructions?: string;
+    couponCode?: string;
+    paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH';
+  }): Promise<any> {
+    const response = await this.api.post<ApiResponse<any>>(this.buildTenantEndpoint('/pos/sync/orders'), payload);
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to sync POS order');
+  }
+
+  async getPosSyncLogs(): Promise<PosSyncLog[]> {
+    const response = await this.api.get<ApiResponse<PosSyncLog[]>>(this.buildTenantEndpoint('/pos/sync/logs'));
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch POS sync logs');
   }
 
   // Restaurant methods

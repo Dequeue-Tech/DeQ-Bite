@@ -1,6 +1,8 @@
 import { EventEmitter } from 'events';
 import type { Server as SocketIOServer } from 'socket.io';
 export type RealtimeEvent = {
+    eventId?: string;
+    sourceInstanceId?: string;
     type: string;
     restaurantId: string;
     userId?: string;

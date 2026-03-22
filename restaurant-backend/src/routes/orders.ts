@@ -1,10 +1,14 @@
 import { Router } from 'express';
 import { prisma } from '@/config/database';
+import { Prisma } from '@prisma/client';
 import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { emitRestaurantEvent } from '@/utils/realtime';
+import { createKOTTicketForOrder } from '@/modules/kot/kot.service';
+import { deductInventoryForOrder, InventoryError } from '@/modules/inventory/inventory.service';
+import { syncCustomerOrderProfile } from '@/modules/crm/crm.service';
 
 const router = Router();
 const TAX_RATE = 0.08;
@@ -276,6 +280,54 @@ router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
           }),
         ]))[0];
 
+    try {
+      await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+        await deductInventoryForOrder(tx, {
+          restaurantId: req.restaurant!.id,
+          orderId: order.id,
+          createdByUserId: userId,
+          items: orderItemsData.map((item) => ({
+            menuItemId: item.menuItemId,
+            quantity: item.quantity,
+          })),
+        });
+
+        await createKOTTicketForOrder(tx, {
+          restaurantId: req.restaurant!.id,
+          orderId: order.id,
+          createdByUserId: userId,
+          note: 'KOT created from order placement',
+        });
+
+        await syncCustomerOrderProfile(tx, {
+          restaurantId: req.restaurant!.id,
+          userId,
+          orderId: order.id,
+          totalPaise: order.totalPaise,
+          couponId: appliedCouponId,
+          couponCode: couponCode ? normalizeCouponCode(couponCode) : null,
+          discountPaise,
+          createdByUserId: userId,
+        });
+      });
+    } catch (workflowError: unknown) {
+      if (workflowError instanceof InventoryError) {
+        await prisma.order.update({
+          where: { id: order.id },
+          data: {
+            status: 'CANCELLED',
+          },
+        });
+
+        return res.status(workflowError.statusCode).json({
+          success: false,
+          error: workflowError.message,
+          details: workflowError.details,
+        });
+      }
+      throw workflowError;
+    }
+
     // Notify staff/admin about new order awaiting confirmation.
     logger.info('New order created and awaiting confirmation', {
       orderId: order.id,
@@ -289,6 +341,13 @@ router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
       type: 'order.created',
       userId: order.userId,
       payload: buildOrderEventPayload(order),
+    });
+
+    emitRestaurantEvent(order.restaurantId, {
+      type: 'kot.created',
+      payload: {
+        orderId: order.id,
+      },
     });
 
     return res.status(201).json({

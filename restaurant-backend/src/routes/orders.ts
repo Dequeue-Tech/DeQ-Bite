@@ -5,6 +5,7 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { AuthenticatedRequest } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { emitRestaurantEvent } from '@/utils/realtime';
+import { sendOrderConfirmationNotification, sendOrderCompletionNotification } from '@/lib/notification';
 
 const router = Router();
 const TAX_RATE = 0.08;
@@ -756,6 +757,18 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
       include: {
         items: { include: { menuItem: true } },
         table: true,
+        user: {
+          select: {
+            name: true,
+            email: true,
+            phone: true,
+          },
+        },
+        restaurant: {
+          select: {
+            name: true,
+          },
+        },
       },
     });
 
@@ -764,6 +777,54 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
       userId: order.userId,
       payload: buildOrderEventPayload(order),
     });
+
+    // Send notification when order status changes to CONFIRMED
+    if (status === 'CONFIRMED' && existing.status === 'PENDING') {
+      // Fire and forget - don't wait for notification to complete
+      sendOrderConfirmationNotification(order)
+        .then((result) => {
+          logger.info('Order confirmation notification result', {
+            orderId: order.id,
+            emailSent: result.emailSent,
+            smsSent: result.smsSent,
+          });
+        })
+        .catch((error) => {
+          logger.error('Order confirmation notification failed', {
+            orderId: order.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        });
+    }
+
+    // Send notification when order status changes to COMPLETED
+    if (status === 'COMPLETED' && existing.status !== 'COMPLETED') {
+      // Ensure invoice exists before sending completion notification
+      const invoice = await prisma.invoice.findUnique({
+        where: { orderId: order.id },
+      });
+
+      if (invoice?.pdfPath) {
+        sendOrderCompletionNotification(order, invoice.pdfPath)
+          .then((result) => {
+            logger.info('Order completion notification result', {
+              orderId: order.id,
+              emailSent: result.emailSent,
+              smsSent: result.smsSent,
+            });
+          })
+          .catch((error) => {
+            logger.error('Order completion notification failed', {
+              orderId: order.id,
+              error: error instanceof Error ? error.message : 'Unknown error',
+            });
+          });
+      } else {
+        logger.warn('Invoice not found for order completion notification', {
+          orderId: order.id,
+        });
+      }
+    }
 
     return res.json({ success: true, data: order, message: 'Order status updated' });
   } catch (error) {

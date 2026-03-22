@@ -27,6 +27,12 @@ const changePasswordSchema = z.object({
   newPassword: z.string().min(6, 'New password must be at least 6 characters'),
 });
 
+// Schema for adding restaurant staff/admin
+const addRestaurantMemberSchema = z.object({
+  email: z.string().email('Invalid email address'),
+  role: z.enum(['STAFF', 'ADMIN', 'OWNER']),
+});
+
 // Helper function to generate JWT token
 const generateToken = (userId: string): string => {
   const jwtSecret = process.env.JWT_SECRET;

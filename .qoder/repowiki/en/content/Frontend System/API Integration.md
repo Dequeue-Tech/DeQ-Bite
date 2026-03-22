@@ -13,10 +13,20 @@
 - [auth.ts (backend)](file://restaurant-backend/src/routes/auth.ts)
 - [menu.ts (backend)](file://restaurant-backend/src/routes/menu.ts)
 - [orders.ts (backend)](file://restaurant-backend/src/routes/orders.ts)
+- [tables.ts (backend)](file://restaurant-backend/src/routes/tables.ts)
 - [auth.ts (backend middleware)](file://restaurant-backend/src/middleware/auth.ts)
 - [api.ts (backend types)](file://restaurant-backend/src/types/api.ts)
 - [env.d.ts (backend types)](file://restaurant-backend/src/types/env.d.ts)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added comprehensive documentation for new table selection functionality in checkout process
+- Documented table preference persistence across sessions using localStorage
+- Updated checkout flow to include table selection with availability validation
+- Added table-related API endpoints and data models
+- Enhanced order placement to include table information
+- Updated frontend components to integrate table selection UI
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -24,14 +34,15 @@
 3. [Core Components](#core-components)
 4. [Architecture Overview](#architecture-overview)
 5. [Detailed Component Analysis](#detailed-component-analysis)
-6. [Dependency Analysis](#dependency-analysis)
-7. [Performance Considerations](#performance-considerations)
-8. [Troubleshooting Guide](#troubleshooting-guide)
-9. [Conclusion](#conclusion)
-10. [Appendices](#appendices)
+6. [Table Selection Functionality](#table-selection-functionality)
+7. [Dependency Analysis](#dependency-analysis)
+8. [Performance Considerations](#performance-considerations)
+9. [Troubleshooting Guide](#troubleshooting-guide)
+10. [Conclusion](#conclusion)
+11. [Appendices](#appendices)
 
 ## Introduction
-This document explains how the DeQ-Bite frontend integrates with the backend APIs using an Axios-based client. It covers configuration (base URL, interceptors, timeouts), authentication token injection, tenant-aware routing, request/response normalization, currency formatting, and internationalization for monetary values. It also documents endpoint mapping, payload structures, response normalization, error handling strategies, and practical examples for authentication, menu retrieval, and order placement. Finally, it outlines caching, retry, and offline patterns and how frontend data models map to backend entities.
+This document explains how the DeQ-Bite frontend integrates with the backend APIs using an Axios-based client. It covers configuration (base URL, interceptors, timeouts), authentication token injection, tenant-aware routing, request/response normalization, currency formatting, and internationalization for monetary values. It also documents endpoint mapping, payload structures, response normalization, error handling strategies, and practical examples for authentication, menu retrieval, order placement, and the new table selection functionality. Finally, it outlines caching, retry, and offline patterns and how frontend data models map to backend entities.
 
 ## Project Structure
 The API integration spans two packages:
@@ -49,11 +60,13 @@ PG2["Menu Page<br/>app/menu/page.tsx"]
 PG3["Cart Page<br/>app/cart/page.tsx"]
 PG4["Checkout Page<br/>app/checkout/page.tsx"]
 CUR["Currency Utils<br/>lib/currency.ts"]
+TBL["Table Utils<br/>localStorage"]
 end
 subgraph "Backend"
 RT1["Auth Routes<br/>routes/auth.ts"]
 RT2["Menu Routes<br/>routes/menu.ts"]
 RT3["Orders Routes<br/>routes/orders.ts"]
+RT4["Tables Routes<br/>routes/tables.ts"]
 MW["Auth Middleware<br/>middleware/auth.ts"]
 TY["Shared Types<br/>types/api.ts"]
 EV["Env Types<br/>types/env.d.ts"]
@@ -67,14 +80,17 @@ ST2 --> AX
 AX --> RT1
 AX --> RT2
 AX --> RT3
+AX --> RT4
 RT1 --> MW
 RT2 --> MW
 RT3 --> MW
+RT4 --> MW
 AX --> CUR
 AX --> TY
 RT1 --> TY
 RT2 --> TY
 RT3 --> TY
+RT4 --> TY
 MW --> TY
 RT1 --> EV
 ```
@@ -90,6 +106,7 @@ RT1 --> EV
 - [auth.ts (backend):10-390](file://restaurant-backend/src/routes/auth.ts#L10-L390)
 - [menu.ts (backend):8-356](file://restaurant-backend/src/routes/menu.ts#L8-L356)
 - [orders.ts (backend):9-694](file://restaurant-backend/src/routes/orders.ts#L9-L694)
+- [tables.ts (backend):1-106](file://restaurant-backend/src/routes/tables.ts#L1-L106)
 - [auth.ts (backend middleware):7-75](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
 - [api.ts (backend types):107-114](file://restaurant-backend/src/types/api.ts#L107-L114)
 - [env.d.ts (backend types):3-28](file://restaurant-backend/src/types/env.d.ts#L3-L28)
@@ -105,6 +122,7 @@ RT1 --> EV
 - [auth.ts (backend):10-390](file://restaurant-backend/src/routes/auth.ts#L10-L390)
 - [menu.ts (backend):8-356](file://restaurant-backend/src/routes/menu.ts#L8-L356)
 - [orders.ts (backend):9-694](file://restaurant-backend/src/routes/orders.ts#L9-L694)
+- [tables.ts (backend):1-106](file://restaurant-backend/src/routes/tables.ts#L1-L106)
 - [auth.ts (backend middleware):7-75](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
 - [api.ts (backend types):107-114](file://restaurant-backend/src/types/api.ts#L107-L114)
 - [env.d.ts (backend types):3-28](file://restaurant-backend/src/types/env.d.ts#L3-L28)
@@ -115,10 +133,11 @@ RT1 --> EV
   - Request interceptor injecting Authorization and tenant slug
   - Response interceptor handling 401 and redirecting to sign-in
   - Tenant-aware endpoint builder
-  - Strongly typed methods for auth, menu, orders, payments, invoices, coupons, restaurants, offers, and generic helpers
+  - Strongly typed methods for auth, menu, orders, payments, invoices, coupons, restaurants, offers, tables, and generic helpers
 - Currency utilities for INR formatting and conversion to paise
 - Frontend stores for auth and cart state with persistence
 - Pages orchestrating API calls and rendering responses
+- **New**: Table selection functionality with preference persistence across sessions
 
 Key implementation references:
 - Client initialization and interceptors: [api-client.ts:194-240](file://restaurant-frontend/src/lib/api-client.ts#L194-L240)
@@ -127,6 +146,8 @@ Key implementation references:
 - Currency formatting: [currency.ts:1-12](file://restaurant-frontend/src/lib/currency.ts#L1-L12)
 - Auth store actions: [auth.ts:24-177](file://restaurant-frontend/src/store/auth.ts#L24-L177)
 - Cart store actions: [cart.ts:26-92](file://restaurant-frontend/src/store/cart.ts#L26-L92)
+- Table selection utilities: [api-client.ts:297-316](file://restaurant-frontend/src/lib/api-client.ts#L297-L316)
+- Table API methods: [api-client.ts:623-632](file://restaurant-frontend/src/lib/api-client.ts#L623-L632)
 
 **Section sources**
 - [api-client.ts:194-240](file://restaurant-frontend/src/lib/api-client.ts#L194-L240)
@@ -134,9 +155,11 @@ Key implementation references:
 - [currency.ts:1-12](file://restaurant-frontend/src/lib/currency.ts#L1-L12)
 - [auth.ts:24-177](file://restaurant-frontend/src/store/auth.ts#L24-L177)
 - [cart.ts:26-92](file://restaurant-frontend/src/store/cart.ts#L26-L92)
+- [api-client.ts:297-316](file://restaurant-frontend/src/lib/api-client.ts#L297-L316)
+- [api-client.ts:623-632](file://restaurant-frontend/src/lib/api-client.ts#L623-L632)
 
 ## Architecture Overview
-The frontend communicates with the backend through a tenant-aware API. Requests include an Authorization header and an optional tenant slug header. Responses follow a consistent envelope with success/data/message/error fields. The backend enforces authentication and optional tenant membership via middleware.
+The frontend communicates with the backend through a tenant-aware API. Requests include an Authorization header and an optional tenant slug header. Responses follow a consistent envelope with success/data/message/error fields. The backend enforces authentication and optional tenant membership via middleware. The new table selection feature integrates seamlessly with this architecture, persisting table preferences across sessions.
 
 ```mermaid
 sequenceDiagram
@@ -144,15 +167,18 @@ participant FE as "Frontend Page"
 participant Store as "Frontend Store"
 participant Client as "ApiClient"
 participant Axios as "Axios Instance"
-participant BE as "Backend Route"
+participant Tables as "Tables Route"
+participant Orders as "Orders Route"
 participant MW as "Auth Middleware"
 FE->>Store : Trigger action (e.g., login)
 Store->>Client : Call method (e.g., login)
 Client->>Axios : HTTP request (with Authorization and x-restaurant-slug)
-Axios->>BE : Forward request
-BE->>MW : Authenticate and attach user/restaurant context
-MW-->>BE : Authorized request
-BE-->>Axios : ApiResponse envelope
+Axios->>Tables : GET /api/restaurants/ : slug/tables
+Tables->>MW : Authenticate and attach restaurant context
+MW-->>Tables : Authorized request
+Tables-->>Axios : Available tables list
+Axios->>Orders : POST /api/restaurants/ : slug/orders
+Orders-->>Axios : Order with table info
 Axios-->>Client : Response
 Client-->>Store : Normalize and return data
 Store-->>FE : Update UI state
@@ -162,7 +188,8 @@ Store-->>FE : Update UI state
 - [page.tsx (SignIn):18-32](file://restaurant-frontend/src/app/auth/signin/page.tsx#L18-L32)
 - [auth.ts:33-55](file://restaurant-frontend/src/store/auth.ts#L33-L55)
 - [api-client.ts:206-222](file://restaurant-frontend/src/lib/api-client.ts#L206-L222)
-- [auth.ts (backend):104-158](file://restaurant-backend/src/routes/auth.ts#L104-L158)
+- [tables.ts (backend):35-62](file://restaurant-backend/src/routes/tables.ts#L35-L62)
+- [orders.ts (backend):83-117](file://restaurant-backend/src/routes/orders.ts#L83-L117)
 - [auth.ts (backend middleware):7-75](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
 - [api.ts (backend types):107-114](file://restaurant-backend/src/types/api.ts#L107-L114)
 
@@ -341,7 +368,7 @@ Format --> Out(["Formatted string"])
 
 ### Data Models and Payload Normalization
 - Frontend models:
-  - Strongly typed interfaces for User, Restaurant, Menu, Order, etc.
+  - Strongly typed interfaces for User, Restaurant, Menu, Order, Table, etc.
   - ApiResponse envelope with success/data/message/error
 - Backend models:
   - Shared types define entities and envelopes
@@ -366,6 +393,13 @@ class User {
 +string role
 +boolean verified
 }
+class Table {
++string id
++number number
++number capacity
++string location
++boolean active
+}
 class MenuItem {
 +string id
 +string name
@@ -388,6 +422,7 @@ class Order {
 +string paymentStatus
 }
 ApiResponse --> User
+ApiResponse --> Table
 ApiResponse --> MenuItem
 ApiResponse --> Order
 ```
@@ -400,11 +435,89 @@ ApiResponse --> Order
 - [api.ts (backend types):107-114](file://restaurant-backend/src/types/api.ts#L107-L114)
 - [api-client.ts:12-183](file://restaurant-frontend/src/lib/api-client.ts#L12-L183)
 
+## Table Selection Functionality
+
+### Overview
+The table selection feature allows customers to choose their dining table during checkout, with preference persistence across browser sessions. The system automatically loads previously selected tables and validates availability when users revisit the checkout page.
+
+### Key Features
+- **Table Discovery**: Fetches available tables from the backend
+- **Selection Persistence**: Stores table choice in localStorage
+- **Availability Validation**: Validates table availability when loading saved selections
+- **Locking Mechanism**: Prevents table changes after selection for QR-generated orders
+- **Real-time Updates**: Dispatches events when table preferences change
+
+### Implementation Details
+
+#### Frontend Integration
+The checkout page implements comprehensive table selection logic:
+
+```mermaid
+flowchart TD
+Start(["Checkout Page Load"]) --> CheckAuth["Check Authentication"]
+CheckAuth --> LoadSaved["Load Saved Table Number"]
+LoadSaved --> HasSaved{"Table Found?"}
+HasSaved --> |Yes| ValidateAvail["Validate Table Availability"]
+HasSaved --> |No| FetchTables["Fetch Available Tables"]
+ValidateAvail --> AvailValid{"Table Available?"}
+AvailValid --> |Yes| LockSelection["Lock Selection (QR Orders)"]
+AvailValid --> |No| ClearSaved["Clear Saved Selection"]
+ClearSaved --> FetchTables
+LockSelection --> ShowTable["Display Selected Table"]
+FetchTables --> RenderGrid["Render Table Selection Grid"]
+RenderGrid --> UserSelect["User Selects Table"]
+UserSelect --> SavePref["Save to localStorage"]
+SavePref --> UpdateState["Update React State"]
+```
+
+**Diagram sources**
+- [page.tsx (Checkout):89-95](file://restaurant-frontend/src/app/checkout/page.tsx#L89-L95)
+- [page.tsx (Checkout):126-143](file://restaurant-frontend/src/app/checkout/page.tsx#L126-L143)
+- [page.tsx (Checkout):145-156](file://restaurant-frontend/src/app/checkout/page.tsx#L145-L156)
+
+#### API Integration
+The API client provides dedicated table management methods:
+
+- `getTables()`: Retrieves all tables for the current restaurant
+- `getAvailableTables()`: Retrieves only active tables
+- `setSelectedTableNumber()`: Persists table selection in localStorage
+- `getSelectedTableNumber()`: Retrieves saved table selection
+- `clearSelectedTableNumber()`: Removes saved table selection
+
+#### Backend Support
+The backend exposes table management endpoints:
+
+- `GET /api/restaurants/:slug/tables`: Returns all tables for a restaurant
+- `GET /api/restaurants/:slug/tables/available`: Returns active tables only
+- `GET /api/restaurants/:slug/tables/:id`: Returns specific table details
+
+**Section sources**
+- [page.tsx (Checkout):89-95](file://restaurant-frontend/src/app/checkout/page.tsx#L89-L95)
+- [page.tsx (Checkout):126-143](file://restaurant-frontend/src/app/checkout/page.tsx#L126-L143)
+- [page.tsx (Checkout):145-156](file://restaurant-frontend/src/app/checkout/page.tsx#L145-L156)
+- [api-client.ts:297-316](file://restaurant-frontend/src/lib/api-client.ts#L297-L316)
+- [api-client.ts:623-632](file://restaurant-frontend/src/lib/api-client.ts#L623-L632)
+- [tables.ts (backend):9-33](file://restaurant-backend/src/routes/tables.ts#L9-L33)
+- [tables.ts (backend):35-62](file://restaurant-backend/src/routes/tables.ts#L35-L62)
+
+### Order Integration
+Table information is seamlessly integrated into the order placement flow:
+
+- **Order Creation**: Includes `tableId` in the order payload
+- **Validation**: Backend validates table existence and active status
+- **Persistence**: Table information is stored with the order record
+- **Display**: Table details are included in order summaries and notifications
+
+**Section sources**
+- [page.tsx (Checkout):219-225](file://restaurant-frontend/src/app/checkout/page.tsx#L219-L225)
+- [orders.ts (backend):111-117](file://restaurant-backend/src/routes/orders.ts#L111-L117)
+
 ## Dependency Analysis
 - Frontend depends on:
   - Axios client for HTTP
   - Stores for state management
   - Currency utilities for formatting
+  - **New**: Table utilities for preference persistence
 - Backend depends on:
   - Auth middleware for JWT verification
   - Prisma for data access
@@ -418,6 +531,7 @@ AX --> BE["Backend Routes"]
 BE --> MW["Auth Middleware"]
 BE --> PR["Prisma"]
 FE --> CU["Currency Utils"]
+FE --> TBL["Table Utils"]
 ```
 
 **Diagram sources**
@@ -434,11 +548,13 @@ FE --> CU["Currency Utils"]
 - Timeout: 25 seconds to avoid hanging requests
 - Concurrent requests: Fetch categories and menu items together on menu page
 - Local caching: Use stores to minimize repeated network calls
+- **New**: Table preference caching in localStorage to avoid unnecessary API calls
 - Precision: Work in paise to avoid floating-point errors
 - Recommendations:
   - Implement optimistic UI for cart updates
   - Debounce search/filter operations
   - Use background sync for offline order drafts
+  - Cache table availability for better UX
 
 [No sources needed since this section provides general guidance]
 
@@ -453,6 +569,10 @@ Common issues and remedies:
 - Business logic errors:
   - Backend validates items, tables, coupons, and payment providers
   - Client surfaces error messages from ApiResponse.error
+- **New**: Table selection issues:
+  - If saved table is unavailable, system automatically clears preference
+  - Verify restaurant has active tables configured
+  - Check localStorage quota if table preferences aren't saving
 - Payment verification failures:
   - Client maps specific backend error messages to actionable feedback
 
@@ -460,9 +580,10 @@ Common issues and remedies:
 - [api-client.ts:224-239](file://restaurant-frontend/src/lib/api-client.ts#L224-L239)
 - [auth.ts (backend middleware):40-44](file://restaurant-backend/src/middleware/auth.ts#L40-L44)
 - [orders.ts (backend):160-168](file://restaurant-backend/src/routes/orders.ts#L160-L168)
+- [page.tsx (Checkout):145-156](file://restaurant-frontend/src/app/checkout/page.tsx#L145-L156)
 
 ## Conclusion
-The API integration leverages a tenant-aware Axios client with robust interceptors, consistent response envelopes, and strong typing. Authentication is centralized via JWT with automatic header injection and 401 handling. Monetary values are consistently represented in paise and formatted for display. The frontend orchestrates flows for authentication, menu browsing, cart management, and order placement, while the backend enforces validation, computes totals, and emits real-time updates.
+The API integration leverages a tenant-aware Axios client with robust interceptors, consistent response envelopes, and strong typing. Authentication is centralized via JWT with automatic header injection and 401 handling. Monetary values are consistently represented in paise and formatted for display. The frontend orchestrates flows for authentication, menu browsing, cart management, and order placement, while the backend enforces validation, computes totals, and emits real-time updates. **The new table selection functionality enhances the checkout experience by allowing customers to choose their dining table with preference persistence across sessions, integrating seamlessly with the existing architecture and providing a smooth user experience.**
 
 [No sources needed since this section summarizes without analyzing specific files]
 
@@ -478,6 +599,10 @@ The API integration leverages a tenant-aware Axios client with robust intercepto
   - GET /api/restaurants/:slug/menu → getMenuItems(categoryId?)
   - GET /api/restaurants/:slug/menu/:id → getMenuItem(id)
   - GET /api/restaurants/:slug/categories → getCategories()
+- **New**: Tables
+  - GET /api/restaurants/:slug/tables → getTables()
+  - GET /api/restaurants/:slug/tables/available → getAvailableTables()
+  - GET /api/restaurants/:slug/tables/:id → getTable(id)
 - Orders
   - POST /api/restaurants/:slug/orders → createOrder(orderData)
   - POST /api/restaurants/:slug/orders/:id/items → addOrderItems(orderId, payload)
@@ -498,6 +623,7 @@ The API integration leverages a tenant-aware Axios client with robust intercepto
 Example usage references:
 - Authentication: [page.tsx (SignIn):18-32](file://restaurant-frontend/src/app/auth/signin/page.tsx#L18-L32), [auth.ts:33-55](file://restaurant-frontend/src/store/auth.ts#L33-L55)
 - Menu retrieval: [page.tsx (Menu):46-86](file://restaurant-frontend/src/app/menu/page.tsx#L46-L86)
+- **New**: Table selection: [page.tsx (Checkout):126-143](file://restaurant-frontend/src/app/checkout/page.tsx#L126-L143), [page.tsx (Checkout):386-401](file://restaurant-frontend/src/app/checkout/page.tsx#L386-L401)
 - Order placement: [page.tsx (Checkout):142-222](file://restaurant-frontend/src/app/checkout/page.tsx#L142-L222), [api-client.ts:595-609](file://restaurant-frontend/src/lib/api-client.ts#L595-L609)
 - Payment flow: [page.tsx (Checkout):321-343](file://restaurant-frontend/src/app/checkout/page.tsx#L321-L343), [api-client.ts:381-440](file://restaurant-frontend/src/lib/api-client.ts#L381-L440)
 
@@ -505,6 +631,8 @@ Example usage references:
 - [page.tsx (SignIn):18-32](file://restaurant-frontend/src/app/auth/signin/page.tsx#L18-L32)
 - [auth.ts:33-55](file://restaurant-frontend/src/store/auth.ts#L33-L55)
 - [page.tsx (Menu):46-86](file://restaurant-frontend/src/app/menu/page.tsx#L46-L86)
+- [page.tsx (Checkout):126-143](file://restaurant-frontend/src/app/checkout/page.tsx#L126-L143)
+- [page.tsx (Checkout):386-401](file://restaurant-frontend/src/app/checkout/page.tsx#L386-L401)
 - [page.tsx (Checkout):142-222](file://restaurant-frontend/src/app/checkout/page.tsx#L142-L222)
 - [api-client.ts:381-440](file://restaurant-frontend/src/lib/api-client.ts#L381-L440)
 - [api-client.ts:595-609](file://restaurant-frontend/src/lib/api-client.ts#L595-L609)
@@ -513,11 +641,13 @@ Example usage references:
 - Caching:
   - Use stores to cache menu and categories
   - Invalidate on slug changes or explicit refresh
+  - **New**: Cache table preferences in localStorage for immediate loading
 - Retry:
   - Implement exponential backoff for transient failures
   - Retry idempotent operations (e.g., order creation) after network errors
 - Offline:
   - Persist cart items and draft orders
   - Sync on reconnection and resolve conflicts (e.g., availability changes)
+  - **New**: Store table preferences locally to maintain user experience during offline scenarios
 
 [No sources needed since this section provides general guidance]

@@ -11,6 +11,7 @@ import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { cacheResponse } from '@/middleware/cache';
+import { sendOrderCompletionNotification } from '@/lib/notification';
 
 const router = Router();
 
@@ -402,6 +403,30 @@ router.post('/verify', authenticate, requireRestaurant, asyncHandler(async (req:
   });
 
   await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+
+  // Send completion notification if payment is fully completed
+  if (computed.paymentStatus === 'COMPLETED') {
+    const invoice = await prisma.invoice.findUnique({ 
+      where: { orderId: order.id } 
+    });
+    
+    if (invoice?.pdfPath) {
+      sendOrderCompletionNotification(updatedOrder, invoice.pdfPath)
+        .then((result) => {
+          logger.info('Payment completion notification result', {
+            orderId: order.id,
+            emailSent: result.emailSent,
+            smsSent: result.smsSent,
+          });
+        })
+        .catch((error) => {
+          logger.error('Payment completion notification failed', {
+            orderId: order.id,
+            error: error instanceof Error ? error.message : 'Unknown error',
+          });
+        });
+    }
+  }
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',

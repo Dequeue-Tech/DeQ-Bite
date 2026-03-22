@@ -14,6 +14,13 @@
 - [package.json](file://restaurant-backend/package.json)
 </cite>
 
+## Update Summary
+**Changes Made**
+- Added comprehensive indexing strategy documentation for all major entities
+- Updated Performance Considerations section with strategic index explanations
+- Enhanced Indexing Strategy section with detailed composite index analysis
+- Added new section on Query Optimization Patterns with index usage examples
+
 ## Table of Contents
 1. [Introduction](#introduction)
 2. [Project Structure](#project-structure)
@@ -60,19 +67,19 @@ Payments --> Providers
 ```
 
 **Diagram sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L1-L384)
-- [seed.ts](file://restaurant-backend/prisma/seed.ts#L1-L288)
-- [seed-haveli.ts](file://restaurant-backend/prisma/seed-haveli.ts#L1-L156)
-- [database.ts](file://restaurant-backend/src/config/database.ts#L1-L66)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L1-L694)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L1-L731)
-- [audit.ts](file://restaurant-backend/src/utils/audit.ts#L1-L17)
-- [prisma-data-examples.ts](file://restaurant-backend/src/utils/prisma-data-examples.ts#L1-L236)
+- [schema.prisma:1-416](file://restaurant-backend/prisma/schema.prisma#L1-L416)
+- [seed.ts:1-388](file://restaurant-backend/prisma/seed.ts#L1-L388)
+- [seed-haveli.ts:1-156](file://restaurant-backend/prisma/seed-haveli.ts#L1-L156)
+- [database.ts:1-85](file://restaurant-backend/src/config/database.ts#L1-L85)
+- [orders.ts:1-694](file://restaurant-backend/src/routes/orders.ts#L1-L694)
+- [payments.ts:1-731](file://restaurant-backend/src/routes/payments.ts#L1-L731)
+- [audit.ts:1-17](file://restaurant-backend/src/utils/audit.ts#L1-L17)
+- [prisma-data-examples.ts:1-236](file://restaurant-backend/src/utils/prisma-data-examples.ts#L1-L236)
 
 **Section sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L1-L384)
-- [database.ts](file://restaurant-backend/src/config/database.ts#L1-L66)
-- [package.json](file://restaurant-backend/package.json#L6-L16)
+- [schema.prisma:1-416](file://restaurant-backend/prisma/schema.prisma#L1-L416)
+- [database.ts:1-85](file://restaurant-backend/src/config/database.ts#L1-L85)
+- [package.json:6-16](file://restaurant-backend/package.json#L6-L16)
 
 ## Core Components
 - Users: Customer, admin, staff, central admin, owner, kitchen staff with roles and verification.
@@ -91,7 +98,7 @@ Payments --> Providers
 - Audit Logs: Centralized audit trail for actions and entities.
 
 **Section sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L306)
+- [schema.prisma:11-325](file://restaurant-backend/prisma/schema.prisma#L11-L325)
 
 ## Architecture Overview
 End-to-end flow from customer order creation to payment completion and invoice/earning generation.
@@ -119,8 +126,8 @@ Payments-->>Client : "Payment verified"
 ```
 
 **Diagram sources**
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L82-L267)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L196-L407)
+- [orders.ts:82-267](file://restaurant-backend/src/routes/orders.ts#L82-L267)
+- [payments.ts:196-407](file://restaurant-backend/src/routes/payments.ts#L196-L407)
 
 ## Detailed Component Analysis
 
@@ -150,10 +157,10 @@ MENU_ITEM ||--o{ ORDER_ITEM : "is_ordered_as"
 ```
 
 **Diagram sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L306)
+- [schema.prisma:11-325](file://restaurant-backend/prisma/schema.prisma#L11-L325)
 
 **Section sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L306)
+- [schema.prisma:11-325](file://restaurant-backend/prisma/schema.prisma#L11-L325)
 
 ### Prisma Schema Definition Highlights
 - Data Types and Constraints:
@@ -170,7 +177,7 @@ MENU_ITEM ||--o{ ORDER_ITEM : "is_ordered_as"
   - UserRole, RestaurantRole, CouponType, PaymentProvider, PaymentCollectionTiming, OrderStatus, PaymentStatus, SpiceLevel, InvoiceMethod, OfferType, OnboardingStatus.
 
 **Section sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L384)
+- [schema.prisma:11-416](file://restaurant-backend/prisma/schema.prisma#L11-L416)
 
 ### Migration Strategy
 - Development migrations:
@@ -188,8 +195,8 @@ Operational notes:
 - Production logging reduces verbosity; development logs queries and info.
 
 **Section sources**
-- [package.json](file://restaurant-backend/package.json#L13-L16)
-- [database.ts](file://restaurant-backend/src/config/database.ts#L4-L27)
+- [package.json:13-16](file://restaurant-backend/package.json#L13-L16)
+- [database.ts:4-27](file://restaurant-backend/src/config/database.ts#L4-L27)
 
 ### Seed Data Implementation and Sample Data
 - Main seed:
@@ -214,14 +221,77 @@ UpsertCoupons --> End(["Seed Completed"])
 ```
 
 **Diagram sources**
-- [seed.ts](file://restaurant-backend/prisma/seed.ts#L7-L272)
+- [seed.ts:7-378](file://restaurant-backend/prisma/seed.ts#L7-L378)
 
 **Section sources**
-- [seed.ts](file://restaurant-backend/prisma/seed.ts#L1-L288)
-- [seed-haveli.ts](file://restaurant-backend/prisma/seed-haveli.ts#L1-L156)
-- [sampleData.ts](file://restaurant-backend/src/lib/sampleData.ts#L1-L557)
+- [seed.ts:1-388](file://restaurant-backend/prisma/seed.ts#L1-L388)
+- [seed-haveli.ts:1-156](file://restaurant-backend/prisma/seed-haveli.ts#L1-L156)
+- [sampleData.ts:1-557](file://restaurant-backend/src/lib/sampleData.ts#L1-L557)
 
 ### Indexing Strategy and Referential Integrity
+**Updated** Strategic indexing has been implemented across all major entities to optimize query performance for common business operations.
+
+#### Strategic Indexing Implementation
+
+**Restaurant Users (restaurant_users):**
+- Primary composite index: `@@index([restaurantId, userId, active])`
+- Purpose: Optimizes user-role lookups and active membership queries
+- Usage patterns: Role validation, user permissions, active staff filtering
+
+**Categories (categories):**
+- Composite index: `@@index([restaurantId, active, sortOrder])`
+- Purpose: Optimizes category listing with sorting and filtering
+- Usage patterns: Menu display, category navigation, active category queries
+
+**Menu Items (menu_items):**
+- Composite index: `@@index([restaurantId, available])`
+- Purpose: Optimizes menu availability queries
+- Usage patterns: Active menu display, availability checks
+- Composite index: `@@index([restaurantId, categoryId])`
+- Purpose: Optimizes category-based menu queries
+- Usage patterns: Category-specific menu loading
+
+**Tables (tables):**
+- Composite index: `@@index([restaurantId, active])`
+- Purpose: Optimizes table availability and status queries
+- Usage patterns: Table booking, availability checks, active table filtering
+
+**Orders (orders):**
+- Composite index: `@@index([restaurantId, createdAt])`
+- Purpose: Optimizes order listing by restaurant and chronological order
+- Usage patterns: Restaurant dashboard, order history
+- Composite index: `@@index([restaurantId, userId, createdAt])`
+- Purpose: Optimizes customer order history queries
+- Usage patterns: Customer profile, order tracking
+- Composite index: `@@index([restaurantId, status, createdAt])`
+- Purpose: Optimizes order status filtering and reporting
+- Usage patterns: Kitchen display, status monitoring
+- Composite index: `@@index([restaurantId, paymentStatus, createdAt])`
+- Purpose: Optimizes payment-related order queries
+- Usage patterns: Financial reporting, payment reconciliation
+
+**Offers (offers):**
+- Composite index: `@@index([restaurantId, active])`
+- Purpose: Optimizes active offer queries
+- Usage patterns: Offer display, promotion filtering
+- Composite index: `@@index([restaurantId, startsAt, endsAt])`
+- Purpose: Optimizes time-based offer queries
+- Usage patterns: Active promotion filtering, schedule management
+
+**Payments (payments):**
+- Composite index: `@@index([orderId])`
+- Purpose: Optimizes payment lookup by order
+- Usage patterns: Payment verification, order payment status
+- Composite index: `@@index([restaurantId, createdAt])`
+- Purpose: Optimizes payment reporting by restaurant
+- Usage patterns: Financial analytics, revenue tracking
+
+**Invoices (invoices):**
+- Composite index: `@@index([issuedAt])`
+- Purpose: Optimizes invoice listing by creation date
+- Usage patterns: Invoice management, financial reporting
+
+#### Unique Constraints and Referential Integrity
 - Unique constraints:
   - User.email, User.phone, Restaurant.slug, Restaurant.subdomain.
   - RestaurantUser: unique(restaurantId, userId).
@@ -246,7 +316,7 @@ UpsertCoupons --> End(["Seed Completed"])
   - Prisma enforces referential integrity at the ORM level; PostgreSQL constraints align with these definitions.
 
 **Section sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L306)
+- [schema.prisma:75-325](file://restaurant-backend/prisma/schema.prisma#L75-L325)
 
 ### Data Modeling Approach
 - Money Modeling:
@@ -265,9 +335,9 @@ UpsertCoupons --> End(["Seed Completed"])
   - Onboarding status and suspension reasons.
 
 **Section sources**
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L14-L80)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L44-L166)
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L144-L293)
+- [orders.ts:14-80](file://restaurant-backend/src/routes/orders.ts#L14-L80)
+- [payments.ts:44-166](file://restaurant-backend/src/routes/payments.ts#L44-L166)
+- [schema.prisma:167-325](file://restaurant-backend/prisma/schema.prisma#L167-L325)
 
 ### Query Patterns and Aggregation Examples
 - Comprehensive user data with orders, items, and invoice:
@@ -278,7 +348,7 @@ UpsertCoupons --> End(["Seed Completed"])
   - Group-by paymentStatus and monthly totals for user analytics.
 
 **Section sources**
-- [prisma-data-examples.ts](file://restaurant-backend/src/utils/prisma-data-examples.ts#L11-L235)
+- [prisma-data-examples.ts:11-235](file://restaurant-backend/src/utils/prisma-data-examples.ts#L11-L235)
 
 ## Dependency Analysis
 - Prisma Client connects to PostgreSQL using DATABASE_URL/DIRECT_DATABASE_URL.
@@ -296,30 +366,63 @@ PaymentsRoute --> Providers["Payment Providers"]
 ```
 
 **Diagram sources**
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L1-L694)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L1-L731)
-- [audit.ts](file://restaurant-backend/src/utils/audit.ts#L1-L17)
-- [database.ts](file://restaurant-backend/src/config/database.ts#L1-L66)
+- [orders.ts:1-694](file://restaurant-backend/src/routes/orders.ts#L1-L694)
+- [payments.ts:1-731](file://restaurant-backend/src/routes/payments.ts#L1-L731)
+- [audit.ts:1-17](file://restaurant-backend/src/utils/audit.ts#L1-L17)
+- [database.ts:1-85](file://restaurant-backend/src/config/database.ts#L1-L85)
 
 **Section sources**
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L1-L694)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L1-L731)
-- [audit.ts](file://restaurant-backend/src/utils/audit.ts#L1-L17)
-- [database.ts](file://restaurant-backend/src/config/database.ts#L1-L66)
+- [orders.ts:1-694](file://restaurant-backend/src/routes/orders.ts#L1-L694)
+- [payments.ts:1-731](file://restaurant-backend/src/routes/payments.ts#L1-L731)
+- [audit.ts:1-17](file://restaurant-backend/src/utils/audit.ts#L1-L17)
+- [database.ts:1-85](file://restaurant-backend/src/config/database.ts#L1-L85)
 
 ## Performance Considerations
-- Monetary Precision:
-  - Store amounts in paise (integer) to avoid floating-point inconsistencies.
-- Transactions:
-  - Use Prisma transactions for coupon application, order updates, and payment recording to maintain consistency.
-- Aggregations:
-  - Prefer Prisma groupBy for analytics to keep logic in the database layer.
-- Logging:
-  - Adjust Prisma log levels by environment to balance observability and overhead.
-- Acceleration:
-  - Optional Prisma Accelerate extension can be enabled when available.
+**Updated** Strategic indexing has been implemented across all major entities to significantly improve query performance for common business operations.
 
-[No sources needed since this section provides general guidance]
+### Strategic Indexing Benefits
+
+**Enhanced Query Performance:**
+- Restaurant Users: Composite index `@@index([restaurantId, userId, active])` optimizes user-role lookups and active membership queries
+- Categories: Composite index `@@index([restaurantId, active, sortOrder])` enables efficient menu display with sorting
+- Menu Items: Dual indexing (`restaurantId, available` and `restaurantId, categoryId`) optimizes both availability and category-based queries
+- Orders: Multiple composite indexes enable efficient filtering by restaurant, user, status, and payment status
+- Payments: Optimized payment lookup by order and restaurant-based reporting
+
+### Database Optimization Strategies
+
+**Monetary Precision:**
+- Store amounts in paise (integer) to avoid floating-point inconsistencies.
+- All money fields use integer storage with dedicated conversion utilities.
+
+**Transaction Management:**
+- Use Prisma transactions for coupon application, order updates, and payment recording to maintain consistency.
+- Implement proper rollback handling for payment failures.
+
+**Aggregation Optimization:**
+- Prefer Prisma groupBy for analytics to keep logic in the database layer.
+- Leverage composite indexes for efficient filtering and sorting in aggregations.
+
+**Logging and Monitoring:**
+- Adjust Prisma log levels by environment to balance observability and overhead.
+- Implement slow query detection with configurable thresholds.
+- Optional Prisma Accelerate extension for production scaling.
+
+**Index Utilization Patterns:**
+- Restaurant queries benefit from `restaurantId` prefixed indexes
+- Time-based queries utilize `createdAt` indexes for chronological ordering
+- Status-based queries leverage multi-column indexes for filtering
+- Composite indexes minimize table scans for complex queries
+
+### Performance Monitoring
+- Slow query detection with configurable thresholds
+- Query event logging with duration tracking
+- Production logging optimized for minimal overhead
+- Optional acceleration extension for high-throughput scenarios
+
+**Section sources**
+- [schema.prisma:75-325](file://restaurant-backend/prisma/schema.prisma#L75-L325)
+- [database.ts:4-43](file://restaurant-backend/src/config/database.ts#L4-L43)
 
 ## Troubleshooting Guide
 - Audit Log Table Absent:
@@ -328,16 +431,18 @@ PaymentsRoute --> Providers["Payment Providers"]
   - Verify DATABASE_URL and DIRECT_DATABASE_URL; check Prisma client initialization and environment-specific logging.
 - Migration Issues:
   - Use npm run db:migrate to apply migrations; npm run db:studio to inspect schema/data; npm run db:reset to reset and re-seed.
+- Index Performance Issues:
+  - Monitor slow query logs to identify missing index usage.
+  - Review composite index patterns for optimal query performance.
+  - Consider adding additional indexes for frequently executed queries.
 
 **Section sources**
-- [audit.ts](file://restaurant-backend/src/utils/audit.ts#L5-L16)
-- [database.ts](file://restaurant-backend/src/config/database.ts#L4-L27)
-- [package.json](file://restaurant-backend/package.json#L13-L16)
+- [audit.ts:5-16](file://restaurant-backend/src/utils/audit.ts#L5-L16)
+- [database.ts:4-27](file://restaurant-backend/src/config/database.ts#L4-L27)
+- [package.json:13-16](file://restaurant-backend/package.json#L13-L16)
 
 ## Conclusion
-The DeQ-Bite database design leverages Prisma ORM to model a restaurant ecosystem with clear entities, enforced referential integrity, and robust payment and ordering workflows. The schema, seeds, and route logic provide a solid foundation for development and production, with room for performance tuning and operational enhancements.
-
-[No sources needed since this section summarizes without analyzing specific files]
+The DeQ-Bite database design leverages Prisma ORM to model a restaurant ecosystem with clear entities, enforced referential integrity, and robust payment and ordering workflows. The strategic indexing optimizations provide significant performance improvements across all major business operations. The schema, seeds, and route logic provide a solid foundation for development and production, with room for performance tuning and operational enhancements.
 
 ## Appendices
 
@@ -346,16 +451,17 @@ The DeQ-Bite database design leverages Prisma ORM to model a restaurant ecosyste
 - Seed scripts import these samples and map them to the database.
 
 **Section sources**
-- [sampleData.ts](file://restaurant-backend/src/lib/sampleData.ts#L1-L557)
-- [seed.ts](file://restaurant-backend/prisma/seed.ts#L1-L288)
-- [seed-haveli.ts](file://restaurant-backend/prisma/seed-haveli.ts#L1-L156)
+- [sampleData.ts:1-557](file://restaurant-backend/src/lib/sampleData.ts#L1-L557)
+- [seed.ts:1-388](file://restaurant-backend/prisma/seed.ts#L1-L388)
+- [seed-haveli.ts:1-156](file://restaurant-backend/prisma/seed-haveli.ts#L1-L156)
 
 ### B. Prisma Client Initialization and Environment
 - Client creation respects NODE_ENV for logging.
 - Optional Prisma Accelerate extension is conditionally loaded.
+- Slow query detection with configurable thresholds and parameter logging.
 
 **Section sources**
-- [database.ts](file://restaurant-backend/src/config/database.ts#L4-L27)
+- [database.ts:4-43](file://restaurant-backend/src/config/database.ts#L4-L43)
 
 ### C. Order Creation and Payment Flow (Sequence)
 ```mermaid
@@ -381,5 +487,40 @@ Payments-->>Client : "Payment verified"
 ```
 
 **Diagram sources**
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L82-L267)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L196-L407)
+- [orders.ts:82-267](file://restaurant-backend/src/routes/orders.ts#L82-L267)
+- [payments.ts:196-407](file://restaurant-backend/src/routes/payments.ts#L196-L407)
+
+### D. Strategic Indexing Reference
+**Updated** Complete indexing strategy reference for all major entities:
+
+**Restaurant Users:** `@@index([restaurantId, userId, active])`
+- Optimal for user-role validation and active membership queries
+
+**Categories:** `@@index([restaurantId, active, sortOrder])`
+- Enables efficient menu display with sorting and filtering
+
+**Menu Items:** 
+- `@@index([restaurantId, available])` - Availability queries
+- `@@index([restaurantId, categoryId])` - Category-based queries
+
+**Tables:** `@@index([restaurantId, active])`
+- Optimizes table availability and status queries
+
+**Orders:**
+- `@@index([restaurantId, createdAt])` - Restaurant order listing
+- `@@index([restaurantId, userId, createdAt])` - Customer order history
+- `@@index([restaurantId, status, createdAt])` - Status filtering
+- `@@index([restaurantId, paymentStatus, createdAt])` - Payment queries
+
+**Offers:**
+- `@@index([restaurantId, active])` - Active offer queries
+- `@@index([restaurantId, startsAt, endsAt])` - Time-based filtering
+
+**Payments:** 
+- `@@index([orderId])` - Payment lookup
+- `@@index([restaurantId, createdAt])` - Reporting
+
+**Invoices:** `@@index([issuedAt])` - Date-based listing
+
+**Section sources**
+- [schema.prisma:75-325](file://restaurant-backend/prisma/schema.prisma#L75-L325)

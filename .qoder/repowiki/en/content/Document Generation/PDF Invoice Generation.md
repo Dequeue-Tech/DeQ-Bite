@@ -16,11 +16,11 @@
 
 ## Update Summary
 **Changes Made**
-- Enhanced PDF generation with dynamic restaurant field support including multi-line address formatting
-- Improved tax calculation handling with dynamic tax percentage calculation
-- Enhanced B2 storage integration with private bucket support and signed URL generation
-- Added conditional GST number display and dynamic tax label formatting
-- Updated template structure to support enhanced restaurant information display
+- Enhanced PDF formatting with improved spacing, clearer typography hierarchy, better readability, and enhanced formatting for item listings and totals
+- Implemented advanced text wrapping using `splitTextToSize()` for restaurant addresses and long item names
+- Optimized vertical spacing between sections for improved visual hierarchy
+- Enhanced font sizing and styling for better readability on 80mm POS printers
+- Improved item listing formatting with proper line wrapping and spacing calculations
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -35,12 +35,12 @@
 10. [Conclusion](#conclusion)
 
 ## Introduction
-This document explains the enhanced PDF invoice generation system built with jspdf for receipt-style printing optimized for 80mm POS printers. The system now features dynamic restaurant field support, improved tax calculation handling, and enhanced B2 storage integration. It covers the template structure, styling, formatting, the InvoiceData interface, dynamic content rendering, totals computation, PDF buffer generation, cloud storage integration, cleanup of old invoices, error handling, logging integration, and performance considerations for high-volume generation.
+This document explains the enhanced PDF invoice generation system built with jspdf for receipt-style printing optimized for 80mm POS printers. The system now features significantly improved formatting with enhanced text wrapping, better spacing, clearer typography hierarchy, and optimized readability. The system covers the template structure, styling, formatting, the InvoiceData interface, dynamic content rendering, totals computation, PDF buffer generation, cloud storage integration, cleanup of old invoices, error handling, logging integration, and performance considerations for high-volume generation.
 
 ## Project Structure
-The enhanced invoice generation pipeline spans several modules with improved cloud storage capabilities:
+The enhanced invoice generation pipeline spans several modules with improved formatting capabilities:
 - Route handler orchestrates invoice creation, validation, and delivery
-- PDF generator builds the receipt-style PDF from structured data with dynamic restaurant fields
+- PDF generator builds the receipt-style PDF from structured data with advanced text wrapping and spacing optimization
 - Enhanced B2 storage integration provides cloud-based PDF management
 - Email/SMS integrations deliver invoices via attachments or messages
 - Prisma schema persists invoice records with cloud storage metadata
@@ -52,7 +52,7 @@ subgraph "Routes"
 R["invoices.ts<br/>POST /generate<br/>GET /:orderId<br/>GET /user/list<br/>POST /:invoiceId/resend<br/>POST /:invoiceOrOrderId/refresh-pdf"]
 end
 subgraph "Libraries"
-L1["pdf.ts<br/>generateInvoicePDF()<br/>savePDFToStorage()<br/>cleanupOldInvoices()<br/>Enhanced Dynamic Fields"]
+L1["pdf.ts<br/>generateInvoicePDF()<br/>savePDFToStorage()<br/>cleanupOldInvoices()<br/>Enhanced Text Wrapping & Spacing"]
 L2["b2-storage.ts<br/>uploadToB2()<br/>downloadFromB2()<br/>getSignedDownloadUrl()<br/>Private Bucket Support"]
 L3["email.ts<br/>sendInvoiceEmail()"]
 L4["sms.ts<br/>sendInvoiceSMS()"]
@@ -77,8 +77,8 @@ R --> U2
 ```
 
 **Diagram sources**
-- [invoices.ts:21-241](file://restaurant-backend/src/routes/invoices.ts#L21-L241)
-- [pdf.ts:37-259](file://restaurant-backend/src/lib/pdf.ts#L37-L259)
+- [invoices.ts:21-262](file://restaurant-backend/src/routes/invoices.ts#L21-L262)
+- [pdf.ts:53-256](file://restaurant-backend/src/lib/pdf.ts#L53-L256)
 - [b2-storage.ts:76-124](file://restaurant-backend/src/lib/b2-storage.ts#L76-L124)
 - [email.ts:200-227](file://restaurant-backend/src/lib/email.ts#L200-L227)
 - [sms.ts:89-104](file://restaurant-backend/src/lib/sms.ts#L89-L104)
@@ -88,7 +88,7 @@ R --> U2
 
 **Section sources**
 - [invoices.ts:1-674](file://restaurant-backend/src/routes/invoices.ts#L1-L674)
-- [pdf.ts:1-354](file://restaurant-backend/src/lib/pdf.ts#L1-L354)
+- [pdf.ts:1-362](file://restaurant-backend/src/lib/pdf.ts#L1-L362)
 - [b2-storage.ts:1-337](file://restaurant-backend/src/lib/b2-storage.ts#L1-L337)
 - [email.ts:1-227](file://restaurant-backend/src/lib/email.ts#L1-L227)
 - [sms.ts:1-131](file://restaurant-backend/src/lib/sms.ts#L1-L131)
@@ -98,7 +98,7 @@ R --> U2
 
 ## Core Components
 - Enhanced InvoiceData interface defines the contract for building receipts with dynamic restaurant fields
-- PDF generator creates a compact 80mm-wide, portrait-format receipt with multi-line address support
+- PDF generator creates a compact 80mm-wide, portrait-format receipt with advanced text wrapping and optimized spacing
 - Enhanced B2 storage layer provides cloud-based PDF management with private bucket support
 - Cleanup routine removes stale invoices after a configurable retention period
 - Delivery pipeline supports email (with PDF attachment) and SMS notifications
@@ -109,7 +109,7 @@ R --> U2
 - [pdf.ts:16-45](file://restaurant-backend/src/lib/pdf.ts#L16-L45)
 - [pdf.ts:53-217](file://restaurant-backend/src/lib/pdf.ts#L53-L217)
 - [pdf.ts:221-256](file://restaurant-backend/src/lib/pdf.ts#L221-L256)
-- [pdf.ts:319-354](file://restaurant-backend/src/lib/pdf.ts#L319-L354)
+- [pdf.ts:319-362](file://restaurant-backend/src/lib/pdf.ts#L319-L362)
 - [invoices.ts:118-149](file://restaurant-backend/src/routes/invoices.ts#L118-L149)
 - [b2-storage.ts:76-124](file://restaurant-backend/src/lib/b2-storage.ts#L76-L124)
 - [b2-storage.ts:267-302](file://restaurant-backend/src/lib/b2-storage.ts#L267-L302)
@@ -118,9 +118,9 @@ R --> U2
 - [errorHandler.ts:9-82](file://restaurant-backend/src/middleware/errorHandler.ts#L9-L82)
 
 ## Architecture Overview
-The enhanced system follows a layered architecture with cloud storage integration:
+The enhanced system follows a layered architecture with cloud storage integration and improved formatting:
 - Express route validates requests and loads order data with restaurant information
-- Business logic constructs InvoiceData with dynamic fields and invokes PDF generation
+- Business logic constructs InvoiceData with dynamic fields and invokes PDF generation with enhanced formatting
 - PDF buffer is persisted to Backblaze B2 cloud storage with enhanced security
 - Invoice metadata is stored in the database with cloud storage references
 - Private bucket support enables secure PDF access with signed URLs
@@ -138,8 +138,8 @@ Client->>Route : POST /api/invoices/generate
 Route->>DB : Load order with restaurant details
 DB-->>Route : Order data with restaurant info
 Route->>Route : Build InvoiceData with dynamic fields
-Route->>PDF : generateInvoicePDF(invoiceData)
-PDF-->>Route : Buffer (PDF)
+Route->>PDF : generateInvoicePDF(invoiceData) with enhanced formatting
+PDF-->>Route : Buffer (PDF with improved spacing & text wrapping)
 Route->>B2 : savePDFToStorage(Buffer, filename)
 B2-->>Route : {pdfPath, b2FileId}
 alt EMAIL requested
@@ -176,7 +176,7 @@ The enhanced InvoiceData interface now supports dynamic restaurant fields:
 
 Rendering logic centers around:
 - Receipt width of 80mm and dynamic height based on item count
-- Centered headers with multi-line address support
+- Centered headers with multi-line address support using advanced text wrapping
 - Conditional GST number display
 - Dynamic tax label formatting with taxPercent support
 - Enhanced footer with restaurant contact information
@@ -186,36 +186,36 @@ Rendering logic centers around:
 - [pdf.ts:53-217](file://restaurant-backend/src/lib/pdf.ts#L53-L217)
 
 ### Enhanced Template Structure and Styling
-The receipt template now supports enhanced dynamic content:
+The receipt template now supports enhanced dynamic content with improved formatting:
 - Page format: portrait, 80mm width, adjustable height
-- Typography: bold headers, normal body text, small footers
+- Typography: bold headers, normal body text, small footers with enhanced readability
 - Alignment: centered for headers, left-aligned for content, right-aligned for monetary values
-- Layout blocks:
+- Layout blocks with optimized spacing:
   - Header with restaurant branding and conditional GST number
-  - Multi-line restaurant address with dynamic line wrapping
+  - Multi-line restaurant address with advanced text wrapping for better readability
   - City and state information display
   - Restaurant contact details
-  - Customer details section
-  - Bill details (date, table, cashier, bill number)
+  - Customer details section with improved spacing
+  - Bill details (date, table, cashier, bill number) with enhanced formatting
   - Itemized rows with serial number, wrapped item name, quantity, price, amount
-  - Totals summary with dynamic tax label formatting
+  - Totals summary with dynamic tax label formatting and better visual hierarchy
   - Enhanced footer with restaurant contact and FSSAI license
 
-Dynamic text wrapping ensures long restaurant addresses and item names fit within constrained column widths.
+Advanced text wrapping ensures long restaurant addresses and item names fit within constrained column widths while maintaining readability.
 
 **Section sources**
 - [pdf.ts:53-217](file://restaurant-backend/src/lib/pdf.ts#L53-L217)
 
 ### Enhanced Dynamic Content Rendering
-- **Restaurant details**: multi-line address support with splitTextToSize for wrapping
+- **Restaurant details**: multi-line address support with `splitTextToSize()` for wrapping and improved spacing
 - **Conditional fields**: GST number display only when available
 - **Dynamic tax calculation**: taxPercent field enables customized tax labeling
 - **Enhanced formatting**: city/state combination display, phone number formatting
 - **Order metadata**: date, table number, cashier name, invoice number
-- **Items**: derived from order.items with computed totals per item
-- **Totals**: subtotal, tax (dynamic tax percentage), and grand total
+- **Items**: derived from order.items with computed totals per item and advanced text wrapping
+- **Totals**: subtotal, tax (dynamic tax percentage), and grand total with improved visual hierarchy
 - **Monetary values**: formatted to two decimal places
-- **Text alignment and spacing**: optimized for compactness with enhanced readability
+- **Text alignment and spacing**: optimized for compactness with enhanced readability using strategic spacing increases
 
 **Section sources**
 - [invoices.ts:118-149](file://restaurant-backend/src/routes/invoices.ts#L118-L149)
@@ -243,7 +243,7 @@ Dynamic text wrapping ensures long restaurant addresses and item names fit withi
 - **Error handling**: graceful degradation when B2 is not configured
 
 **Section sources**
-- [pdf.ts:319-354](file://restaurant-backend/src/lib/pdf.ts#L319-L354)
+- [pdf.ts:319-362](file://restaurant-backend/src/lib/pdf.ts#L319-L362)
 - [b2-storage.ts:189-211](file://restaurant-backend/src/lib/b2-storage.ts#L189-L211)
 - [b2-storage.ts:218-252](file://restaurant-backend/src/lib/b2-storage.ts#L218-L252)
 
@@ -293,29 +293,40 @@ Dynamic text wrapping ensures long restaurant addresses and item names fit withi
 
 ## Enhanced Features
 
-### Dynamic Restaurant Field Support
-The system now supports comprehensive restaurant information display:
-- **Multi-line address formatting**: restaurantAddress field supports addresses spanning multiple lines
-- **Conditional field display**: GST number shown only when available
-- **Enhanced contact information**: phone numbers, emails, and location details
-- **Dynamic formatting**: city/state combinations and address line wrapping
+### Advanced Text Wrapping and Spacing Optimization
+The system now features significantly improved text handling:
+- **Restaurant address wrapping**: Uses `splitTextToSize()` with 65mm width constraint for multi-line addresses
+- **Item name wrapping**: Advanced text wrapping for long menu item names with proper line height calculation
+- **Enhanced spacing**: Strategic spacing increases between sections (5-9mm increments) for better visual hierarchy
+- **Improved readability**: Better font sizing and contrast for 80mm POS printer compatibility
 
 **Section sources**
-- [pdf.ts:78-99](file://restaurant-backend/src/lib/pdf.ts#L78-L99)
-- [pdf.ts:171-174](file://restaurant-backend/src/lib/pdf.ts#L171-L174)
-- [invoices.ts:123-131](file://restaurant-backend/src/routes/invoices.ts#L123-L131)
+- [pdf.ts:78-82](file://restaurant-backend/src/lib/pdf.ts#L78-L82)
+- [pdf.ts:146](file://restaurant-backend/src/lib/pdf.ts#L146)
+- [pdf.ts:153](file://restaurant-backend/src/lib/pdf.ts#L153)
 
-### Improved Tax Calculation Handling
-Enhanced tax calculation with dynamic percentage support:
-- **Dynamic tax percentage**: taxPercent field enables customized tax labeling
-- **Automatic calculation**: tax percentage derived from order data when available
-- **Flexible formatting**: tax label adapts based on taxPercent presence
-- **Enhanced accuracy**: precise tax calculations with proper rounding
+### Enhanced Typography Hierarchy and Visual Design
+Improved visual presentation with better typography and spacing:
+- **Header hierarchy**: Bold 14pt restaurant name, 8pt GST notice, 8pt address text
+- **Section spacing**: Increased margins between header, customer, bill details, items, and totals sections
+- **Item formatting**: Enhanced item listing with proper line wrapping and spacing calculations
+- **Totals presentation**: Clear separation between subtotal, tax, and grand total with double line separators
 
 **Section sources**
-- [pdf.ts:39-40](file://restaurant-backend/src/lib/pdf.ts#L39-L40)
-- [pdf.ts:171-174](file://restaurant-backend/src/lib/pdf.ts#L171-L174)
-- [invoices.ts:118-121](file://restaurant-backend/src/routes/invoices.ts#L118-L121)
+- [pdf.ts:65-74](file://restaurant-backend/src/lib/pdf.ts#L65-L74)
+- [pdf.ts:185-195](file://restaurant-backend/src/lib/pdf.ts#L185-L195)
+
+### Improved Item Listing and Totals Formatting
+Enhanced formatting for better readability and visual appeal:
+- **Item name wrapping**: Proper text wrapping for long menu item names with line height calculation
+- **Quantity and pricing**: Clear alignment of quantities, prices, and amounts with right-aligned monetary values
+- **Totals calculation**: Enhanced spacing between subtotal, tax, and grand total sections
+- **Visual separators**: Double line under grand total for emphasis and clarity
+
+**Section sources**
+- [pdf.ts:141-154](file://restaurant-backend/src/lib/pdf.ts#L141-L154)
+- [pdf.ts:164-175](file://restaurant-backend/src/lib/pdf.ts#L164-L175)
+- [pdf.ts:188-195](file://restaurant-backend/src/lib/pdf.ts#L188-L195)
 
 ### Enhanced B2 Storage Integration
 Comprehensive cloud storage capabilities:
@@ -329,11 +340,11 @@ Comprehensive cloud storage capabilities:
 - [b2-storage.ts:257-259](file://restaurant-backend/src/lib/b2-storage.ts#L257-L259)
 - [b2-storage.ts:267-302](file://restaurant-backend/src/lib/b2-storage.ts#L267-L302)
 - [b2-storage.ts:319-336](file://restaurant-backend/src/lib/b2-storage.ts#L319-L336)
-- [pdf.ts:319-354](file://restaurant-backend/src/lib/pdf.ts#L319-L354)
+- [pdf.ts:319-362](file://restaurant-backend/src/lib/pdf.ts#L319-L362)
 
 ## Dependency Analysis
 Enhanced external libraries and internal dependencies:
-- **jspdf**: PDF generation engine with enhanced text wrapping
+- **jspdf**: PDF generation engine with enhanced text wrapping and spacing capabilities
 - **backblaze-b2**: Cloud storage with private bucket support and signed URL generation
 - **nodemailer**: Email transport and templating
 - **twilio**: SMS delivery with enhanced error handling
@@ -409,4 +420,4 @@ Enhanced troubleshooting for cloud-integrated systems:
 - [errorHandler.ts:22-76](file://restaurant-backend/src/middleware/errorHandler.ts#L22-L76)
 
 ## Conclusion
-The enhanced PDF invoice generation system integrates a receipt-style jspdf template with robust cloud storage integration, dynamic restaurant field support, and improved tax calculation handling. The system now supports multi-line address formatting, conditional GST display, dynamic tax percentages, and secure cloud storage with private bucket support. It provides comprehensive delivery and persistence layers with enhanced operational safeguards including logging, cleanup, error handling, and cloud storage management. For high-volume deployments, consider asynchronous processing, caching strategies, and scalable cloud storage solutions to maintain responsiveness and reliability.
+The enhanced PDF invoice generation system integrates a receipt-style jspdf template with significantly improved formatting capabilities, dynamic restaurant field support, and enhanced tax calculation handling. The system now features advanced text wrapping with `splitTextToSize()`, optimized spacing between sections, clearer typography hierarchy, and better readability specifically designed for 80mm POS printers. The system supports multi-line address formatting, conditional GST display, dynamic tax percentages, and secure cloud storage with private bucket support. It provides comprehensive delivery and persistence layers with enhanced operational safeguards including logging, cleanup, error handling, and cloud storage management. For high-volume deployments, consider asynchronous processing, caching strategies, and scalable cloud storage solutions to maintain responsiveness and reliability.

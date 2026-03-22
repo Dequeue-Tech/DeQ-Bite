@@ -19,7 +19,15 @@
 - [schema.prisma](file://restaurant-backend/prisma/schema.prisma)
 - [api.ts](file://restaurant-backend/src/types/api.ts)
 - [DeQ-Restaurants-API.postman_collection.json](file://restaurant-backend/postman/DeQ-Restaurants-API.postman_collection.json)
+- [realtime.ts](file://restaurant-backend/src/utils/realtime.ts)
 </cite>
+
+## Update Summary
+**Changes Made**
+- Added pagination support to order management endpoints with `page`, `limit`, `take`, and `cursor` parameters
+- Enhanced staff management APIs with improved user listing and role assignment
+- Updated real-time communication endpoints with enhanced event payload schemas and connection handling
+- Improved order management documentation with new pagination capabilities and event payload details
 
 ## Table of Contents
 1. [Introduction](#introduction)
@@ -34,7 +42,7 @@
 10. [Appendices](#appendices)
 
 ## Introduction
-This document provides comprehensive API documentation for DeQ-Bite’s Restaurant Management System backend. It covers authentication, payment processing, order management, menu and category administration, restaurant profiles and settings, table management, coupon and offer systems, invoice generation, and real-time communication. It includes endpoint specifications, request/response schemas, authentication requirements, rate limiting, CORS configuration, and security considerations. A Postman collection is integrated for interactive testing.
+This document provides comprehensive API documentation for DeQ-Bite's Restaurant Management System backend. It covers authentication, payment processing, order management, menu and category administration, restaurant profiles and settings, table management, coupon and offer systems, invoice generation, and real-time communication. It includes endpoint specifications, request/response schemas, authentication requirements, rate limiting, CORS configuration, and security considerations. A Postman collection is integrated for interactive testing.
 
 ## Project Structure
 The backend is an Express-based TypeScript application with modular routing and middleware. Key areas:
@@ -53,27 +61,28 @@ A --> E["Server Bootstrap<br/>server.ts"]
 ```
 
 **Diagram sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L34-L147)
-- [server.ts](file://restaurant-backend/src/server.ts#L1-L33)
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L1-L137)
-- [restaurant.ts](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L384)
+- [app.ts:34-147](file://restaurant-backend/src/app.ts#L34-L147)
+- [server.ts:1-33](file://restaurant-backend/src/server.ts#L1-L33)
+- [auth.ts:1-137](file://restaurant-backend/src/middleware/auth.ts#L1-L137)
+- [restaurant.ts:76-200](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
+- [schema.prisma:11-384](file://restaurant-backend/prisma/schema.prisma#L11-L384)
 
 **Section sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L1-L148)
-- [server.ts](file://restaurant-backend/src/server.ts#L1-L33)
+- [app.ts:1-148](file://restaurant-backend/src/app.ts#L1-L148)
+- [server.ts:1-33](file://restaurant-backend/src/server.ts#L1-L33)
 
 ## Core Components
 - Authentication middleware validates JWT and attaches user context.
 - Restaurant context middleware resolves tenant context via slug/subdomain/host/path.
 - Route modules encapsulate business logic per domain (auth, payments, orders, etc.).
 - Payment provider abstraction supports multiple gateways.
-- Real-time streaming via Server-Sent Events.
+- Real-time streaming via Server-Sent Events with enhanced event payload schemas.
 
 **Section sources**
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
-- [restaurant.ts](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
-- [index.ts](file://restaurant-backend/src/lib/payments/index.ts#L1-L124)
+- [auth.ts:7-75](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
+- [restaurant.ts:76-200](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
+- [index.ts:1-124](file://restaurant-backend/src/lib/payments/index.ts#L1-L124)
+- [realtime.ts:1-42](file://restaurant-backend/src/utils/realtime.ts#L1-L42)
 
 ## Architecture Overview
 High-level API architecture and request flow:
@@ -98,11 +107,11 @@ Route-->>Client : JSON Response
 ```
 
 **Diagram sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L107-L126)
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
-- [restaurant.ts](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L195-L292)
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L144-L175)
+- [app.ts:107-126](file://restaurant-backend/src/app.ts#L107-L126)
+- [auth.ts:7-75](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
+- [restaurant.ts:76-200](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
+- [payments.ts:195-292](file://restaurant-backend/src/routes/payments.ts#L195-L292)
+- [schema.prisma:144-175](file://restaurant-backend/prisma/schema.prisma#L144-L175)
 
 ## Detailed Component Analysis
 
@@ -152,12 +161,12 @@ Validation and error handling:
 - AppError thrown for invalid credentials, duplicates, not found, etc.
 
 **Section sources**
-- [auth.ts](file://restaurant-backend/src/routes/auth.ts#L47-L158)
-- [auth.ts](file://restaurant-backend/src/routes/auth.ts#L160-L232)
-- [auth.ts](file://restaurant-backend/src/routes/auth.ts#L234-L335)
-- [auth.ts](file://restaurant-backend/src/routes/auth.ts#L337-L373)
-- [auth.ts](file://restaurant-backend/src/routes/auth.ts#L375-L387)
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
+- [auth.ts:47-158](file://restaurant-backend/src/routes/auth.ts#L47-L158)
+- [auth.ts:160-232](file://restaurant-backend/src/routes/auth.ts#L160-L232)
+- [auth.ts:234-335](file://restaurant-backend/src/routes/auth.ts#L234-L335)
+- [auth.ts:337-373](file://restaurant-backend/src/routes/auth.ts#L337-L373)
+- [auth.ts:375-387](file://restaurant-backend/src/routes/auth.ts#L375-L387)
+- [auth.ts:7-75](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
 
 ### Payment Processing Endpoints
 Supported providers: RAZORPAY, PAYTM (placeholder), PHONEPE (placeholder), CASH.
@@ -211,16 +220,18 @@ Invoice and earning automation:
 - Fully paid orders trigger invoice creation and earning record creation
 
 **Section sources**
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L180-L193)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L195-L292)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L294-L407)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L409-L516)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L518-L568)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L570-L646)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L648-L728)
-- [index.ts](file://restaurant-backend/src/lib/payments/index.ts#L40-L81)
+- [payments.ts:180-193](file://restaurant-backend/src/routes/payments.ts#L180-L193)
+- [payments.ts:195-292](file://restaurant-backend/src/routes/payments.ts#L195-L292)
+- [payments.ts:294-407](file://restaurant-backend/src/routes/payments.ts#L294-L407)
+- [payments.ts:409-516](file://restaurant-backend/src/routes/payments.ts#L409-L516)
+- [payments.ts:518-568](file://restaurant-backend/src/routes/payments.ts#L518-L568)
+- [payments.ts:570-646](file://restaurant-backend/src/routes/payments.ts#L570-L646)
+- [payments.ts:648-728](file://restaurant-backend/src/routes/payments.ts#L648-L728)
+- [index.ts:40-81](file://restaurant-backend/src/lib/payments/index.ts#L40-L81)
 
 ### Order Management Endpoints
+**Updated** Enhanced with comprehensive pagination support and improved event payload schemas.
+
 - Create Order
   - Method: POST
   - URL: /api/restaurants/:restaurantId/orders
@@ -228,44 +239,66 @@ Invoice and earning automation:
   - Body: tableId, items[], specialInstructions (optional), couponCode (optional), paymentProvider (RAZORPAY, PAYTM, PHONEPE, CASH)
   - Response: order
   - Behavior: Applies coupon, computes tax, sets initial status and paymentStatus based on provider and timing
+
 - Add Items to Order
   - Method: POST
   - URL: /api/restaurants/:restaurantId/orders/:id/items
   - Auth: Required (Bearer), Restaurant context
   - Body: items[], specialInstructions (optional)
   - Response: updated order
+
 - Apply Coupon
   - Method: POST
   - URL: /api/restaurants/:restaurantId/orders/:id/apply-coupon
   - Auth: Required (Bearer), Restaurant context
   - Body: couponCode
   - Response: updated order
-- My Orders
+
+- My Orders (with Pagination)
   - Method: GET
   - URL: /api/restaurants/:restaurantId/orders
   - Auth: Required (Bearer), Restaurant context
-  - Response: orders[]
-- Restaurant All Orders
+  - Query Parameters:
+    - page (optional): Page number (default: 1, min: 1)
+    - limit (optional): Items per page (default: 20, max: 100)
+    - take (optional): Cursor-based pagination limit (alternative to page/limit)
+    - cursor (optional): Cursor for next page navigation
+  - Response: orders[] with pagination metadata when using page/limit, otherwise cursor-based pagination
+
+- Restaurant All Orders (with Pagination)
   - Method: GET
   - URL: /api/restaurants/:restaurantId/orders/restaurant/all
   - Auth: Required (Bearer), Restaurant context (Owner/Admin/Staff)
-  - Response: orders[]
+  - Query Parameters:
+    - page (optional): Page number (default: 1, min: 1)
+    - limit (optional): Items per page (default: 20, max: 200)
+    - take (optional): Cursor-based pagination limit (alternative to page/limit)
+    - cursor (optional): Cursor for next page navigation
+  - Response: orders[] with pagination metadata when using page/limit, otherwise cursor-based pagination
+
 - Get Order by ID
   - Method: GET
   - URL: /api/restaurants/:restaurantId/orders/:id
   - Auth: Required (Bearer), Restaurant context
   - Response: order
+
 - Update Order Status
   - Method: PUT
   - URL: /api/restaurants/:restaurantId/orders/:id/status
   - Auth: Required (Bearer), Restaurant context (Owner/Admin/Staff)
   - Body: status
   - Response: order
+
 - Cancel Order
   - Method: PUT
   - URL: /api/restaurants/:restaurantId/orders/:id/cancel
   - Auth: Required (Bearer), Restaurant context
   - Response: cancelled order
+
+**Enhanced Event Payload Schemas**:
+The real-time event system now includes enhanced payload structures:
+- order.created: Includes order ID, user ID, table ID, status, payment status, payment provider, amounts, timestamps, and optional items/table/user details
+- order.updated: Same structure as created events with updated values
 
 Constraints and validations:
 - Items must include menuItemId and quantity
@@ -274,14 +307,14 @@ Constraints and validations:
 - Status transitions constrained by payment collection timing
 
 **Section sources**
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L82-L267)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L269-L394)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L396-L497)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L499-L524)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L526-L546)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L548-L579)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L581-L629)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L631-L691)
+- [orders.ts:82-267](file://restaurant-backend/src/routes/orders.ts#L82-L267)
+- [orders.ts:269-394](file://restaurant-backend/src/routes/orders.ts#L269-L394)
+- [orders.ts:396-497](file://restaurant-backend/src/routes/orders.ts#L396-L497)
+- [orders.ts:524-598](file://restaurant-backend/src/routes/orders.ts#L524-L598)
+- [orders.ts:600-669](file://restaurant-backend/src/routes/orders.ts#L600-L669)
+- [orders.ts:671-691](file://restaurant-backend/src/routes/orders.ts#L671-L691)
+- [orders.ts:704-753](file://restaurant-backend/src/routes/orders.ts#L704-L753)
+- [orders.ts:755-800](file://restaurant-backend/src/routes/orders.ts#L755-L800)
 
 ### Menu and Categories Endpoints
 - List Menu Items
@@ -337,15 +370,15 @@ Categories:
   - Response: category
 
 **Section sources**
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L28-L60)
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L62-L89)
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L91-L135)
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L137-L192)
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L194-L268)
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L270-L316)
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L318-L353)
-- [categories.ts](file://restaurant-backend/src/routes/categories.ts#L8-L34)
-- [categories.ts](file://restaurant-backend/src/routes/categories.ts#L36-L84)
+- [menu.ts:28-60](file://restaurant-backend/src/routes/menu.ts#L28-L60)
+- [menu.ts:62-89](file://restaurant-backend/src/routes/menu.ts#L62-L89)
+- [menu.ts:91-135](file://restaurant-backend/src/routes/menu.ts#L91-L135)
+- [menu.ts:137-192](file://restaurant-backend/src/routes/menu.ts#L137-L192)
+- [menu.ts:194-268](file://restaurant-backend/src/routes/menu.ts#L194-L268)
+- [menu.ts:270-316](file://restaurant-backend/src/routes/menu.ts#L270-L316)
+- [menu.ts:318-353](file://restaurant-backend/src/routes/menu.ts#L318-L353)
+- [categories.ts:8-34](file://restaurant-backend/src/routes/categories.ts#L8-L34)
+- [categories.ts:36-84](file://restaurant-backend/src/routes/categories.ts#L36-L84)
 
 ### Table Management Endpoints
 - List Tables
@@ -365,9 +398,9 @@ Categories:
   - Response: table
 
 **Section sources**
-- [tables.ts](file://restaurant-backend/src/routes/tables.ts#L8-L26)
-- [tables.ts](file://restaurant-backend/src/routes/tables.ts#L28-L49)
-- [tables.ts](file://restaurant-backend/src/routes/tables.ts#L51-L89)
+- [tables.ts:8-26](file://restaurant-backend/src/routes/tables.ts#L8-L26)
+- [tables.ts:28-49](file://restaurant-backend/src/routes/tables.ts#L28-L49)
+- [tables.ts:51-89](file://restaurant-backend/src/routes/tables.ts#L51-L89)
 
 ### Coupon System Endpoints
 - List Coupons
@@ -399,12 +432,14 @@ Coupon rules:
 - Discount computed with caps
 
 **Section sources**
-- [coupons.ts](file://restaurant-backend/src/routes/coupons.ts#L52-L64)
-- [coupons.ts](file://restaurant-backend/src/routes/coupons.ts#L66-L97)
-- [coupons.ts](file://restaurant-backend/src/routes/coupons.ts#L99-L139)
-- [coupons.ts](file://restaurant-backend/src/routes/coupons.ts#L141-L193)
+- [coupons.ts:52-64](file://restaurant-backend/src/routes/coupons.ts#L52-L64)
+- [coupons.ts:66-97](file://restaurant-backend/src/routes/coupons.ts#L66-L97)
+- [coupons.ts:99-139](file://restaurant-backend/src/routes/coupons.ts#L99-L139)
+- [coupons.ts:141-193](file://restaurant-backend/src/routes/coupons.ts#L141-L193)
 
 ### Restaurant Administration Endpoints
+**Updated** Enhanced with improved pagination and staff management capabilities.
+
 - Public Search
   - Method: GET
   - URL: /api/restaurants/public/search?query=&cuisine=&location=
@@ -420,17 +455,40 @@ Coupon rules:
   - URL: /api/restaurants/current
   - Auth: Required (Bearer), Restaurant context
   - Response: restaurant
-- Mine
+- Mine (with Pagination)
   - Method: GET
   - URL: /api/restaurants/mine
   - Auth: Required (Bearer)
-  - Response: restaurants[]
+  - Query Parameters:
+    - take (optional): Limit number of restaurants (default: none, max: 100)
+    - cursor (optional): Cursor for pagination
+  - Response: restaurants[] with cursor-based pagination
+
+**Staff Management APIs**:
+- List Restaurant Users (with Pagination)
+  - Method: GET
+  - URL: /api/restaurants/users
+  - Auth: Required (Bearer), Restaurant context (Owner/Admin)
+  - Query Parameters:
+    - take (optional): Limit number of users (default: none, max: 200)
+    - cursor (optional): Cursor for pagination
+  - Response: users[] with cursor-based pagination
+
+- Add/Update Restaurant User
+  - Method: POST
+  - URL: /api/restaurants/users
+  - Auth: Required (Bearer), Restaurant context (Owner/Admin)
+  - Body: email, role (OWNER/ADMIN/STAFF)
+  - Response: membership
+  - Constraints: Only OWNER can add/promote to ADMIN; ADMIN/OWNER can add STAFF
+
 - Create Restaurant
   - Method: POST
   - URL: /api/restaurants
   - Auth: Required (Bearer)
   - Body: name, email, phone, address, city, state, country, cuisineTypes[]
   - Response: restaurant
+
 - Payment Policy (GET/PUT)
   - Method: GET
   - URL: /api/restaurants/settings/payment-policy
@@ -441,39 +499,40 @@ Coupon rules:
   - Auth: Required (Bearer), Restaurant context (Owner/Admin)
   - Body: paymentCollectionTiming (BEFORE_MEAL/AFTER_MEAL), cashPaymentEnabled (boolean)
   - Response: paymentPolicy
-- List Restaurant Users
-  - Method: GET
-  - URL: /api/restaurants/users
-  - Auth: Required (Bearer), Restaurant context (Owner/Admin)
-  - Response: users[]
-- Add/Update Restaurant User
-  - Method: POST
-  - URL: /api/restaurants/users
-  - Auth: Required (Bearer), Restaurant context (Owner/Admin)
-  - Body: email, role (OWNER/ADMIN/STAFF)
-  - Response: membership
 
 **Section sources**
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L92-L164)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L166-L250)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L252-L260)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L262-L305)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L307-L375)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L377-L394)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L396-L429)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L431-L480)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L482-L551)
+- [restaurants.ts:92-164](file://restaurant-backend/src/routes/restaurants.ts#L92-L164)
+- [restaurants.ts:166-250](file://restaurant-backend/src/routes/restaurants.ts#L166-L250)
+- [restaurants.ts:252-260](file://restaurant-backend/src/routes/restaurants.ts#L252-L260)
+- [restaurants.ts:262-305](file://restaurant-backend/src/routes/restaurants.ts#L262-L305)
+- [restaurants.ts:307-356](file://restaurant-backend/src/routes/restaurants.ts#L307-L356)
+- [restaurants.ts:377-394](file://restaurant-backend/src/routes/restaurants.ts#L377-L394)
+- [restaurants.ts:396-429](file://restaurant-backend/src/routes/restaurants.ts#L396-L429)
+- [restaurants.ts:431-480](file://restaurant-backend/src/routes/restaurants.ts#L431-L480)
+- [restaurants.ts:482-551](file://restaurant-backend/src/routes/restaurants.ts#L482-L551)
+- [restaurants.ts:490-545](file://restaurant-backend/src/routes/restaurants.ts#L490-L545)
+- [restaurants.ts:547-646](file://restaurant-backend/src/routes/restaurants.ts#L547-L646)
 
 ### Real-Time Communication
+**Updated** Enhanced Server-Sent Events with improved connection handling and event payload schemas.
+
 - Server-Sent Events
   - Method: GET
-  - URL: /api/r/:restaurantSlug/events
+  - URL: /api/:restaurantSlug/events
   - Auth: Required (Bearer), Restaurant context
   - Headers: x-restaurant-slug or x-restaurant-subdomain
   - Response: SSE stream with order events (ping, order.created, order.updated)
+  - Connection Handling: Automatic ping every 25 seconds, keep-alive mechanism, graceful cleanup on disconnect
+
+**Enhanced Event Payload Schemas**:
+The real-time event system now includes structured event payloads:
+- ping: Heartbeat event with timestamp
+- order.created: Complete order details including ID, user ID, table ID, status, payment status, payment provider, amounts, timestamps, and optional items/table/user details
+- order.updated: Same structure as created events with updated values
 
 **Section sources**
-- [realtime.ts](file://restaurant-backend/src/routes/realtime.ts#L9-L37)
+- [realtime.ts:9-37](file://restaurant-backend/src/routes/realtime.ts#L9-L37)
+- [realtime.ts:1-42](file://restaurant-backend/src/utils/realtime.ts#L1-L42)
 
 ### Additional System Endpoints
 - Health Check
@@ -488,14 +547,14 @@ Coupon rules:
   - Response: welcome message
 
 **Section sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L92-L105)
+- [app.ts:92-105](file://restaurant-backend/src/app.ts#L92-L105)
 
 ## Dependency Analysis
 Key dependencies and relationships:
 - Express app composes middleware and routes
 - Route handlers depend on Prisma client for persistence
 - Payment provider abstraction decouples gateway specifics
-- Real-time events integrate with order updates
+- Real-time events integrate with order updates and socket.io
 
 ```mermaid
 graph LR
@@ -518,25 +577,27 @@ Categories --> Prisma
 Tables --> Prisma
 Coupons --> Prisma
 Restaurants --> Prisma
+Realtime --> Utils["utils/realtime.ts"]
 ```
 
 **Diagram sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L107-L126)
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
-- [restaurant.ts](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L1-L731)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L1-L694)
-- [menu.ts](file://restaurant-backend/src/routes/menu.ts#L1-L356)
-- [categories.ts](file://restaurant-backend/src/routes/categories.ts#L1-L87)
-- [tables.ts](file://restaurant-backend/src/routes/tables.ts#L1-L92)
-- [coupons.ts](file://restaurant-backend/src/routes/coupons.ts#L1-L196)
-- [restaurants.ts](file://restaurant-backend/src/routes/restaurants.ts#L1-L554)
-- [realtime.ts](file://restaurant-backend/src/routes/realtime.ts#L1-L40)
-- [index.ts](file://restaurant-backend/src/lib/payments/index.ts#L1-L124)
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L384)
+- [app.ts:107-126](file://restaurant-backend/src/app.ts#L107-L126)
+- [auth.ts:7-75](file://restaurant-backend/src/middleware/auth.ts#L7-L75)
+- [restaurant.ts:76-200](file://restaurant-backend/src/middleware/restaurant.ts#L76-L200)
+- [payments.ts:1-731](file://restaurant-backend/src/routes/payments.ts#L1-L731)
+- [orders.ts:1-694](file://restaurant-backend/src/routes/orders.ts#L1-L694)
+- [menu.ts:1-356](file://restaurant-backend/src/routes/menu.ts#L1-L356)
+- [categories.ts:1-87](file://restaurant-backend/src/routes/categories.ts#L1-L87)
+- [tables.ts:1-92](file://restaurant-backend/src/routes/tables.ts#L1-L92)
+- [coupons.ts:1-196](file://restaurant-backend/src/routes/coupons.ts#L1-L196)
+- [restaurants.ts:1-554](file://restaurant-backend/src/routes/restaurants.ts#L1-L554)
+- [realtime.ts:1-40](file://restaurant-backend/src/routes/realtime.ts#L1-L40)
+- [index.ts:1-124](file://restaurant-backend/src/lib/payments/index.ts#L1-L124)
+- [schema.prisma:11-384](file://restaurant-backend/prisma/schema.prisma#L11-L384)
+- [realtime.ts:1-42](file://restaurant-backend/src/utils/realtime.ts#L1-L42)
 
 **Section sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L107-L126)
+- [app.ts:107-126](file://restaurant-backend/src/app.ts#L107-L126)
 
 ## Performance Considerations
 - Rate limiting: 200 requests per 15 minutes per IP
@@ -544,8 +605,8 @@ Restaurants --> Prisma
 - Transactional writes: Payments and order updates use Prisma transactions to maintain consistency
 - Streaming SSE: Efficient real-time updates without polling
 - Optional fields and dynamic selects: Schema compatibility across deployments reduces downtime during migrations
-
-[No sources needed since this section provides general guidance]
+- **Enhanced Pagination**: Optimized database queries with cursor-based pagination for better performance on large datasets
+- **Real-time Event Optimization**: Efficient event emission with structured payloads and automatic cleanup
 
 ## Troubleshooting Guide
 Common issues and resolutions:
@@ -555,18 +616,17 @@ Common issues and resolutions:
 - 404 Not Found: Entity not found (user, order, menu item, coupon)
 - 429 Too Many Requests: Exceeded rate limit; wait before retrying
 - CORS blocked: Origin not allowed; ensure frontend origin is whitelisted
+- **Pagination Issues**: Ensure proper use of page/limit vs take/cursor parameters; page must be > 0, limit must be within allowed range
 
 **Section sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L42-L65)
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L33-L75)
-- [restaurant.ts](file://restaurant-backend/src/middleware/restaurant.ts#L202-L211)
-- [payments.ts](file://restaurant-backend/src/routes/payments.ts#L225-L235)
-- [orders.ts](file://restaurant-backend/src/routes/orders.ts#L91-L108)
+- [app.ts:42-65](file://restaurant-backend/src/app.ts#L42-L65)
+- [auth.ts:33-75](file://restaurant-backend/src/middleware/auth.ts#L33-L75)
+- [restaurant.ts:202-211](file://restaurant-backend/src/middleware/restaurant.ts#L202-L211)
+- [payments.ts:225-235](file://restaurant-backend/src/routes/payments.ts#L225-L235)
+- [orders.ts:91-108](file://restaurant-backend/src/routes/orders.ts#L91-L108)
 
 ## Conclusion
-DeQ-Bite’s API provides a comprehensive, tenant-aware, and secure REST interface for restaurant operations. It emphasizes strong authentication, validated inputs, flexible payment providers, and real-time updates. The modular design and Prisma schema enable scalable growth and operational reliability.
-
-[No sources needed since this section summarizes without analyzing specific files]
+DeQ-Bite's API provides a comprehensive, tenant-aware, and secure REST interface for restaurant operations. It emphasizes strong authentication, validated inputs, flexible payment providers, and real-time updates. The modular design and Prisma schema enable scalable growth and operational reliability. Recent enhancements include robust pagination support, improved staff management capabilities, and enhanced real-time communication with structured event payloads.
 
 ## Appendices
 
@@ -578,37 +638,38 @@ DeQ-Bite’s API provides a comprehensive, tenant-aware, and secure REST interfa
 - Rate limiting to prevent abuse
 
 **Section sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L28-L32)
-- [app.ts](file://restaurant-backend/src/app.ts#L42-L65)
-- [app.ts](file://restaurant-backend/src/app.ts#L67-L75)
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L40-L44)
-- [restaurant.ts](file://restaurant-backend/src/middleware/restaurant.ts#L213-L245)
+- [app.ts:28-32](file://restaurant-backend/src/app.ts#L28-L32)
+- [app.ts:42-65](file://restaurant-backend/src/app.ts#L42-L65)
+- [app.ts:67-75](file://restaurant-backend/src/app.ts#L67-L75)
+- [auth.ts:40-44](file://restaurant-backend/src/middleware/auth.ts#L40-L44)
+- [restaurant.ts:213-245](file://restaurant-backend/src/middleware/restaurant.ts#L213-L245)
 
 ### Request/Response Examples and Schemas
 - Example requests and responses are available in the Postman collection.
 - Representative JSON schemas are defined in the types and route handlers.
 
 **Section sources**
-- [DeQ-Restaurants-API.postman_collection.json](file://restaurant-backend/postman/DeQ-Restaurants-API.postman_collection.json#L76-L196)
-- [api.ts](file://restaurant-backend/src/types/api.ts#L107-L114)
+- [DeQ-Restaurants-API.postman_collection.json:76-196](file://restaurant-backend/postman/DeQ-Restaurants-API.postman_collection.json#L76-L196)
+- [api.ts:107-114](file://restaurant-backend/src/types/api.ts#L107-L114)
 
 ### API Versioning and Base URL
 - Base URL: http://localhost:5000 (adjust per deployment)
 - Versioning: No explicit version path; use latest stable endpoints under /api and /api/restaurants/:restaurantId
 
 **Section sources**
-- [app.ts](file://restaurant-backend/src/app.ts#L101-L105)
+- [app.ts:101-105](file://restaurant-backend/src/app.ts#L101-L105)
 
 ### Client Implementation Guidelines
 - Use Authorization: Bearer <token> for protected endpoints
 - Set x-restaurant-slug or x-restaurant-subdomain for tenant-aware endpoints
 - Respect rate limits and handle 429 responses
 - Subscribe to SSE events for real-time updates
+- **Pagination Best Practices**: Use page/limit for simple pagination, take/cursor for infinite scrolling, respect maximum limits
 
 **Section sources**
-- [auth.ts](file://restaurant-backend/src/middleware/auth.ts#L13-L38)
-- [restaurant.ts](file://restaurant-backend/src/middleware/restaurant.ts#L85-L99)
-- [realtime.ts](file://restaurant-backend/src/routes/realtime.ts#L9-L37)
+- [auth.ts:13-38](file://restaurant-backend/src/middleware/auth.ts#L13-L38)
+- [restaurant.ts:85-99](file://restaurant-backend/src/middleware/restaurant.ts#L85-L99)
+- [realtime.ts:9-37](file://restaurant-backend/src/routes/realtime.ts#L9-L37)
 
 ### Data Model Overview
 Core entities and relationships:
@@ -759,4 +820,4 @@ ORDER ||--o{ PAYMENT : "processed_by"
 ```
 
 **Diagram sources**
-- [schema.prisma](file://restaurant-backend/prisma/schema.prisma#L11-L384)
+- [schema.prisma:11-384](file://restaurant-backend/prisma/schema.prisma#L11-L384)

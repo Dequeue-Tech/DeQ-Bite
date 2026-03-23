@@ -1,0 +1,14 @@
+
+> restaurant-frontend@1.0.0 dev
+> next dev
+
+   ▲ Next.js 15.5.9
+   - Local:        http://localhost:3002
+   - Network:      http://192.168.85.195:3002
+   - Environments: .env
+   - Experiments (use with caution):
+     ⨯ devtoolSegmentExplorer
+
+ ✓ Starting...
+ ✓ Ready in 2.3s
+[?25h

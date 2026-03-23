@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useAuthStore } from '@/store/auth';
 import { apiClient } from '@/lib/api-client';
 import Link from 'next/link';
-import { ChefHat, Mail, Lock, User, Phone, Eye, EyeOff } from 'lucide-react';
+import { ChefHat, Mail, Lock, User, Phone, Eye, EyeOff, Github } from 'lucide-react';
 
 export default function SignUpPage() {
   const [formData, setFormData] = useState({
@@ -18,7 +18,7 @@ export default function SignUpPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const { register, error, clearError } = useAuthStore();
+  const { register, loginWithOAuth, error, clearError } = useAuthStore();
   const router = useRouter();
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -54,6 +54,21 @@ export default function SignUpPage() {
       ...prev,
       [name]: value
     }));
+  };
+
+  const handleOAuthSignUp = async (provider: 'GOOGLE' | 'GITHUB') => {
+    setIsLoading(true);
+    clearError();
+
+    try {
+      await loginWithOAuth(provider);
+      const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
+      router.push(selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/');
+    } catch {
+      // Error handled by store.
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -201,6 +216,32 @@ export default function SignUpPage() {
             )}
           </button>
         </form>
+
+        <div className="my-5 flex items-center gap-3 text-xs text-gray-400">
+          <div className="h-px bg-gray-200 flex-1" />
+          <span>OR</span>
+          <div className="h-px bg-gray-200 flex-1" />
+        </div>
+
+        <div className="space-y-2">
+          <button
+            type="button"
+            onClick={() => void handleOAuthSignUp('GOOGLE')}
+            disabled={isLoading}
+            className="w-full border border-gray-300 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-50"
+          >
+            Continue with Google
+          </button>
+          <button
+            type="button"
+            onClick={() => void handleOAuthSignUp('GITHUB')}
+            disabled={isLoading}
+            className="w-full border border-gray-300 rounded-lg py-2.5 text-sm font-medium hover:bg-gray-50 disabled:opacity-50 inline-flex items-center justify-center gap-2"
+          >
+            <Github className="h-4 w-4" />
+            Continue with GitHub
+          </button>
+        </div>
 
         {/* Footer */}
         <div className="mt-5 sm:mt-6 text-center">

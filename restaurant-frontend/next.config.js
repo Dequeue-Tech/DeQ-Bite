@@ -1,6 +1,10 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  experimental: {
+    // Workaround for Next.js 15 devtools manifest crashes in local dev.
+    devtoolSegmentExplorer: false,
+  },
   images: {
     remotePatterns: [
       {

@@ -1,5 +1,5 @@
 'use client';
 
-import RestaurantLandingPage from '@/app/restaurants/[id]/page';
+import RestaurantLandingPage from '@/components/RestaurantLandingPage';
 
 export default RestaurantLandingPage;

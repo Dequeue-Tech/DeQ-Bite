@@ -1,4 +1,19 @@
 import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import {
+  ApplicationVerifier,
+  ConfirmationResult,
+  GoogleAuthProvider,
+  GithubAuthProvider,
+  OAuthProvider,
+  createUserWithEmailAndPassword,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signInWithPhoneNumber,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+} from 'firebase/auth';
+import { auth } from '@/lib/firebase';
 
 // API Response types
 export interface ApiResponse<T = any> {
@@ -120,6 +135,8 @@ export interface RegisterData {
   password: string;
 }
 
+export type OAuthProviderType = 'GOOGLE' | 'GITHUB' | 'APPLE';
+
 export interface MenuItem {
   id: string;
   name: string;
@@ -162,6 +179,10 @@ export interface Order {
   id: string;
   userId: string;
   tableId: string;
+  isDelivery?: boolean;
+  deliveryStatus?: DeliveryStatus | null;
+  sourceSystem?: MarketplaceSourceSystem;
+  externalOrderId?: string | null;
   status: 'PENDING' | 'CONFIRMED' | 'PREPARING' | 'READY' | 'SERVED' | 'COMPLETED' | 'CANCELLED';
   items: OrderItem[];
   subtotalPaise: number;
@@ -435,6 +456,56 @@ export interface PosSyncLog {
   updatedAt: string;
 }
 
+export type MarketplaceSourceSystem = 'ZOMATO' | 'SWIGGY';
+
+export type MarketplacePaymentStatus =
+  | 'PENDING'
+  | 'PROCESSING'
+  | 'COMPLETED'
+  | 'FAILED'
+  | 'REFUNDED'
+  | 'PARTIALLY_PAID';
+
+export interface MarketplaceOrderItemInput {
+  menuItemId?: string;
+  menuItemName?: string;
+  quantity: number;
+  notes?: string;
+}
+
+export interface MarketplaceOrderInput {
+  externalOrderId: string;
+  customer: {
+    name: string;
+    phone?: string;
+    email?: string;
+    address: string;
+    landmark?: string;
+  };
+  items: MarketplaceOrderItemInput[];
+  specialInstructions?: string;
+  paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH';
+  paymentStatus?: MarketplacePaymentStatus;
+  paidAmountPaise?: number;
+}
+
+export interface MarketplaceOrderSummary {
+  orderId: string;
+  sourceSystem: MarketplaceSourceSystem;
+  externalOrderId?: string | null;
+  syncLogId: string;
+  syncedAt: string;
+  status: string;
+  paymentStatus: string;
+  totalPaise: number;
+  createdAt: string;
+  customerName?: string | null;
+  customerPhone?: string | null;
+  deliveryAddress?: string | null;
+  tableNumber?: number | null;
+  itemsCount: number;
+}
+
 class ApiClient {
   private api: AxiosInstance;
   private blockedRootSegments = new Set([
@@ -455,6 +526,42 @@ class ApiClient {
     'favicon.ico',
   ]);
 
+  private decodeJwtPayload(token: string): Record<string, unknown> | null {
+    const parts = token.split('.');
+    if (parts.length !== 3) return null;
+    try {
+      const base64 = parts[1]!.replace(/-/g, '+').replace(/_/g, '/');
+      const padded = base64 + '='.repeat((4 - (base64.length % 4)) % 4);
+      const json = atob(padded);
+      return JSON.parse(json) as Record<string, unknown>;
+    } catch {
+      return null;
+    }
+  }
+
+  private isUsableFirebaseIdToken(token: string | null): token is string {
+    if (!token) return false;
+    const payload = this.decodeJwtPayload(token);
+    if (!payload) return false;
+
+    const issuer = payload['iss'];
+    const audience = payload['aud'];
+    const expiry = payload['exp'];
+
+    if (typeof issuer !== 'string' || !issuer.startsWith('https://securetoken.google.com/')) {
+      return false;
+    }
+    if (typeof audience !== 'string' || !audience) {
+      return false;
+    }
+    if (typeof expiry !== 'number') {
+      return false;
+    }
+
+    // Treat tokens that expire within 30 seconds as expired to avoid race conditions.
+    return expiry * 1000 > Date.now() + 30_000;
+  }
+
   constructor() {
     this.api = axios.create({
       baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api',
@@ -466,8 +573,8 @@ class ApiClient {
 
     // Request interceptor to add auth token
     this.api.interceptors.request.use(
-      (config) => {
-        const token = this.getAuthToken();
+      async (config) => {
+        const token = await this.getAuthToken();
         if (token) {
           config.headers.Authorization = `Bearer ${token}`;
         }
@@ -491,6 +598,7 @@ class ApiClient {
         if (error.response?.status === 401) {
           // Token expired or invalid
           this.clearAuthToken();
+          signOut(auth).catch(() => undefined);
           if (typeof window !== 'undefined') {
             window.location.href = '/auth/signin';
           }
@@ -505,9 +613,24 @@ class ApiClient {
     return this.api.defaults.baseURL?.replace('/api', '') || 'http://localhost:5000';
   }
 
-  private getAuthToken(): string | null {
+  private async getAuthToken(): Promise<string | null> {
+    const firebaseUser = auth.currentUser;
+    if (firebaseUser) {
+      try {
+        const token = await firebaseUser.getIdToken();
+        this.setAuthToken(token);
+        return token;
+      } catch (_error) {
+        // Fall through to local token fallback.
+      }
+    }
+
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('auth_token');
+      const storedToken = localStorage.getItem('auth_token');
+      if (this.isUsableFirebaseIdToken(storedToken)) {
+        return storedToken;
+      }
+      this.clearAuthToken();
     }
     return null;
   }
@@ -612,23 +735,77 @@ class ApiClient {
     return `${base}${connector}token=${encodeURIComponent(token)}`;
   }
 
+  async syncFirebaseSession(payload: { name?: string; phone?: string } = {}, token?: string): Promise<User> {
+    const response = await this.api.post<ApiResponse<{ user: User }>>('/auth/session', payload, {
+      ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+    });
+    if (response.data.success && response.data.data) {
+      return response.data.data.user;
+    }
+    throw new Error(response.data.error || response.data.message || 'Failed to synchronize user session');
+  }
+
+  private async completeFirebaseSignIn(payload: { name?: string; phone?: string } = {}): Promise<AuthResponse> {
+    const firebaseUser = auth.currentUser;
+    if (!firebaseUser) {
+      throw new Error('Firebase user session is not available');
+    }
+
+    // Force-refresh to avoid stale/expired cached tokens during sign-in handoff.
+    const token = await firebaseUser.getIdToken(true);
+    this.setAuthToken(token);
+    const user = await this.syncFirebaseSession(payload, token);
+    return { user, token };
+  }
+
   // Authentication methods
   async login(data: LoginData): Promise<AuthResponse> {
-    const response = await this.api.post<ApiResponse<AuthResponse>>('/auth/login', data);
-    if (response.data.success && response.data.data) {
-      this.setAuthToken(response.data.data.token);
-      return response.data.data;
-    }
-    throw new Error(response.data.error || 'Login failed');
+    await signInWithEmailAndPassword(auth, data.email, data.password);
+    return this.completeFirebaseSignIn();
   }
 
   async register(data: RegisterData): Promise<AuthResponse> {
-    const response = await this.api.post<ApiResponse<AuthResponse>>('/auth/register', data);
-    if (response.data.success && response.data.data) {
-      this.setAuthToken(response.data.data.token);
-      return response.data.data;
-    }
-    throw new Error(response.data.error || 'Registration failed');
+    const credential = await createUserWithEmailAndPassword(auth, data.email, data.password);
+    await updateProfile(credential.user, {
+      displayName: data.name,
+    });
+    return this.completeFirebaseSignIn({
+      name: data.name,
+      ...(data.phone ? { phone: data.phone } : {}),
+    });
+  }
+
+  async loginWithOAuth(provider: OAuthProviderType): Promise<AuthResponse> {
+    const selectedProvider =
+      provider === 'GOOGLE'
+        ? new GoogleAuthProvider()
+        : provider === 'GITHUB'
+          ? new GithubAuthProvider()
+          : new OAuthProvider('apple.com');
+
+    await signInWithPopup(auth, selectedProvider);
+    return this.completeFirebaseSignIn();
+  }
+
+  async startPhoneOtp(phoneNumber: string, appVerifier: ApplicationVerifier): Promise<ConfirmationResult> {
+    return signInWithPhoneNumber(auth, phoneNumber, appVerifier);
+  }
+
+  async verifyPhoneOtp(
+    confirmationResult: ConfirmationResult,
+    otpCode: string,
+    payload: { name?: string; phone?: string } = {}
+  ): Promise<AuthResponse> {
+    await confirmationResult.confirm(otpCode);
+    return this.completeFirebaseSignIn(payload);
+  }
+
+  async sendPasswordReset(email: string): Promise<void> {
+    await sendPasswordResetEmail(auth, email);
+  }
+
+  async syncCurrentFirebaseUser(payload: { name?: string; phone?: string } = {}): Promise<AuthResponse> {
+    return this.completeFirebaseSignIn(payload);
   }
 
   async getProfile(): Promise<User> {
@@ -648,16 +825,13 @@ class ApiClient {
   }
 
   async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    const response = await this.api.put<ApiResponse>('/auth/change-password', {
-      currentPassword,
-      newPassword,
-    });
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to change password');
-    }
+    void currentPassword;
+    void newPassword;
+    throw new Error('Password updates are managed by Firebase Authentication.');
   }
 
   async logout(): Promise<void> {
+    await signOut(auth);
     this.clearAuthToken();
   }
 
@@ -906,16 +1080,28 @@ class ApiClient {
     return response.data;
   }
 
-  async getRestaurantOrders(): Promise<ApiResponse<Order[]>> {
-    const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint('/orders/restaurant/all'));
+  async getRestaurantOrders(channel: 'ALL' | 'DINE_IN' | 'DELIVERY' | MarketplaceSourceSystem = 'ALL'): Promise<ApiResponse<Order[]>> {
+    const params = new URLSearchParams();
+    if (channel !== 'ALL') {
+      params.set('channel', channel);
+    }
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint(`/orders/restaurant/all${suffix}`));
     return response.data;
   }
 
-  async getRestaurantOrdersPage(page = 1, limit = 20): Promise<ApiResponse<Order[]>> {
+  async getRestaurantOrdersPage(
+    page = 1,
+    limit = 20,
+    channel: 'ALL' | 'DINE_IN' | 'DELIVERY' | MarketplaceSourceSystem = 'ALL'
+  ): Promise<ApiResponse<Order[]>> {
     const params = new URLSearchParams({
       page: String(page),
       limit: String(limit),
     });
+    if (channel !== 'ALL') {
+      params.set('channel', channel);
+    }
     const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint(`/orders/restaurant/all?${params.toString()}`));
     return response.data;
   }
@@ -1288,6 +1474,31 @@ class ApiClient {
       return response.data.data || [];
     }
     throw new Error(response.data.error || 'Failed to fetch POS sync logs');
+  }
+
+  async syncMarketplaceOrder(platform: MarketplaceSourceSystem, payload: MarketplaceOrderInput): Promise<any> {
+    const response = await this.api.post<ApiResponse<any>>(
+      this.buildTenantEndpoint(`/pos/integrations/${platform.toLowerCase()}/orders`),
+      payload
+    );
+    if (response.data.success) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || `Failed to sync ${platform} order`);
+  }
+
+  async getMarketplaceOrders(params?: { sourceSystem?: MarketplaceSourceSystem; limit?: number }): Promise<MarketplaceOrderSummary[]> {
+    const search = new URLSearchParams();
+    if (params?.sourceSystem) search.set('sourceSystem', params.sourceSystem);
+    if (typeof params?.limit === 'number') search.set('limit', String(params.limit));
+    const suffix = search.toString() ? `?${search.toString()}` : '';
+    const response = await this.api.get<ApiResponse<MarketplaceOrderSummary[]>>(
+      this.buildTenantEndpoint(`/pos/integrations/orders${suffix}`)
+    );
+    if (response.data.success) {
+      return response.data.data || [];
+    }
+    throw new Error(response.data.error || 'Failed to fetch marketplace orders');
   }
 
   // Restaurant methods

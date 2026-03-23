@@ -24,6 +24,16 @@ type MenuForm = {
   categoryId: string;
 };
 
+type OrderChannelFilter = 'ALL' | 'DINE_IN' | 'DELIVERY' | 'ZOMATO' | 'SWIGGY';
+
+const orderChannelFilters: Array<{ value: OrderChannelFilter; label: string }> = [
+  { value: 'ALL', label: 'All Orders' },
+  { value: 'DINE_IN', label: 'Dine-In' },
+  { value: 'DELIVERY', label: 'Delivery' },
+  { value: 'ZOMATO', label: 'Zomato' },
+  { value: 'SWIGGY', label: 'Swiggy' },
+];
+
 const getStatusColor = (status: Order['status']) => {
   const colors = {
     PENDING: 'bg-yellow-100 text-yellow-800 border-yellow-200',
@@ -56,6 +66,12 @@ const getPlainInstructions = (specialInstructions?: string) => {
   return (idx === -1 ? specialInstructions : specialInstructions.slice(0, idx)).trim();
 };
 
+const getMarketplaceBadgeText = (order: Pick<Order, 'sourceSystem' | 'externalOrderId'>) => {
+  if (!order.sourceSystem) return null;
+  if (!order.externalOrderId) return order.sourceSystem;
+  return `${order.sourceSystem} #${order.externalOrderId}`;
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
@@ -72,6 +88,7 @@ export default function AdminPage() {
   const [deliveryLoading, setDeliveryLoading] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
   const [ordersLimit] = useState(20);
+  const [orderChannelFilter, setOrderChannelFilter] = useState<OrderChannelFilter>('ALL');
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [ordersTotalPages, setOrdersTotalPages] = useState(1);
   const [deliveryOrders, setDeliveryOrders] = useState<DeliveryOrder[]>([]);
@@ -127,7 +144,7 @@ export default function AdminPage() {
         await loadBaseData();
         if (!isActive) return;
         setOrdersPage(1);
-        await Promise.all([loadOrdersPage(1), loadDeliveryOrders()]);
+        await Promise.all([loadOrdersPage(1, 'ALL'), loadDeliveryOrders()]);
       } catch {
         if (!isActive) return;
         setAdminAccessVerified(false);
@@ -176,8 +193,8 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!hasAdminAccess) return;
-    loadOrdersPage(ordersPage);
-  }, [hasAdminAccess, ordersPage]);
+    loadOrdersPage(ordersPage, orderChannelFilter);
+  }, [hasAdminAccess, ordersPage, orderChannelFilter]);
 
   useEffect(() => {
     if (!hasAdminAccess || activeTab !== 'delivery') return;
@@ -209,10 +226,10 @@ export default function AdminPage() {
     }
   };
 
-  const loadOrdersPage = async (page: number) => {
+  const loadOrdersPage = async (page: number, channel: OrderChannelFilter = orderChannelFilter) => {
     try {
       setOrdersLoading(true);
-      const response = await apiClient.getRestaurantOrdersPage(page, ordersLimit);
+      const response = await apiClient.getRestaurantOrdersPage(page, ordersLimit, channel);
       if (response.success) {
         setOrders(response.data || []);
         setOrdersTotal(response.pagination?.total || 0);
@@ -387,11 +404,21 @@ export default function AdminPage() {
     if (!q) return deliveryOrders;
     return deliveryOrders.filter((order) => {
       const id = order.id.toLowerCase();
+      const source = order.sourceSystem?.toLowerCase() || '';
+      const externalOrderId = order.externalOrderId?.toLowerCase() || '';
       const name = order.deliveryMeta?.customerName?.toLowerCase() || '';
       const phone = order.deliveryMeta?.customerPhone?.toLowerCase() || '';
       const address = order.deliveryMeta?.deliveryAddress?.toLowerCase() || '';
       const rider = order.deliveryMeta?.riderName?.toLowerCase() || '';
-      return id.includes(q) || name.includes(q) || phone.includes(q) || address.includes(q) || rider.includes(q);
+      return (
+        id.includes(q) ||
+        source.includes(q) ||
+        externalOrderId.includes(q) ||
+        name.includes(q) ||
+        phone.includes(q) ||
+        address.includes(q) ||
+        rider.includes(q)
+      );
     });
   }, [deliveryOrders, deliverySearch]);
 
@@ -957,9 +984,26 @@ export default function AdminPage() {
             <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <h2 className="text-lg sm:text-xl font-black text-gray-900">Live Orders</h2>
-                <div className="relative w-full sm:w-64">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
-                  <input type="text" placeholder="Search ID..." className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20" />
+                <div className="flex gap-2 w-full sm:w-auto">
+                  <div className="relative w-full sm:w-64">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
+                    <input type="text" placeholder="Search ID..." className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20" />
+                  </div>
+                  <select
+                    value={orderChannelFilter}
+                    onChange={(e) => {
+                      const nextFilter = e.target.value as OrderChannelFilter;
+                      setOrderChannelFilter(nextFilter);
+                      setOrdersPage(1);
+                    }}
+                    className="bg-gray-50 border-none rounded-xl px-3 py-2 text-xs sm:text-sm font-bold text-gray-700 focus:ring-2 focus:ring-orange-500/20"
+                  >
+                    {orderChannelFilters.map((filter) => (
+                      <option key={filter.value} value={filter.value}>
+                        {filter.label}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -1025,6 +1069,11 @@ export default function AdminPage() {
                         <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
                           <span className="font-black text-base sm:text-lg text-gray-900">#{order.id.slice(0, 8).toUpperCase()}</span>
                           <span className={`text-[10px] font-black uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border ${getStatusColor(order.status)}`}>{order.status}</span>
+                          {getMarketplaceBadgeText(order) && (
+                            <span className="text-[10px] font-black uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border border-indigo-200 text-indigo-700 bg-indigo-50">
+                              {getMarketplaceBadgeText(order)}
+                            </span>
+                          )}
                         </div>
                         <p className="text-xs sm:text-sm font-medium text-gray-500">{order.user?.name || 'Walk-in'} • {formatInr(order.totalPaise)}</p>
                         
@@ -1133,7 +1182,7 @@ export default function AdminPage() {
                       type="text"
                       value={deliverySearch}
                       onChange={(e) => setDeliverySearch(e.target.value)}
-                      placeholder="Search customer, phone, address, order..."
+                      placeholder="Search customer, phone, address, platform, order..."
                       className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20"
                     />
                   </div>
@@ -1174,6 +1223,11 @@ export default function AdminPage() {
                               <span className="text-[10px] font-bold uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border border-gray-200 text-gray-600 bg-gray-50">
                                 {order.paymentProvider || 'NA'} | {order.paymentStatus}
                               </span>
+                              {getMarketplaceBadgeText(order) && (
+                                <span className="text-[10px] font-black uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border border-indigo-200 text-indigo-700 bg-indigo-50">
+                                  {getMarketplaceBadgeText(order)}
+                                </span>
+                              )}
                             </div>
 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-100">

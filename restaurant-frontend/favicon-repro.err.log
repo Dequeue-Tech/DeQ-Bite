@@ -1,0 +1,45 @@
+[baseline-browser-mapping] The data in this module is over two months old.  To ensure accurate Baseline data, please update: `npm i baseline-browser-mapping@latest -D`
+Browserslist: browsers data (caniuse-lite) is 6 months old. Please run:
+  npx update-browserslist-db@latest
+  Why you should do it regularly: https://github.com/browserslist/update-db#readme
+ ⨯ ./src/app/restaurants/[id]/page.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\D\Documents\Web_development_Projects\Restaurant\DeQ-Restaurants\restaurant-frontend\src\app\restaurants\[id]\page.tsx
+    1: The system cannot find the file specified. (os error 2)
+
+Import trace for requested module:
+./src/app/restaurants/[id]/page.tsx
+./src/app/[slug]/page.tsx
+ ⨯ ./src/components/RestaurantLandingPage.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\D\Documents\Web_development_Projects\Restaurant\DeQ-Restaurants\restaurant-frontend\src\components\RestaurantLandingPage.tsx
+    1: stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/components/RestaurantLandingPage.tsx
+./src/app/[slug]/page.tsx
+ ⨯ ./src/components/RestaurantLandingPage.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\D\Documents\Web_development_Projects\Restaurant\DeQ-Restaurants\restaurant-frontend\src\components\RestaurantLandingPage.tsx
+    1: stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/components/RestaurantLandingPage.tsx
+./src/app/[slug]/page.tsx
+ ⨯ ./src/components/RestaurantLandingPage.tsx
+Error: 
+
+Caused by:
+    0: Failed to read source code from C:\D\Documents\Web_development_Projects\Restaurant\DeQ-Restaurants\restaurant-frontend\src\components\RestaurantLandingPage.tsx
+    1: stream did not contain valid UTF-8
+
+Import trace for requested module:
+./src/components/RestaurantLandingPage.tsx
+./src/app/[slug]/page.tsx
+<w> [webpack.cache.PackFileCacheStrategy] Caching failed for pack: Error: ENOENT: no such file or directory, rename 'C:\D\Documents\Web_development_Projects\Restaurant\DeQ-Restaurants\restaurant-frontend\.next\cache\webpack\client-development\0.pack.gz_' -> 'C:\D\Documents\Web_development_Projects\Restaurant\DeQ-Restaurants\restaurant-frontend\.next\cache\webpack\client-development\0.pack.gz'

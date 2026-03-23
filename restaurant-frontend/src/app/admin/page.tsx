@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import { 
   ChefHat, Plus, Trash2, CheckCircle, TrendingUp, 
   Users, CreditCard, LayoutDashboard, BellRing, 
-  Clock, Check, X, Search, Activity, ChevronDown, Bike, MapPin, Phone
+  Clock, Check, X, Search, Activity, ChevronDown, Bike, MapPin, Phone, Sparkles, AlertCircle, AlertTriangle, Zap, RefreshCw
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
@@ -97,6 +97,34 @@ export default function AdminPage() {
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [adminNotifications, setAdminNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
   const [adminAccessVerified, setAdminAccessVerified] = useState(false);
+  const [isGeneratingAi, setIsGeneratingAi] = useState(false);
+  const [aiInsights, setAiInsights] = useState<{type: string, title: string, desc: string}[] | null>(null);
+
+  const generateRealTimeInsights = async () => {
+    setIsGeneratingAi(true);
+    setAiInsights(null); // Clear old insights
+    
+    try {
+      // 1. Gather the live data from your existing React state
+      const payload = {
+        topDishes: topDishes.length > 0 ? topDishes.map(d => d.name) : ['No data yet'],
+        pendingDeliveries: pendingDeliveryOrders.length,
+        totalOrders: ordersTotal
+      };
+
+      // 2. Call your backend (this automatically unwraps the data or throws an error)
+      const insights = await apiClient.generateInsights(payload);
+
+      // 3. Set the state directly with the returned array
+      setAiInsights(insights);
+
+    } catch (error: any) {
+      // 4. The api-client handles throwing the exact error message from the backend
+      toast.error(error?.message || "Could not generate insights right now.");
+    } finally {
+      setIsGeneratingAi(false);
+    }
+  };
 
   const hasAdminAccess = 
   user?.role === 'OWNER' || 
@@ -855,6 +883,85 @@ export default function AdminPage() {
               </div>
             </div>
 
+            {/* --- AI COPILOT SECTION --- */}
+            <div className="relative bg-gradient-to-br from-orange-50/50 via-white to-blue-50/30 rounded-[32px] p-6 sm:p-8 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-orange-100/50 overflow-hidden mt-2 group">
+              
+              {/* Subtle animated background mesh */}
+              <div className="absolute top-0 right-0 w-[500px] h-[500px] bg-gradient-to-bl from-orange-400/10 to-transparent rounded-full blur-3xl opacity-50 group-hover:opacity-70 transition-opacity duration-700 pointer-events-none translate-x-1/3 -translate-y-1/3" />
+              
+              <div className="relative z-10 flex flex-col lg:flex-row gap-8">
+                
+                {/* Left: AI Header & CTA */}
+                <div className="lg:w-1/3 flex flex-col justify-center border-b lg:border-b-0 lg:border-r border-gray-200/60 pb-6 lg:pb-0 lg:pr-8">
+                  <div className="flex items-center gap-2.5 mb-3">
+                    <div className="bg-gradient-to-br from-orange-500 to-orange-600 p-2 rounded-xl shadow-md shadow-orange-500/20 text-white">
+                      <Sparkles className="h-5 w-5" />
+                    </div>
+                    <h2 className="text-xl font-black bg-clip-text text-transparent bg-gradient-to-r from-gray-900 to-gray-600 tracking-tight">
+                      Bite Copilot
+                    </h2>
+                  </div>
+                  <p className="text-gray-500 text-sm font-medium leading-relaxed mb-6">
+                    Analyze your live kitchen traffic, delivery load, and sales data to uncover hidden growth opportunities.
+                  </p>
+                  <button 
+                    onClick={generateRealTimeInsights}
+                    disabled={isGeneratingAi}
+                    className="w-max flex items-center gap-2 text-sm font-bold text-white bg-gray-900 px-6 py-3 rounded-xl hover:bg-black active:scale-95 transition-all shadow-lg disabled:opacity-70 disabled:active:scale-100"
+                  >
+                    {isGeneratingAi ? (
+                      <><RefreshCw className="h-4 w-4 animate-spin" /> Analyzing Data...</>
+                    ) : (
+                      <><Zap className="h-4 w-4 text-orange-400" /> Generate Insights</>
+                    )}
+                  </button>
+                </div>
+
+                {/* Right: Dynamic Insights Feed */}
+                <div className="lg:w-2/3 flex flex-col justify-center">
+                  
+                  {/* Empty State (Before clicking generate) */}
+                  {!isGeneratingAi && !aiInsights && (
+                    <div className="h-full flex flex-col items-center justify-center text-center py-6 opacity-60">
+                      <Sparkles className="h-8 w-8 text-gray-300 mb-3" />
+                      <p className="text-sm font-bold text-gray-400">Ready to analyze your restaurant's performance.</p>
+                    </div>
+                  )}
+
+                  {/* Loading Skeleton (While generating) */}
+                  {isGeneratingAi && (
+                    <div className="space-y-4 animate-pulse">
+                      <div className="bg-white/60 backdrop-blur-sm border border-gray-100 rounded-2xl p-5 w-full h-24 rounded-xl" />
+                      <div className="bg-white/60 backdrop-blur-sm border border-gray-100 rounded-2xl p-5 w-full h-24 rounded-xl" />
+                    </div>
+                  )}
+
+                  {/* Rendered Insights */}
+                  {!isGeneratingAi && aiInsights && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                      {aiInsights.map((insight, idx) => (
+                        <div key={idx} className="bg-white/80 backdrop-blur-md border border-white shadow-sm rounded-2xl p-5 hover:shadow-md transition-shadow">
+                          <div className="flex items-center gap-2 mb-2">
+                            {insight.type === 'growth' ? (
+                              <TrendingUp className="h-4 w-4 text-green-500" />
+                            ) : (
+                              <AlertTriangle className="h-4 w-4 text-orange-500" />
+                            )}
+                            <h3 className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{insight.title}</h3>
+                          </div>
+                          <p className="text-sm font-bold text-gray-800 leading-relaxed mt-2">
+                            {insight.desc}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+              </div>
+            </div>
+            {/* ------------------------------------------ */}
+
             {/* Charts Row */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               <div className="lg:col-span-2 bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100">
@@ -951,7 +1058,7 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* ORDERS TAB - With Unified Controls */}
+        {/* ORDERS TAB - Modern Grid Layout */}
         {activeTab === 'orders' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100">
@@ -1015,29 +1122,33 @@ export default function AdminPage() {
               {ordersLoading ? (
                 <p className="text-sm text-gray-500">Loading orders...</p>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
                   {orders.map((order) => (
-                  <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 hover:border-orange-200 transition-colors">
-                    <div className="flex flex-col lg:flex-row justify-between gap-5">
+                    <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[28px] p-4 sm:p-5 hover:border-orange-200 transition-all flex flex-col h-full shadow-[0_4px_20px_rgb(0,0,0,0.03)] group">
                       
-                      {/* Order Details */}
-                      <div className="flex-1">
-                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-1 sm:mb-2">
-                          <span className="font-black text-base sm:text-lg text-gray-900">#{order.id.slice(0, 8).toUpperCase()}</span>
-                          <span className={`text-[10px] font-black uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border ${getStatusColor(order.status)}`}>{order.status}</span>
+                      {/* Order Info (Top) */}
+                      <div className="flex-1 flex flex-col">
+                        <div className="flex items-start justify-between gap-3 mb-2">
+                          <div>
+                            <p className="font-black text-lg text-gray-900 leading-tight">#{order.id.slice(0, 8).toUpperCase()}</p>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-widest mt-1">{order.user?.name || 'Walk-in'} • {formatInr(order.totalPaise)}</p>
+                          </div>
+                          <span className={`shrink-0 text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md border ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </span>
                         </div>
-                        <p className="text-xs sm:text-sm font-medium text-gray-500">{order.user?.name || 'Walk-in'} • {formatInr(order.totalPaise)}</p>
                         
-                        <div className="mt-3 sm:mt-4 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-100">
-                          <div><p className="text-[10px] font-bold text-gray-400 uppercase">Payment</p><p className="text-xs sm:text-sm font-black text-gray-900 mt-0.5 truncate">{order.paymentStatus}</p></div>
-                          <div><p className="text-[10px] font-bold text-gray-400 uppercase">Method</p><p className="text-xs sm:text-sm font-black text-gray-900 mt-0.5 truncate">{order.paymentProvider || 'NA'}</p></div>
-                          <div><p className="text-[10px] font-bold text-gray-400 uppercase">Paid</p><p className="text-xs sm:text-sm font-black text-green-600 mt-0.5 truncate">{formatInr(order.paidAmountPaise || 0)}</p></div>
-                          <div><p className="text-[10px] font-bold text-gray-400 uppercase">Due</p><p className="text-xs sm:text-sm font-black text-orange-600 mt-0.5 truncate">{formatInr(order.dueAmountPaise || 0)}</p></div>
+                        {/* 2x2 Info Grid */}
+                        <div className="mt-4 grid grid-cols-2 gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-100 mb-5">
+                          <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Payment</p><p className="text-xs font-black text-gray-900 truncate">{order.paymentStatus}</p></div>
+                          <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Method</p><p className="text-xs font-black text-gray-900 truncate">{order.paymentProvider || 'NA'}</p></div>
+                          <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Paid</p><p className="text-xs font-black text-green-600 truncate">{formatInr(order.paidAmountPaise || 0)}</p></div>
+                          <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Due</p><p className="text-xs font-black text-orange-600 truncate">{formatInr(order.dueAmountPaise || 0)}</p></div>
                         </div>
                       </div>
 
-                      {/* Unified Update Controls */}
-                      <div className="w-full lg:w-72 shrink-0 bg-gray-50 rounded-[20px] p-4 border border-gray-100">
+                      {/* Unified Update Controls (Bottom Pushed) */}
+                      <div className="w-full mt-auto bg-gray-50 rounded-[20px] p-4 border border-gray-100 group-hover:bg-white group-hover:border-orange-100 transition-colors">
                         <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Update Order</p>
                         <div className="space-y-3">
                           
@@ -1081,7 +1192,7 @@ export default function AdminPage() {
                           <button 
                             onClick={() => saveOrderChanges(order)} 
                             disabled={updatingOrderId === order.id}
-                            className="w-full bg-gray-900 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-black transition-colors disabled:opacity-50 mt-1"
+                            className="w-full bg-gray-900 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-black transition-all active:scale-95 disabled:opacity-50 mt-1 shadow-sm"
                           >
                             {updatingOrderId === order.id ? 'Saving...' : 'Save Changes'}
                           </button>
@@ -1089,15 +1200,14 @@ export default function AdminPage() {
                       </div>
 
                     </div>
-                  </div>
-                ))}
+                  ))}
                 </div>
               )}
             </div>
           </div>
         )}
 
-        {/* DELIVERY TAB */}
+        {/* DELIVERY TAB - Modern Grid Layout */}
         {activeTab === 'delivery' && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
@@ -1139,7 +1249,7 @@ export default function AdminPage() {
                   </div>
                   <button
                     onClick={loadDeliveryOrders}
-                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-black"
+                    className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-black transition-colors"
                   >
                     Refresh
                   </button>
@@ -1153,7 +1263,7 @@ export default function AdminPage() {
                   <p className="text-sm font-semibold text-gray-500">No delivery orders found.</p>
                 </div>
               ) : (
-                <div className="space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
                   {filteredDeliveryOrders.map((order) => {
                     const instructions = getPlainInstructions(order.specialInstructions);
                     const riderDraft = deliveryRiderDraft[order.id];
@@ -1163,71 +1273,82 @@ export default function AdminPage() {
                     const selectedPaymentStatus = deliveryPaymentStatusDraft[order.id] || order.paymentStatus;
 
                     return (
-                      <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[24px] p-4 sm:p-5 hover:border-blue-200 transition-colors">
-                        <div className="flex flex-col xl:flex-row justify-between gap-5">
-                          <div className="flex-1 space-y-3">
-                            <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-                              <span className="font-black text-base sm:text-lg text-gray-900">#{order.id.slice(0, 8).toUpperCase()}</span>
-                              <span className={`text-[10px] font-black uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border ${getDeliveryStatusColor(order.deliveryMeta.deliveryStatus)}`}>
+                      <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[28px] p-4 sm:p-5 hover:border-blue-200 transition-all flex flex-col h-full shadow-[0_4px_20px_rgb(0,0,0,0.03)] group">
+                        
+                        {/* Delivery Info (Top) */}
+                        <div className="flex-1 flex flex-col space-y-4">
+                          <div className="flex flex-wrap items-start justify-between gap-2">
+                            <div>
+                              <span className="font-black text-lg text-gray-900 leading-tight block">#{order.id.slice(0, 8).toUpperCase()}</span>
+                              <span className="text-[10px] font-bold uppercase tracking-wider mt-1 block text-gray-500">
+                                {new Date(order.createdAt).toLocaleString('en-IN')}
+                              </span>
+                            </div>
+                            <div className="flex flex-col items-end gap-1.5">
+                              <span className={`text-[10px] font-black uppercase tracking-wider px-2.5 py-1 rounded-md border ${getDeliveryStatusColor(order.deliveryMeta.deliveryStatus)}`}>
                                 {order.deliveryMeta.deliveryStatus.replace(/_/g, ' ')}
                               </span>
-                              <span className="text-[10px] font-bold uppercase tracking-wider px-2 sm:px-3 py-1 rounded-md border border-gray-200 text-gray-600 bg-gray-50">
+                              <span className="text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-md border border-gray-200 text-gray-600 bg-gray-50">
                                 {order.paymentProvider || 'NA'} | {order.paymentStatus}
                               </span>
                             </div>
-
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-100">
-                              <div>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Customer</p>
-                                <p className="text-sm font-black text-gray-900">{order.deliveryMeta.customerName || order.user?.name || 'Unknown'}</p>
-                                <p className="text-xs font-semibold text-gray-600 flex items-center gap-1 mt-1"><Phone className="h-3 w-3" /> {order.deliveryMeta.customerPhone || 'NA'}</p>
-                                <p className="text-xs text-gray-500 mt-1">{order.user?.email || 'Guest checkout'}</p>
-                              </div>
-                              <div>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Address</p>
-                                <p className="text-sm font-semibold text-gray-900 flex items-start gap-1"><MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0" /> {order.deliveryMeta.deliveryAddress || 'NA'}</p>
-                                {order.deliveryMeta.landmark && (
-                                  <p className="text-xs text-gray-600 mt-1">Landmark: {order.deliveryMeta.landmark}</p>
-                                )}
-                              </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4 bg-gray-50 rounded-xl p-3 sm:p-4 border border-gray-100">
-                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Total</p><p className="text-sm font-black text-gray-900 mt-0.5">{formatInr(order.totalPaise)}</p></div>
-                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Paid</p><p className="text-sm font-black text-green-600 mt-0.5">{formatInr(order.paidAmountPaise || 0)}</p></div>
-                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Due</p><p className="text-sm font-black text-orange-600 mt-0.5">{formatInr(order.dueAmountPaise || 0)}</p></div>
-                              <div><p className="text-[10px] font-bold text-gray-400 uppercase">Placed At</p><p className="text-sm font-black text-gray-900 mt-0.5">{new Date(order.createdAt).toLocaleString('en-IN')}</p></div>
-                            </div>
-
-                            <div>
-                              <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Items</p>
-                              <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-1">
-                                {order.items.map((item) => (
-                                  <p key={item.id} className="text-xs sm:text-sm text-gray-700 font-semibold">
-                                    {item.menuItem?.name || 'Item'} x {item.quantity}
-                                  </p>
-                                ))}
-                              </div>
-                            </div>
-
-                            {instructions && (
-                              <div>
-                                <p className="text-[10px] font-bold text-gray-400 uppercase mb-1">Special Instructions</p>
-                                <p className="text-xs sm:text-sm text-gray-700 bg-gray-50 border border-gray-100 rounded-xl p-3">{instructions}</p>
-                              </div>
-                            )}
                           </div>
 
-                          <div className="w-full xl:w-80 shrink-0 bg-gray-50 rounded-[20px] p-4 border border-gray-100">
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Delivery Actions</p>
-                            <div className="space-y-3">
-                              <div>
-                                <label className="text-[10px] font-bold text-gray-500 uppercase block mb-1">Delivery Status</label>
-                                <div className="relative">
+                          {/* Customer & Address Card */}
+                          <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                            <div className="mb-3">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Customer</p>
+                              <p className="text-sm font-black text-gray-900">{order.deliveryMeta.customerName || order.user?.name || 'Unknown'}</p>
+                              <p className="text-xs font-semibold text-gray-600 flex items-center gap-1 mt-1"><Phone className="h-3 w-3" /> {order.deliveryMeta.customerPhone || 'NA'}</p>
+                            </div>
+                            <div className="pt-3 border-t border-gray-200">
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-1">Address</p>
+                              <p className="text-xs font-semibold text-gray-900 flex items-start gap-1 leading-snug"><MapPin className="h-3.5 w-3.5 mt-0.5 shrink-0 text-blue-500" /> {order.deliveryMeta.deliveryAddress || 'NA'}</p>
+                              {order.deliveryMeta.landmark && (
+                                <p className="text-[10px] text-gray-500 mt-1 ml-4.5 font-medium">Landmark: {order.deliveryMeta.landmark}</p>
+                              )}
+                            </div>
+                          </div>
+
+                          {/* Financials 2x2 */}
+                          <div className="grid grid-cols-2 gap-3 bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                            <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Total</p><p className="text-sm font-black text-gray-900">{formatInr(order.totalPaise)}</p></div>
+                            <div><p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Paid</p><p className="text-sm font-black text-green-600">{formatInr(order.paidAmountPaise || 0)}</p></div>
+                            <div className="col-span-2 pt-2 border-t border-gray-200"><p className="text-[10px] font-bold text-gray-400 uppercase mb-0.5">Due Amount</p><p className="text-sm font-black text-orange-600">{formatInr(order.dueAmountPaise || 0)}</p></div>
+                          </div>
+
+                          {/* Items */}
+                          <div>
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Items</p>
+                            <div className="bg-gray-50 border border-gray-100 rounded-xl p-3 space-y-1">
+                              {order.items.map((item) => (
+                                <p key={item.id} className="text-xs text-gray-700 font-bold flex justify-between">
+                                  <span>{item.menuItem?.name || 'Item'}</span> <span>x {item.quantity}</span>
+                                </p>
+                              ))}
+                            </div>
+                          </div>
+
+                          {instructions && (
+                            <div>
+                              <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-2">Notes</p>
+                              <p className="text-xs text-gray-700 bg-yellow-50 border border-yellow-100 rounded-xl p-3 font-medium">{instructions}</p>
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Delivery Actions (Bottom Pushed) */}
+                        <div className="w-full mt-auto pt-5">
+                          <div className="bg-gray-50 rounded-[20px] p-4 border border-gray-100 group-hover:bg-white group-hover:border-blue-100 transition-colors">
+                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-widest mb-3">Delivery Controls</p>
+                            <div className="space-y-4">
+                              
+                              <div className="flex gap-2">
+                                <div className="relative flex-1">
                                   <select
                                     value={selectedStatus}
                                     onChange={(e) => setDeliveryStatusDraft((p) => ({ ...p, [order.id]: e.target.value as DeliveryStatus }))}
-                                    className="w-full bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 appearance-none"
+                                    className="w-full bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 appearance-none"
                                   >
                                     {(['PLACED', 'CONFIRMED', 'PREPARING', 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED'] as DeliveryStatus[]).map((status) => (
                                       <option key={status} value={status}>
@@ -1237,17 +1358,16 @@ export default function AdminPage() {
                                   </select>
                                   <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
                                 </div>
+                                <button
+                                  onClick={() => saveDeliveryStatus(order)}
+                                  disabled={updatingDeliveryOrderId === order.id}
+                                  className="px-4 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition-colors disabled:opacity-50"
+                                >
+                                  Save
+                                </button>
                               </div>
 
-                              <button
-                                onClick={() => saveDeliveryStatus(order)}
-                                disabled={updatingDeliveryOrderId === order.id}
-                                className="w-full bg-gray-900 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-black transition-colors disabled:opacity-50"
-                              >
-                                {updatingDeliveryOrderId === order.id ? 'Saving...' : 'Save Status'}
-                              </button>
-
-                              <div className="pt-2 border-t border-gray-200">
+                              <div className="pt-3 border-t border-gray-200">
                                 <p className="text-[10px] font-bold text-gray-500 uppercase mb-2">Payment Update</p>
                                 <div className="relative mb-2">
                                   <select
@@ -1258,7 +1378,7 @@ export default function AdminPage() {
                                         [order.id]: e.target.value as Order['paymentStatus'],
                                       }))
                                     }
-                                    className="w-full bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 appearance-none"
+                                    className="w-full bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 appearance-none"
                                   >
                                     {(['PENDING', 'PROCESSING', 'COMPLETED', 'FAILED', 'REFUNDED', 'PARTIALLY_PAID'] as Order['paymentStatus'][]).map((status) => (
                                       <option key={status} value={status}>{status}</option>
@@ -1276,19 +1396,19 @@ export default function AdminPage() {
                                       }))
                                     }
                                     placeholder="Paid Amount INR"
-                                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 mb-2"
+                                    className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 mb-2"
                                   />
                                 )}
                                 <button
                                   onClick={() => saveDeliveryPayment(order)}
                                   disabled={updatingDeliveryOrderId === order.id}
-                                  className="w-full bg-emerald-600 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50"
+                                  className="w-full bg-emerald-600 text-white rounded-xl py-2 text-xs font-bold hover:bg-emerald-700 transition-colors disabled:opacity-50 shadow-sm"
                                 >
-                                  {updatingDeliveryOrderId === order.id ? 'Saving...' : 'Save Payment'}
+                                  {updatingDeliveryOrderId === order.id ? 'Saving...' : 'Update Payment'}
                                 </button>
                               </div>
 
-                              <div className="pt-2 border-t border-gray-200">
+                              <div className="pt-3 border-t border-gray-200">
                                 <p className="text-[10px] font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Bike className="h-3 w-3" /> Rider Assignment</p>
                                 <input
                                   value={riderName}
@@ -1299,7 +1419,7 @@ export default function AdminPage() {
                                     }))
                                   }
                                   placeholder="Rider name"
-                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 mb-2"
+                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 mb-2"
                                 />
                                 <input
                                   value={riderPhone}
@@ -1310,12 +1430,12 @@ export default function AdminPage() {
                                     }))
                                   }
                                   placeholder="Rider phone"
-                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2.5 text-xs font-bold focus:ring-2 focus:ring-orange-500/20 mb-2"
+                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 mb-2"
                                 />
                                 <button
                                   onClick={() => saveDeliveryRider(order)}
                                   disabled={updatingDeliveryOrderId === order.id}
-                                  className="w-full bg-blue-600 text-white rounded-xl py-2.5 text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50"
+                                  className="w-full bg-blue-600 text-white rounded-xl py-2 text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-sm"
                                 >
                                   {updatingDeliveryOrderId === order.id ? 'Assigning...' : 'Assign Rider'}
                                 </button>
@@ -1323,6 +1443,7 @@ export default function AdminPage() {
                             </div>
                           </div>
                         </div>
+
                       </div>
                     );
                   })}

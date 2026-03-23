@@ -1,12 +1,9 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initSocketServer = void 0;
 const socket_io_1 = require("socket.io");
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
 const database_1 = require("../config/database");
+const firebase_user_1 = require("../lib/firebase-user");
 const logger_1 = require("../utils/logger");
 const realtime_1 = require("../utils/realtime");
 const getAllowedOrigins = () => {
@@ -42,17 +39,7 @@ const authenticateSocket = async (socket, next) => {
         if (!token) {
             return next(new Error('Unauthorized'));
         }
-        if (!process.env.JWT_SECRET) {
-            return next(new Error('Server configuration error'));
-        }
-        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        const user = await database_1.prisma.user.findUnique({
-            where: { id: decoded.id },
-            select: { id: true, role: true },
-        });
-        if (!user) {
-            return next(new Error('Unauthorized'));
-        }
+        const user = await (0, firebase_user_1.ensureAuthenticatedUserFromToken)(token);
         socket.data.userId = user.id;
         socket.data.userRole = user.role;
         return next();

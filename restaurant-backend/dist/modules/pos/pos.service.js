@@ -1,16 +1,39 @@
 "use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.createIntegratedPosOrder = void 0;
+exports.getMarketplaceIntegratedOrders = exports.createMarketplaceIntegratedOrder = exports.createIntegratedPosOrder = void 0;
+const crypto_1 = require("crypto");
+const bcryptjs_1 = __importDefault(require("bcryptjs"));
 const database_1 = require("../../config/database");
 const inventory_service_1 = require("../../modules/inventory/inventory.service");
 const kot_service_1 = require("../../modules/kot/kot.service");
 const crm_service_1 = require("../../modules/crm/crm.service");
 const realtime_1 = require("../../utils/realtime");
+const marketplace_order_meta_1 = require("../../modules/pos/marketplace-order-meta");
 const TAX_RATE = 0.08;
 const MAX_POS_LINE_ITEMS = 150;
 const MAX_POS_ITEM_QUANTITY = 50;
+const MAX_MARKETPLACE_ITEMS = 80;
+const MARKETPLACE_SOURCE_SYSTEMS = ['ZOMATO', 'SWIGGY'];
 const normalizeCouponCode = (code) => code.trim().toUpperCase();
 const normalizeExternalOrderId = (value) => value?.trim() || null;
+const normalizePhoneNumber = (value) => {
+    if (!value)
+        return null;
+    const normalized = value.trim();
+    if (!normalized)
+        return null;
+    const sanitized = normalized.replace(/\s+/g, '');
+    return sanitized.length > 20 ? sanitized.slice(0, 20) : sanitized;
+};
+const sanitizeFreeText = (value, maxLen) => {
+    const trimmed = value?.trim();
+    if (!trimmed)
+        return '';
+    return trimmed.length > maxLen ? trimmed.slice(0, maxLen) : trimmed;
+};
 const normalizePosItems = (items) => {
     if (items.length === 0) {
         throw new Error('Order must contain at least one item');
@@ -29,11 +52,10 @@ const normalizePosItems = (items) => {
         if (item.quantity > MAX_POS_ITEM_QUANTITY) {
             throw new Error(`Quantity for item ${menuItemId} exceeds limit (${MAX_POS_ITEM_QUANTITY})`);
         }
-        const notes = item.notes?.trim();
         return {
             menuItemId,
             quantity: item.quantity,
-            notes: notes ? notes.slice(0, 200) : '',
+            notes: sanitizeFreeText(item.notes, 200),
         };
     });
 };
@@ -84,72 +106,297 @@ const buildOrderEventPayload = (order) => ({
         subtotalPaise: order.subtotalPaise,
         taxPaise: order.taxPaise,
         discountPaise: order.discountPaise,
+        ...(() => {
+            const metadata = (0, marketplace_order_meta_1.extractMarketplaceOrderMetadata)(order.specialInstructions);
+            if (!metadata)
+                return {};
+            return {
+                sourceSystem: metadata.sourceSystem,
+                externalOrderId: metadata.externalOrderId,
+            };
+        })(),
     },
 });
+const findExistingOrderReplay = async (input) => {
+    if (!input.externalOrderId)
+        return null;
+    const existingSuccessLog = await database_1.prisma.posSyncLog.findFirst({
+        where: {
+            restaurantId: input.restaurantId,
+            sourceSystem: input.sourceSystem,
+            eventType: 'ORDER_CREATED',
+            externalOrderId: input.externalOrderId,
+            status: 'SUCCESS',
+        },
+        orderBy: { createdAt: 'desc' },
+    });
+    const existingOrderId = extractOrderIdFromPayload(existingSuccessLog?.payload ?? null);
+    if (!existingSuccessLog || !existingOrderId) {
+        return null;
+    }
+    const existingOrder = await database_1.prisma.order.findFirst({
+        where: {
+            id: existingOrderId,
+            restaurantId: input.restaurantId,
+        },
+        include: {
+            items: { include: { menuItem: true } },
+            table: true,
+        },
+    });
+    if (!existingOrder) {
+        return null;
+    }
+    const [existingTicket, existingProfile] = await Promise.all([
+        database_1.prisma.kOTTicket.findFirst({
+            where: { restaurantId: input.restaurantId, orderId: existingOrder.id },
+        }),
+        database_1.prisma.customerProfile.findUnique({
+            where: {
+                restaurantId_userId: {
+                    restaurantId: input.restaurantId,
+                    userId: existingOrder.userId,
+                },
+            },
+            select: {
+                id: true,
+                loyaltyPoints: true,
+            },
+        }),
+    ]);
+    return {
+        order: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(existingOrder),
+        ticket: existingTicket,
+        customerProfile: existingProfile,
+        inventoryResult: {
+            adjustedMaterials: 0,
+            lowStockAlerts: [],
+        },
+        syncLog: {
+            id: existingSuccessLog.id,
+            status: existingSuccessLog.status,
+            createdAt: existingSuccessLog.createdAt,
+            updatedAt: existingSuccessLog.updatedAt,
+        },
+        idempotentReplay: true,
+    };
+};
+const ensureDeliveryTable = async (tx, restaurantId) => {
+    const existing = await tx.table.findFirst({
+        where: {
+            restaurantId,
+            active: true,
+            location: { equals: 'DELIVERY', mode: 'insensitive' },
+        },
+    });
+    if (existing)
+        return existing;
+    const maxNumberRow = await tx.table.findFirst({
+        where: { restaurantId },
+        orderBy: { number: 'desc' },
+        select: { number: true },
+    });
+    return tx.table.create({
+        data: {
+            restaurantId,
+            number: (maxNumberRow?.number || 0) + 1,
+            capacity: 1,
+            location: 'DELIVERY',
+            active: true,
+        },
+    });
+};
+const buildSyntheticGuestEmail = (input) => {
+    const sanitizedExternalId = input.externalOrderId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase();
+    const compactExternalId = sanitizedExternalId.slice(0, 18) || (0, crypto_1.randomUUID)().replace(/-/g, '').slice(0, 18);
+    const compactRestaurantId = input.restaurantId.replace(/[^a-zA-Z0-9]/g, '').toLowerCase().slice(-8) || 'rest';
+    return `guest+${input.sourceSystem.toLowerCase()}-${compactRestaurantId}-${compactExternalId}@deq-guest.local`;
+};
+const resolveMarketplaceCustomer = async (tx, input) => {
+    const normalizedPhone = normalizePhoneNumber(input.customer.phone);
+    const normalizedEmail = sanitizeFreeText(input.customer.email, 120).toLowerCase();
+    if (normalizedPhone) {
+        const byPhone = await tx.user.findUnique({
+            where: { phone: normalizedPhone },
+            select: { id: true },
+        });
+        if (byPhone) {
+            return byPhone.id;
+        }
+    }
+    if (normalizedEmail) {
+        const byEmail = await tx.user.findUnique({
+            where: { email: normalizedEmail },
+            select: { id: true },
+        });
+        if (byEmail) {
+            return byEmail.id;
+        }
+    }
+    const syntheticEmail = normalizedEmail ||
+        buildSyntheticGuestEmail({
+            restaurantId: input.restaurantId,
+            sourceSystem: input.sourceSystem,
+            externalOrderId: input.externalOrderId,
+        });
+    const existingSynthetic = await tx.user.findUnique({
+        where: { email: syntheticEmail },
+        select: { id: true },
+    });
+    if (existingSynthetic) {
+        return existingSynthetic.id;
+    }
+    const hashedPassword = await bcryptjs_1.default.hash((0, crypto_1.randomUUID)(), 10);
+    const fallbackName = `${input.sourceSystem} Guest`;
+    const safeName = sanitizeFreeText(input.customer.name, 80) || fallbackName;
+    const created = await tx.user.create({
+        data: {
+            name: safeName,
+            email: syntheticEmail,
+            password: hashedPassword,
+            role: 'CUSTOMER',
+            ...(normalizedPhone ? { phone: normalizedPhone } : {}),
+        },
+        select: { id: true },
+    });
+    return created.id;
+};
+const resolveMarketplaceItems = async (tx, input) => {
+    if (input.items.length === 0) {
+        throw new Error('At least one order item is required');
+    }
+    if (input.items.length > MAX_MARKETPLACE_ITEMS) {
+        throw new Error(`Order exceeds max line items (${MAX_MARKETPLACE_ITEMS})`);
+    }
+    const normalizedItems = input.items.map((item) => {
+        const menuItemId = sanitizeFreeText(item.menuItemId, 120);
+        const menuItemName = sanitizeFreeText(item.menuItemName, 120);
+        if (!menuItemId && !menuItemName) {
+            throw new Error('Each item must include either menuItemId or menuItemName');
+        }
+        if (!Number.isInteger(item.quantity) || item.quantity <= 0) {
+            throw new Error('Item quantity must be a positive integer');
+        }
+        if (item.quantity > MAX_POS_ITEM_QUANTITY) {
+            throw new Error(`Item quantity cannot exceed ${MAX_POS_ITEM_QUANTITY}`);
+        }
+        return {
+            menuItemId,
+            menuItemName,
+            quantity: item.quantity,
+            notes: sanitizeFreeText(item.notes, 200),
+        };
+    });
+    const itemIds = Array.from(new Set(normalizedItems
+        .map((item) => item.menuItemId)
+        .filter((value) => Boolean(value))));
+    const itemNames = Array.from(new Set(normalizedItems
+        .map((item) => item.menuItemName)
+        .filter((value) => Boolean(value))
+        .map((value) => value.toLowerCase())));
+    const [itemsById, itemsByName] = await Promise.all([
+        itemIds.length
+            ? tx.menuItem.findMany({
+                where: {
+                    restaurantId: input.restaurantId,
+                    id: { in: itemIds },
+                },
+                select: {
+                    id: true,
+                    available: true,
+                },
+            })
+            : Promise.resolve([]),
+        itemNames.length
+            ? tx.menuItem.findMany({
+                where: {
+                    restaurantId: input.restaurantId,
+                    OR: itemNames.map((name) => ({
+                        name: { equals: name, mode: 'insensitive' },
+                    })),
+                },
+                select: {
+                    id: true,
+                    name: true,
+                    available: true,
+                },
+            })
+            : Promise.resolve([]),
+    ]);
+    const idMap = new Map(itemsById.map((item) => [item.id, item]));
+    const nameMap = new Map(itemsByName.map((item) => [item.name.toLowerCase(), item]));
+    return normalizedItems.map((item) => {
+        if (item.menuItemId) {
+            const matched = idMap.get(item.menuItemId);
+            if (!matched || !matched.available) {
+                throw new Error(`Menu item ${item.menuItemId} is not available`);
+            }
+            return {
+                menuItemId: matched.id,
+                quantity: item.quantity,
+                notes: item.notes,
+            };
+        }
+        const lookup = item.menuItemName ? nameMap.get(item.menuItemName.toLowerCase()) : null;
+        if (!lookup || !lookup.available) {
+            throw new Error(`Menu item \"${item.menuItemName || ''}\" is not available`);
+        }
+        return {
+            menuItemId: lookup.id,
+            quantity: item.quantity,
+            notes: item.notes,
+        };
+    });
+};
+const mapPaymentState = (input) => {
+    let paidAmount = typeof input.paidAmountPaise === 'number'
+        ? Math.max(0, Math.floor(input.paidAmountPaise))
+        : 0;
+    let paymentStatus = input.requestedStatus || 'PENDING';
+    if (paymentStatus === 'COMPLETED' && typeof input.paidAmountPaise !== 'number') {
+        paidAmount = input.totalPaise;
+    }
+    if (paidAmount > input.totalPaise) {
+        paidAmount = input.totalPaise;
+    }
+    const dueAmount = Math.max(input.totalPaise - paidAmount, 0);
+    if (dueAmount === 0 && paymentStatus !== 'REFUNDED' && paymentStatus !== 'FAILED') {
+        paymentStatus = 'COMPLETED';
+    }
+    else if (dueAmount > 0 &&
+        paidAmount > 0 &&
+        paymentStatus !== 'FAILED' &&
+        paymentStatus !== 'REFUNDED') {
+        paymentStatus = 'PARTIALLY_PAID';
+    }
+    return {
+        paidAmountPaise: paidAmount,
+        dueAmountPaise: dueAmount,
+        paymentStatus,
+    };
+};
+const buildMarketplaceInstructions = (input) => {
+    const blocks = [
+        sanitizeFreeText(input.specialInstructions, 400),
+        `[${input.sourceSystem}] External Order ${input.externalOrderId}`,
+        `Customer: ${sanitizeFreeText(input.customer.name, 80) || 'Guest'}`,
+        `Address: ${sanitizeFreeText(input.customer.address, 240)}`,
+        input.customer.phone ? `Phone: ${sanitizeFreeText(input.customer.phone, 30)}` : '',
+    ].filter((entry) => entry.length > 0);
+    return blocks.join(' | ');
+};
 const createIntegratedPosOrder = async (input) => {
     const selectedProvider = input.paymentProvider || 'RAZORPAY';
     const normalizedItems = normalizePosItems(input.items);
     const normalizedExternalOrderId = normalizeExternalOrderId(input.externalOrderId) || undefined;
-    if (normalizedExternalOrderId) {
-        const existingSuccessLog = await database_1.prisma.posSyncLog.findFirst({
-            where: {
-                restaurantId: input.restaurantId,
-                sourceSystem: input.sourceSystem,
-                eventType: 'ORDER_CREATED',
-                externalOrderId: normalizedExternalOrderId,
-                status: 'SUCCESS',
-            },
-            orderBy: { createdAt: 'desc' },
-        });
-        const existingOrderId = extractOrderIdFromPayload(existingSuccessLog?.payload ?? null);
-        if (existingSuccessLog && existingOrderId) {
-            const existingOrder = await database_1.prisma.order.findFirst({
-                where: {
-                    id: existingOrderId,
-                    restaurantId: input.restaurantId,
-                },
-                include: {
-                    items: { include: { menuItem: true } },
-                    table: true,
-                },
-            });
-            if (existingOrder) {
-                const [existingTicket, existingProfile] = await Promise.all([
-                    database_1.prisma.kOTTicket.findFirst({
-                        where: { restaurantId: input.restaurantId, orderId: existingOrder.id },
-                    }),
-                    database_1.prisma.customerProfile.findUnique({
-                        where: {
-                            restaurantId_userId: {
-                                restaurantId: input.restaurantId,
-                                userId: existingOrder.userId,
-                            },
-                        },
-                        select: {
-                            id: true,
-                            loyaltyPoints: true,
-                        },
-                    }),
-                ]);
-                const replayResult = {
-                    order: existingOrder,
-                    ticket: existingTicket,
-                    customerProfile: existingProfile,
-                    inventoryResult: {
-                        adjustedMaterials: 0,
-                        lowStockAlerts: [],
-                    },
-                    syncLog: {
-                        id: existingSuccessLog.id,
-                        status: existingSuccessLog.status,
-                        createdAt: existingSuccessLog.createdAt,
-                        updatedAt: existingSuccessLog.updatedAt,
-                    },
-                    idempotentReplay: true,
-                };
-                return replayResult;
-            }
-        }
+    const replayLookup = {
+        restaurantId: input.restaurantId,
+        sourceSystem: input.sourceSystem,
+        ...(normalizedExternalOrderId ? { externalOrderId: normalizedExternalOrderId } : {}),
+    };
+    const replay = await findExistingOrderReplay(replayLookup);
+    if (replay) {
+        return replay;
     }
     try {
         const created = await database_1.prisma.$transaction(async (tx) => {
@@ -294,16 +541,13 @@ const createIntegratedPosOrder = async (input) => {
                 },
             });
             return {
-                order,
+                order: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(order),
                 ticket,
                 customerProfile,
                 inventoryResult,
                 syncLog,
             };
         });
-        if (created.idempotentReplay) {
-            return created;
-        }
         (0, realtime_1.emitRestaurantEvent)(input.restaurantId, {
             type: 'order.created',
             userId: created.order.userId,
@@ -358,4 +602,168 @@ const createIntegratedPosOrder = async (input) => {
     }
 };
 exports.createIntegratedPosOrder = createIntegratedPosOrder;
+const createMarketplaceIntegratedOrder = async (input) => {
+    const normalizedExternalOrderId = normalizeExternalOrderId(input.externalOrderId);
+    if (!normalizedExternalOrderId) {
+        throw new Error('externalOrderId is required');
+    }
+    const replay = await findExistingOrderReplay({
+        restaurantId: input.restaurantId,
+        sourceSystem: input.sourceSystem,
+        externalOrderId: normalizedExternalOrderId,
+    });
+    if (replay) {
+        return replay;
+    }
+    const prepared = await database_1.prisma.$transaction(async (tx) => {
+        const [deliveryTable, resolvedItems] = await Promise.all([
+            ensureDeliveryTable(tx, input.restaurantId),
+            resolveMarketplaceItems(tx, {
+                restaurantId: input.restaurantId,
+                items: input.items,
+            }),
+        ]);
+        const customerUserId = await resolveMarketplaceCustomer(tx, {
+            restaurantId: input.restaurantId,
+            sourceSystem: input.sourceSystem,
+            externalOrderId: normalizedExternalOrderId,
+            customer: input.customer,
+        });
+        return {
+            customerUserId,
+            tableId: deliveryTable.id,
+            items: resolvedItems,
+        };
+    });
+    const integrationInstructions = buildMarketplaceInstructions({
+        sourceSystem: input.sourceSystem,
+        externalOrderId: normalizedExternalOrderId,
+        customer: {
+            name: input.customer.name,
+            address: input.customer.address,
+            ...(input.customer.phone ? { phone: input.customer.phone } : {}),
+        },
+        ...(input.specialInstructions ? { specialInstructions: input.specialInstructions } : {}),
+    });
+    const createPayload = {
+        restaurantId: input.restaurantId,
+        userId: prepared.customerUserId,
+        tableId: prepared.tableId,
+        sourceSystem: input.sourceSystem,
+        externalOrderId: normalizedExternalOrderId,
+        items: prepared.items,
+        specialInstructions: integrationInstructions,
+        ...(input.paymentProvider ? { paymentProvider: input.paymentProvider } : {}),
+        ...(input.createdByUserId ? { createdByUserId: input.createdByUserId } : {}),
+    };
+    const created = await (0, exports.createIntegratedPosOrder)(createPayload);
+    if (created.idempotentReplay) {
+        return created;
+    }
+    const paymentProjection = mapPaymentState({
+        totalPaise: created.order.totalPaise,
+        ...(input.paymentStatus ? { requestedStatus: input.paymentStatus } : {}),
+        ...(typeof input.paidAmountPaise === 'number' ? { paidAmountPaise: input.paidAmountPaise } : {}),
+    });
+    const updatedOrder = await database_1.prisma.order.update({
+        where: { id: created.order.id },
+        data: {
+            isDelivery: true,
+            deliveryStatus: 'PLACED',
+            deliveryCustomerName: sanitizeFreeText(input.customer.name, 80) || 'Guest',
+            deliveryCustomerPhone: normalizePhoneNumber(input.customer.phone),
+            deliveryAddress: sanitizeFreeText(input.customer.address, 240),
+            deliveryLandmark: sanitizeFreeText(input.customer.landmark, 120) || null,
+            paidAmountPaise: paymentProjection.paidAmountPaise,
+            dueAmountPaise: paymentProjection.dueAmountPaise,
+            paymentStatus: paymentProjection.paymentStatus,
+        },
+        include: {
+            items: { include: { menuItem: true } },
+            table: true,
+        },
+    });
+    (0, realtime_1.emitRestaurantEvent)(input.restaurantId, {
+        type: 'order.updated',
+        userId: updatedOrder.userId,
+        payload: buildOrderEventPayload(updatedOrder),
+    });
+    return {
+        ...created,
+        order: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(updatedOrder),
+    };
+};
+exports.createMarketplaceIntegratedOrder = createMarketplaceIntegratedOrder;
+const getMarketplaceIntegratedOrders = async (input) => {
+    const take = Math.min(Math.max(input.limit || 20, 1), 100);
+    const sourceFilter = input.sourceSystem;
+    const logs = await database_1.prisma.posSyncLog.findMany({
+        where: {
+            restaurantId: input.restaurantId,
+            eventType: 'ORDER_CREATED',
+            status: 'SUCCESS',
+            ...(sourceFilter
+                ? { sourceSystem: sourceFilter }
+                : {
+                    sourceSystem: {
+                        in: [...MARKETPLACE_SOURCE_SYSTEMS],
+                    },
+                }),
+        },
+        orderBy: { createdAt: 'desc' },
+        take: Math.max(take * 2, 20),
+    });
+    const orderIds = Array.from(new Set(logs
+        .map((log) => extractOrderIdFromPayload(log.payload))
+        .filter((value) => Boolean(value))));
+    if (orderIds.length === 0) {
+        return [];
+    }
+    const orders = await database_1.prisma.order.findMany({
+        where: {
+            id: { in: orderIds },
+            restaurantId: input.restaurantId,
+        },
+        include: {
+            items: true,
+            table: { select: { number: true } },
+        },
+    });
+    const orderMap = new Map(orders.map((order) => [order.id, order]));
+    const summaries = [];
+    const seenOrderIds = new Set();
+    for (const log of logs) {
+        const orderId = extractOrderIdFromPayload(log.payload);
+        if (!orderId || seenOrderIds.has(orderId))
+            continue;
+        const order = orderMap.get(orderId);
+        if (!order)
+            continue;
+        if (!MARKETPLACE_SOURCE_SYSTEMS.includes(log.sourceSystem)) {
+            continue;
+        }
+        summaries.push({
+            orderId,
+            sourceSystem: log.sourceSystem,
+            externalOrderId: log.externalOrderId,
+            syncLogId: log.id,
+            syncedAt: log.createdAt,
+            status: order.status,
+            paymentStatus: order.paymentStatus,
+            totalPaise: order.totalPaise,
+            createdAt: order.createdAt,
+            customerName: order.deliveryCustomerName,
+            customerPhone: order.deliveryCustomerPhone,
+            deliveryAddress: order.deliveryAddress,
+            tableNumber: order.table?.number || null,
+            itemsCount: order.items.length,
+        });
+        seenOrderIds.add(orderId);
+        if (summaries.length >= take) {
+            break;
+        }
+    }
+    return summaries;
+};
+exports.getMarketplaceIntegratedOrders = getMarketplaceIntegratedOrders;
 //# sourceMappingURL=pos.service.js.map

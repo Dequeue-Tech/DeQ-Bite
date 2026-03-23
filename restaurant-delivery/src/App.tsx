@@ -1,4 +1,6 @@
 import { FormEvent, useEffect, useMemo, useRef, useState } from 'react';
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, updateProfile } from 'firebase/auth';
+import { auth } from './firebase';
 
 type AuthMode = 'login' | 'register';
 type DeliveryStatus =
@@ -352,25 +354,37 @@ export default function App() {
     setBusy(true);
     setError('');
     try {
-      const endpoint = authMode === 'login' ? '/auth/login' : '/auth/register';
-      const payload =
+      const credential =
         authMode === 'login'
-          ? { email: authForm.email, password: authForm.password }
-          : {
-              name: authForm.name,
-              email: authForm.email,
-              phone: authForm.phone,
-              password: authForm.password,
-            };
+          ? await signInWithEmailAndPassword(auth, authForm.email, authForm.password)
+          : await createUserWithEmailAndPassword(auth, authForm.email, authForm.password);
 
-      const data = await fetchJson<{ user: User; token: string }>(`${apiUrl}${endpoint}`, {
+      if (authMode === 'register' && authForm.name.trim()) {
+        await updateProfile(credential.user, { displayName: authForm.name.trim() });
+      }
+
+      const idToken = await credential.user.getIdToken();
+      await fetchJson<{ user: User }>(`${apiUrl}/auth/session`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${idToken}`,
+        },
+        body: JSON.stringify({
+          ...(authMode === 'register' && authForm.name.trim() ? { name: authForm.name.trim() } : {}),
+          ...(authForm.phone.trim() ? { phone: authForm.phone.trim() } : {}),
+        }),
       });
 
-      localStorage.setItem('auth_token', data.token);
-      setToken(data.token);
+      const data = await fetchJson<{ user: User }>(`${apiUrl}/auth/me`, {
+        headers: {
+          Authorization: `Bearer ${idToken}`,
+          ...(selectedSlug ? { 'x-restaurant-slug': selectedSlug } : {}),
+        },
+      });
+
+      localStorage.setItem('auth_token', idToken);
+      setToken(idToken);
       setUser(data.user);
       setCheckout((prev) => ({
         ...prev,
@@ -389,7 +403,8 @@ export default function App() {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    await signOut(auth);
     localStorage.removeItem('auth_token');
     setToken('');
     setUser(null);
@@ -403,7 +418,10 @@ export default function App() {
       setLoading(true);
       try {
         const slug = getSlugFromPath();
-        const localToken = localStorage.getItem('auth_token') || '';
+        const firebaseUser = auth.currentUser;
+        const localToken = firebaseUser
+          ? await firebaseUser.getIdToken()
+          : localStorage.getItem('auth_token') || '';
         setSelectedSlug(slug);
         setToken(localToken);
 

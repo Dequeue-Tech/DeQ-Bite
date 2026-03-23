@@ -34,8 +34,8 @@ import posRoutes from '@/modules/pos/pos.routes';
 dotenv.config();
 
 if (process.env.NODE_ENV === 'production') {
-  if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
-    logger.error('JWT_SECRET is not properly configured for production');
+  if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+    logger.error('Firebase Admin SDK environment variables are not properly configured for production');
   }
 }
 

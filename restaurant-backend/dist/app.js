@@ -35,8 +35,8 @@ const analytics_routes_1 = __importDefault(require("./modules/analytics/analytic
 const pos_routes_1 = __importDefault(require("./modules/pos/pos.routes"));
 dotenv_1.default.config();
 if (process.env.NODE_ENV === 'production') {
-    if (!process.env.JWT_SECRET || process.env.JWT_SECRET === 'your-super-secure-jwt-secret-key-for-production') {
-        logger_1.logger.error('JWT_SECRET is not properly configured for production');
+    if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
+        logger_1.logger.error('Firebase Admin SDK environment variables are not properly configured for production');
     }
 }
 const app = (0, express_1.default)();

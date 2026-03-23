@@ -1,65 +1,71 @@
 "use strict";
-var __importDefault = (this && this.__importDefault) || function (mod) {
-    return (mod && mod.__esModule) ? mod : { "default": mod };
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.optionalAuth = exports.authorize = exports.authenticate = void 0;
-const jsonwebtoken_1 = __importDefault(require("jsonwebtoken"));
-const database_1 = require("../config/database");
+const client_1 = require("@prisma/client");
+const firebase_user_1 = require("../lib/firebase-user");
 const errorHandler_1 = require("./errorHandler");
+const decodeJwtPayload = (token) => {
+    const parts = token.split('.');
+    if (parts.length !== 3)
+        return null;
+    try {
+        const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+        return payload;
+    }
+    catch {
+        return null;
+    }
+};
+const getFirebaseAuthErrorMessage = (error, token) => {
+    if (error instanceof client_1.Prisma.PrismaClientKnownRequestError && error.code === 'P2022') {
+        return 'Database schema is out of date for Firebase auth. Run Prisma migration to add required columns.';
+    }
+    const firebaseCode = error?.code;
+    if (firebaseCode === 'auth/id-token-expired') {
+        return 'Firebase token expired. Please sign in again.';
+    }
+    if (firebaseCode === 'auth/argument-error') {
+        return 'Invalid Firebase token format. Please sign in again.';
+    }
+    const payload = decodeJwtPayload(token);
+    const expectedProjectId = process.env.FIREBASE_PROJECT_ID;
+    if (payload?.aud && expectedProjectId && payload.aud !== expectedProjectId) {
+        return `Firebase token project mismatch. Token audience "${payload.aud}" does not match FIREBASE_PROJECT_ID "${expectedProjectId}".`;
+    }
+    if (payload?.exp && payload.exp * 1000 < Date.now()) {
+        return 'Firebase token expired. Please sign in again.';
+    }
+    return 'Invalid or expired Firebase token.';
+};
+const extractToken = (req) => {
+    const authHeader = req.get('Authorization') || req.headers['authorization'];
+    if (authHeader && typeof authHeader === 'string' && authHeader.startsWith('Bearer ')) {
+        return authHeader.substring(7);
+    }
+    if (req.body && typeof req.body.token === 'string') {
+        return req.body.token;
+    }
+    if (req.query && typeof req.query['token'] === 'string') {
+        return req.query['token'];
+    }
+    return undefined;
+};
 const authenticate = async (req, _res, next) => {
     try {
-        let token;
-        const authHeader = req.get('Authorization') || req.headers['authorization'];
-        if (authHeader && typeof authHeader === 'string') {
-            if (authHeader.startsWith('Bearer ')) {
-                token = authHeader.substring(7);
-            }
-        }
-        if (!token && req.body) {
-            token = req.body['token'];
-        }
-        if (!token && req.query) {
-            token = req.query['token'];
-        }
+        const token = extractToken(req);
         if (!token) {
-            console.log('No token found in request');
-            console.log('Headers:', req.headers);
-            console.log('Body:', req.body);
             throw new errorHandler_1.AppError('Access denied. No token provided.', 401);
         }
-        if (!process.env.JWT_SECRET) {
-            console.error('JWT_SECRET is not configured in environment variables');
-            throw new errorHandler_1.AppError('Server configuration error.', 500);
-        }
-        const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-        const user = await database_1.prisma.user.findUnique({
-            where: { id: decoded.id },
-            select: {
-                id: true,
-                email: true,
-                name: true,
-                role: true,
-                verified: true,
-                phone: true,
-            },
-        });
-        if (!user) {
-            throw new errorHandler_1.AppError('Invalid token.', 401);
-        }
+        const user = await (0, firebase_user_1.ensureAuthenticatedUserFromToken)(token);
         req.user = user;
         next();
     }
     catch (error) {
-        if (error instanceof jsonwebtoken_1.default.JsonWebTokenError) {
-            next(new errorHandler_1.AppError('Invalid token.', 401));
+        if (error instanceof errorHandler_1.AppError) {
+            return next(error);
         }
-        else if (error instanceof jsonwebtoken_1.default.TokenExpiredError) {
-            next(new errorHandler_1.AppError('Token expired.', 401));
-        }
-        else {
-            next(error);
-        }
+        const token = extractToken(req) || '';
+        next(new errorHandler_1.AppError(getFirebaseAuthErrorMessage(error, token), 401));
     }
 };
 exports.authenticate = authenticate;
@@ -77,35 +83,13 @@ const authorize = (...roles) => {
 exports.authorize = authorize;
 const optionalAuth = async (req, _res, next) => {
     try {
-        let token;
-        const authHeader = req.get('Authorization') || req.headers['authorization'];
-        if (authHeader && typeof authHeader === 'string') {
-            if (authHeader.startsWith('Bearer ')) {
-                token = authHeader.substring(7);
-            }
-        }
+        const token = extractToken(req);
         if (token) {
-            if (!process.env.JWT_SECRET) {
-                console.error('JWT_SECRET is not configured in environment variables');
-                throw new Error('Server configuration error.');
-            }
-            const decoded = jsonwebtoken_1.default.verify(token, process.env.JWT_SECRET);
-            const user = await database_1.prisma.user.findUnique({
-                where: { id: decoded.id },
-                select: {
-                    id: true,
-                    email: true,
-                    name: true,
-                    role: true,
-                },
-            });
-            if (user) {
-                req.user = user;
-            }
+            req.user = await (0, firebase_user_1.ensureAuthenticatedUserFromToken)(token);
         }
         next();
     }
-    catch (error) {
+    catch (_error) {
         next();
     }
 };

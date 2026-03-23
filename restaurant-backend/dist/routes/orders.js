@@ -9,10 +9,47 @@ const realtime_1 = require("../utils/realtime");
 const kot_service_1 = require("../modules/kot/kot.service");
 const inventory_service_1 = require("../modules/inventory/inventory.service");
 const crm_service_1 = require("../modules/crm/crm.service");
+const marketplace_order_meta_1 = require("../modules/pos/marketplace-order-meta");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 router.use(auth_1.authenticate);
 const normalizeCouponCode = (code) => code.trim().toUpperCase();
+const parseOrderChannelFilter = (value) => {
+    const raw = typeof value === 'string' ? value.trim().toUpperCase() : '';
+    if (raw === 'DINE_IN')
+        return 'DINE_IN';
+    if (raw === 'DELIVERY')
+        return 'DELIVERY';
+    if (raw === 'ZOMATO' || raw === 'SWIGGY')
+        return raw;
+    return 'ALL';
+};
+const buildRestaurantOrderWhere = (input) => {
+    if (input.channel === 'DINE_IN') {
+        return {
+            restaurantId: input.restaurantId,
+            isDelivery: false,
+        };
+    }
+    if (input.channel === 'DELIVERY') {
+        return {
+            restaurantId: input.restaurantId,
+            isDelivery: true,
+        };
+    }
+    if (input.channel === 'ZOMATO' || input.channel === 'SWIGGY') {
+        return {
+            restaurantId: input.restaurantId,
+            isDelivery: true,
+            specialInstructions: {
+                contains: `[${input.channel}] External Order`,
+            },
+        };
+    }
+    return {
+        restaurantId: input.restaurantId,
+    };
+};
 const calculateDiscountFromCoupon = (coupon, subtotalPaise) => {
     if (!coupon || !coupon.active)
         return 0;
@@ -61,6 +98,11 @@ const buildOrderEventPayload = (order) => {
         payloadOrder.taxPaise = order.taxPaise;
     if (typeof order.discountPaise === 'number')
         payloadOrder.discountPaise = order.discountPaise;
+    const marketplaceMetadata = (0, marketplace_order_meta_1.extractMarketplaceOrderMetadata)(order.specialInstructions);
+    if (marketplaceMetadata) {
+        payloadOrder.sourceSystem = marketplaceMetadata.sourceSystem;
+        payloadOrder.externalOrderId = marketplaceMetadata.externalOrderId;
+    }
     return { order: payloadOrder };
 };
 const applyCoupon = async (restaurantId, code, subtotalPaise) => {
@@ -302,7 +344,7 @@ router.post('/', restaurant_1.requireRestaurant, async (req, res) => {
         });
         return res.status(201).json({
             success: true,
-            data: order,
+            data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(order),
             message: 'Order created successfully and is awaiting confirmation from staff',
         });
     }
@@ -417,7 +459,7 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
         });
         return res.status(200).json({
             success: true,
-            data: updatedOrder,
+            data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(updatedOrder),
             message: 'Dishes added to ongoing meal',
         });
     }
@@ -508,7 +550,7 @@ router.post('/:id/apply-coupon', restaurant_1.requireRestaurant, async (req, res
         });
         return res.json({
             success: true,
-            data: updatedOrder,
+            data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(updatedOrder),
             message: 'Coupon applied successfully',
         });
     }
@@ -557,7 +599,7 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
             ]);
             return res.json({
                 success: true,
-                data: orders,
+                data: (0, marketplace_order_meta_1.attachMarketplaceMetadataToOrders)(orders),
                 pagination: {
                     page,
                     limit,
@@ -583,7 +625,7 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
             ...(typeof take === 'number' ? { take } : {}),
             ...(cursor ? { cursor, skip: 1 } : {}),
         });
-        return res.json({ success: true, data: orders });
+        return res.json({ success: true, data: (0, marketplace_order_meta_1.attachMarketplaceMetadataToOrders)(orders) });
     }
     catch (error) {
         return res.status(500).json({ success: false, error: 'Internal server error while fetching orders' });
@@ -591,6 +633,11 @@ router.get('/', restaurant_1.requireRestaurant, async (req, res) => {
 });
 router.get('/restaurant/all', restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
     try {
+        const channel = parseOrderChannelFilter(req.query['channel']);
+        const where = buildRestaurantOrderWhere({
+            restaurantId: req.restaurant.id,
+            channel,
+        });
         const pageRaw = Number(req.query['page']);
         const limitRaw = Number(req.query['limit']);
         const hasPaging = Number.isFinite(pageRaw) || Number.isFinite(limitRaw);
@@ -600,9 +647,7 @@ router.get('/restaurant/all', restaurant_1.requireRestaurant, (0, restaurant_1.a
             const skip = (page - 1) * limit;
             const [orders, total] = await Promise.all([
                 database_1.prisma.order.findMany({
-                    where: {
-                        restaurantId: req.restaurant.id,
-                    },
+                    where,
                     include: {
                         user: { select: { id: true, name: true, email: true } },
                         items: { include: { menuItem: true } },
@@ -615,29 +660,26 @@ router.get('/restaurant/all', restaurant_1.requireRestaurant, (0, restaurant_1.a
                     take: limit,
                 }),
                 database_1.prisma.order.count({
-                    where: {
-                        restaurantId: req.restaurant.id,
-                    },
+                    where,
                 }),
             ]);
             return res.json({
                 success: true,
-                data: orders,
+                data: (0, marketplace_order_meta_1.attachMarketplaceMetadataToOrders)(orders),
                 pagination: {
                     page,
                     limit,
                     total,
                     totalPages: Math.max(1, Math.ceil(total / limit)),
                 },
+                meta: { channel },
                 message: 'Restaurant orders retrieved successfully',
             });
         }
         const take = typeof req.query['take'] !== 'undefined' ? Math.min(Number(req.query['take']) || 0, 200) : undefined;
         const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
         const orders = await database_1.prisma.order.findMany({
-            where: {
-                restaurantId: req.restaurant.id,
-            },
+            where,
             include: {
                 user: { select: { id: true, name: true, email: true } },
                 items: { include: { menuItem: true } },
@@ -649,7 +691,12 @@ router.get('/restaurant/all', restaurant_1.requireRestaurant, (0, restaurant_1.a
             ...(typeof take === 'number' ? { take } : {}),
             ...(cursor ? { cursor, skip: 1 } : {}),
         });
-        return res.json({ success: true, data: orders, message: 'Restaurant orders retrieved successfully' });
+        return res.json({
+            success: true,
+            data: (0, marketplace_order_meta_1.attachMarketplaceMetadataToOrders)(orders),
+            meta: { channel },
+            message: 'Restaurant orders retrieved successfully',
+        });
     }
     catch (error) {
         return res.status(500).json({ success: false, error: 'Internal server error while fetching restaurant orders' });
@@ -679,7 +726,7 @@ router.get('/:id', restaurant_1.requireRestaurant, async (req, res) => {
         if (!order) {
             return res.status(404).json({ success: false, error: 'Order not found' });
         }
-        return res.json({ success: true, data: order });
+        return res.json({ success: true, data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(order) });
     }
     catch (error) {
         return res.status(500).json({ success: false, error: 'Internal server error while fetching order' });
@@ -720,7 +767,7 @@ router.put('/:id/status', restaurant_1.requireRestaurant, (0, restaurant_1.autho
             userId: order.userId,
             payload: buildOrderEventPayload(order),
         });
-        return res.json({ success: true, data: order, message: 'Order status updated' });
+        return res.json({ success: true, data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(order), message: 'Order status updated' });
     }
     catch (error) {
         return res.status(500).json({ success: false, error: 'Failed to update order status' });

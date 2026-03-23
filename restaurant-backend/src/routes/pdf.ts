@@ -1,6 +1,6 @@
 import { Router, Response } from 'express';
 import { prisma } from '@/config/database';
-import jwt from 'jsonwebtoken';
+import { ensureAuthenticatedUserFromToken } from '@/lib/firebase-user';
 import { AppError, asyncHandler } from '@/middleware/errorHandler';
 import { generateInvoicePDF, savePDFToStorage, downloadPDFFromStorage, getPDFDownloadUrl, isPrivateBucket } from '@/lib/pdf';
 import { AuthenticatedRequest } from '@/types/api';
@@ -78,14 +78,9 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
   }
 
   // Token provided: verify and ensure ownership
-  if (!process.env.JWT_SECRET) {
-    throw new AppError('Server configuration error', 500);
-  }
-
   try {
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as any;
-    const userId = decoded?.id;
-    if (!userId) throw new AppError('Invalid token', 401);
+    const user = await ensureAuthenticatedUserFromToken(token);
+    const userId = user.id;
 
     if (invoice.order?.userId !== userId) {
       throw new AppError('Access denied. You do not own this invoice.', 403);

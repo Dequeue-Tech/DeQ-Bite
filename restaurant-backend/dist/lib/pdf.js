@@ -13,127 +13,221 @@ const jspdf_1 = __importDefault(require("jspdf"));
 const logger_1 = require("../utils/logger");
 const b2_storage_1 = require("./b2-storage");
 exports.isPrivateBucket = b2_storage_1.isPrivateBucket;
+const COLOR_DARK = '#1A1A2E';
+const COLOR_ACCENT = '#E94560';
+const COLOR_LIGHT = '#F5F5F5';
+const COLOR_MID = '#AAAAAA';
+function fillRect(doc, x, y, w, h, hexColor) {
+    doc.setFillColor(hexColor);
+    doc.rect(x, y, w, h, 'F');
+}
+function hRule(doc, y, color, lineWidth = 0.4, x1 = 4, x2 = 76) {
+    doc.setDrawColor(color);
+    doc.setLineWidth(lineWidth);
+    doc.line(x1, y, x2, y);
+}
+function dottedRule(doc, y, x1 = 4, x2 = 76) {
+    doc.setDrawColor(COLOR_MID);
+    doc.setLineWidth(0.3);
+    doc.setLineDashPattern([0.5, 1.5], 0);
+    doc.line(x1, y, x2, y);
+    doc.setLineDashPattern([], 0);
+}
+function infoRow(doc, label, value, x, y, labelWidth = 18) {
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(7);
+    doc.setTextColor(COLOR_MID);
+    doc.text(label, x, y);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(7.5);
+    doc.setTextColor(COLOR_DARK);
+    doc.text(value, x + labelWidth, y);
+}
+function totalsRow(doc, label, value, y, bold = false, valueColor = COLOR_DARK) {
+    doc.setFont('helvetica', bold ? 'bold' : 'normal');
+    doc.setFontSize(8);
+    doc.setTextColor(bold ? COLOR_DARK : COLOR_MID);
+    doc.text(label, 4, y);
+    doc.setTextColor(valueColor);
+    doc.text(value, 76, y, { align: 'right' });
+}
 function generateInvoicePDF(invoiceData) {
     try {
-        const doc = new jspdf_1.default({
-            orientation: 'portrait',
-            unit: 'mm',
-            format: [80, 250]
-        });
-        const centerX = 40;
-        let currentY = 12;
+        const PAGE_W = 80;
+        const doc = new jspdf_1.default({ orientation: 'portrait', unit: 'mm', format: [PAGE_W, 260] });
+        const CX = PAGE_W / 2;
+        const M = 4;
+        const R = PAGE_W - M;
+        const COL2 = PAGE_W / 2;
+        let y = 0;
+        const HEADER_H = 38;
+        fillRect(doc, 0, 0, PAGE_W, HEADER_H, COLOR_DARK);
         doc.setFont('helvetica', 'bold');
         doc.setFontSize(14);
-        doc.text(invoiceData.restaurantName, centerX, currentY, { align: 'center' });
-        if (invoiceData.gstNumber) {
-            currentY += 5;
-            doc.setFont('helvetica', 'normal');
-            doc.setFontSize(8);
-            doc.text(`GST: ${invoiceData.gstNumber}`, centerX, currentY, { align: 'center' });
-        }
+        doc.setTextColor('#FFFFFF');
+        doc.text(invoiceData.restaurantName.toUpperCase(), CX, 12, { align: 'center' });
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(7);
+        doc.setTextColor(COLOR_ACCENT);
+        doc.text(invoiceData.restaurantTagline || 'Fine Dining & Hospitality', CX, 16.5, { align: 'center' });
+        doc.setDrawColor(COLOR_ACCENT);
+        doc.setLineWidth(0.6);
+        doc.line(10, 18.5, 70, 18.5);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor('#CCCCCC');
+        let addrY = 22;
         if (invoiceData.restaurantAddress) {
-            currentY += 4;
-            doc.setFontSize(8);
-            const addressLines = doc.splitTextToSize(invoiceData.restaurantAddress, 65);
-            doc.text(addressLines, centerX, currentY, { align: 'center' });
-            currentY += (addressLines.length - 1) * 4;
+            const lines = doc.splitTextToSize(invoiceData.restaurantAddress, 65);
+            doc.text(lines, CX, addrY, { align: 'center' });
+            addrY += lines.length * 3.5;
         }
         if (invoiceData.restaurantCity || invoiceData.restaurantState) {
-            currentY += 4;
             const cityState = [invoiceData.restaurantCity, invoiceData.restaurantState]
-                .filter(Boolean)
-                .join(', ');
-            doc.text(cityState, centerX, currentY, { align: 'center' });
+                .filter(Boolean).join(', ');
+            doc.text(cityState, CX, addrY, { align: 'center' });
+            addrY += 3.5;
         }
-        if (invoiceData.restaurantPhone) {
-            currentY += 4;
-            doc.text(`Ph: ${invoiceData.restaurantPhone}`, centerX, currentY, { align: 'center' });
+        const contactParts = [];
+        if (invoiceData.restaurantPhone)
+            contactParts.push(`Ph: ${invoiceData.restaurantPhone}`);
+        if (invoiceData.restaurantEmail)
+            contactParts.push(invoiceData.restaurantEmail);
+        if (contactParts.length) {
+            doc.text(contactParts.join('  |  '), CX, addrY, { align: 'center' });
         }
-        currentY += 5;
-        doc.setLineWidth(0.3);
-        doc.line(5, currentY, 75, currentY);
-        currentY += 6;
-        doc.setFontSize(9);
-        doc.text(`Name: ${invoiceData.customerName || '-'}`, 5, currentY);
-        currentY += 4;
-        doc.line(5, currentY, 75, currentY);
-        currentY += 6;
-        doc.text(`Date: ${invoiceData.orderDate}`, 5, currentY);
+        if (invoiceData.gstNumber) {
+            doc.setFontSize(6.5);
+            doc.setTextColor('#999999');
+            doc.text(`GSTIN: ${invoiceData.gstNumber}`, CX, 32.5, { align: 'center' });
+        }
+        y = HEADER_H;
+        fillRect(doc, 0, y, PAGE_W, 6, COLOR_ACCENT);
         doc.setFont('helvetica', 'bold');
-        doc.text(`Dine In: ${invoiceData.tableNumber || '-'}`, 45, currentY);
-        currentY += 5;
-        doc.setFont('helvetica', 'normal');
-        doc.text(`Cashier: ${invoiceData.cashierName || '-'}`, 5, currentY);
-        doc.text(`Bill No: ${invoiceData.invoiceNumber}`, 45, currentY);
-        currentY += 4;
-        doc.line(5, currentY, 75, currentY);
-        currentY += 6;
         doc.setFontSize(9);
-        doc.text('No', 5, currentY);
-        doc.text('Item', 12, currentY);
-        doc.text('Qty', 45, currentY);
-        doc.text('Price', 55, currentY);
-        doc.text('Amt', 75, currentY, { align: 'right' });
-        currentY += 2;
-        doc.line(5, currentY, 75, currentY);
-        currentY += 5;
+        doc.setTextColor('#FFFFFF');
+        doc.text('TAX INVOICE', CX, y + 4.2, { align: 'center' });
+        y += 6;
+        y += 3;
+        doc.setTextColor(COLOR_DARK);
+        infoRow(doc, 'Customer:', invoiceData.customerName || '-', M, y);
+        y += 4;
+        infoRow(doc, 'Mobile:', invoiceData.customerPhone || '-', M, y);
+        y += 4;
+        infoRow(doc, 'Date:', invoiceData.orderDate, M, y);
+        if (invoiceData.orderTime) {
+            infoRow(doc, 'Time:', invoiceData.orderTime, COL2, y, 10);
+        }
+        y += 4;
+        infoRow(doc, 'Table:', invoiceData.tableNumber || '-', M, y);
+        infoRow(doc, 'Cashier:', invoiceData.cashierName || '-', COL2, y, 12);
+        y += 4;
+        const shortBill = invoiceData.invoiceNumber.slice(-10);
+        infoRow(doc, 'Bill No:', shortBill, M, y);
+        if (invoiceData.paymentMode) {
+            infoRow(doc, 'Mode:', invoiceData.paymentMode, COL2, y, 10);
+        }
+        y += 5;
+        hRule(doc, y, COLOR_DARK, 0.8);
+        y += 1;
+        fillRect(doc, M, y, PAGE_W - 2 * M, 6.5, COLOR_LIGHT);
+        y += 1;
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(7.5);
+        doc.setTextColor(COLOR_DARK);
+        doc.text('#', M + 1, y + 4);
+        doc.text('ITEM', M + 6, y + 4);
+        doc.text('QTY', 44, y + 4);
+        doc.text('PRICE', 53, y + 4);
+        doc.text('AMOUNT', R, y + 4, { align: 'right' });
+        y += 6.5;
+        hRule(doc, y, COLOR_ACCENT, 0.6);
+        y += 5.5;
         let totalQty = 0;
-        invoiceData.items.forEach((item, index) => {
+        invoiceData.items.forEach((item, idx) => {
             totalQty += item.quantity;
-            doc.text(`${index + 1}`, 5, currentY);
-            const itemNameLines = doc.splitTextToSize(item.name, 30);
-            doc.text(itemNameLines, 12, currentY);
-            doc.text(item.quantity.toString(), 45, currentY);
-            doc.text(item.price.toFixed(2), 55, currentY);
-            doc.text(item.total.toFixed(2), 75, currentY, { align: 'right' });
-            currentY += (itemNameLines.length * 5) + 3;
-        });
-        doc.line(5, currentY, 75, currentY);
-        currentY += 8;
-        doc.setFont('helvetica', 'normal');
-        doc.setFontSize(9);
-        doc.text(`Total Qty: ${totalQty}`, 5, currentY);
-        doc.text('Sub Total', 45, currentY);
-        doc.text(invoiceData.subtotal.toFixed(2), 75, currentY, { align: 'right' });
-        currentY += 8;
-        const taxLabel = invoiceData.taxPercent
-            ? `GST ${invoiceData.taxPercent}%`
-            : 'GST';
-        doc.text(taxLabel, 45, currentY);
-        doc.text(invoiceData.tax.toFixed(2), 75, currentY, { align: 'right' });
-        currentY += 7;
-        doc.setLineWidth(0.5);
-        doc.line(5, currentY, 75, currentY);
-        currentY += 9;
-        doc.setFont('helvetica', 'bold');
-        doc.setFontSize(11);
-        doc.text('Grand Total', 5, currentY);
-        doc.text(`INR ${invoiceData.total.toFixed(2)}`, 75, currentY, { align: 'right' });
-        currentY += 8;
-        doc.setLineWidth(0.5);
-        doc.line(5, currentY, 75, currentY);
-        currentY += 2;
-        doc.line(5, currentY, 75, currentY);
-        if (invoiceData.fssaiNumber) {
-            currentY += 6;
             doc.setFont('helvetica', 'bold');
-            doc.setFontSize(8);
-            doc.text(`FSSAI Lic No. ${invoiceData.fssaiNumber}`, centerX, currentY, {
-                align: 'center'
-            });
+            doc.setFontSize(7.5);
+            doc.setTextColor(COLOR_DARK);
+            doc.text(`${idx + 1}`, M + 1, y);
+            doc.setFont('helvetica', 'normal');
+            const nameLines = doc.splitTextToSize(item.name, 28);
+            doc.text(nameLines, M + 6, y);
+            doc.text(item.quantity.toString(), 44, y);
+            doc.text(item.price.toFixed(2), 53, y);
+            doc.text(item.total.toFixed(2), R, y, { align: 'right' });
+            y += nameLines.length * 4.5;
+            dottedRule(doc, y);
+            y += 4;
+        });
+        hRule(doc, y, COLOR_DARK, 0.8);
+        y += 6;
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(7);
+        doc.setTextColor(COLOR_MID);
+        doc.text(`Total Qty: ${totalQty}`, M, y);
+        totalsRow(doc, 'Sub Total', `INR ${invoiceData.subtotal.toFixed(2)}`, y);
+        y += 5;
+        if (invoiceData.discount && invoiceData.discount > 0) {
+            totalsRow(doc, 'Discount', `- INR ${invoiceData.discount.toFixed(2)}`, y, false, COLOR_ACCENT);
+            y += 5;
         }
+        const taxLabel = invoiceData.taxPercent ? `GST (${invoiceData.taxPercent}%)` : 'GST';
+        totalsRow(doc, taxLabel, `INR ${invoiceData.tax.toFixed(2)}`, y);
+        y += 6;
+        fillRect(doc, 0, y - 2, PAGE_W, 10, COLOR_DARK);
+        doc.setFont('helvetica', 'bold');
+        doc.setFontSize(10);
+        doc.setTextColor('#FFFFFF');
+        doc.text('GRAND TOTAL', M + 2, y + 4.5);
+        doc.setFontSize(11);
+        doc.setTextColor(COLOR_ACCENT);
+        doc.text(`INR ${invoiceData.total.toFixed(2)}`, R, y + 4.5, { align: 'right' });
+        y += 12;
+        if (invoiceData.amountPaid !== undefined) {
+            totalsRow(doc, 'Amount Paid', `INR ${invoiceData.amountPaid.toFixed(2)}`, y);
+            y += 5;
+        }
+        if (invoiceData.changeReturned !== undefined) {
+            totalsRow(doc, 'Change Returned', `INR ${invoiceData.changeReturned.toFixed(2)}`, y);
+            y += 5;
+        }
+        hRule(doc, y, COLOR_DARK, 0.8);
+        y += 6;
+        if (invoiceData.fssaiNumber) {
+            doc.setFont('helvetica', 'bold');
+            doc.setFontSize(6.5);
+            doc.setTextColor(COLOR_MID);
+            doc.text(`FSSAI Lic No.: ${invoiceData.fssaiNumber}`, CX, y, { align: 'center' });
+            y += 5;
+        }
+        hRule(doc, y, COLOR_MID, 0.3);
+        y += 6;
+        const footerLines = (invoiceData.footerMessage || 'Thank you for dining with us!\nWe hope to see you again soon.')
+            .split('\n');
+        doc.setFont('helvetica', 'italic');
+        doc.setFontSize(8);
+        doc.setTextColor(COLOR_DARK);
+        footerLines.forEach(line => {
+            doc.text(line, CX, y, { align: 'center' });
+            y += 4.5;
+        });
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(5.5);
+        doc.setTextColor(COLOR_MID);
+        doc.text('Powered by BillingPro v2.1', CX, y + 2, { align: 'center' });
         const pdfBuffer = Buffer.from(doc.output('arraybuffer'));
         logger_1.logger.info('PDF invoice generated successfully', {
             invoiceNumber: invoiceData.invoiceNumber,
             customerName: invoiceData.customerName,
-            total: invoiceData.total
+            total: invoiceData.total,
         });
         return pdfBuffer;
     }
     catch (error) {
         logger_1.logger.error('PDF generation failed', {
             error: error instanceof Error ? error.message : 'Unknown error',
-            invoiceNumber: invoiceData.invoiceNumber
+            invoiceNumber: invoiceData.invoiceNumber,
         });
         throw new Error('Failed to generate PDF invoice');
     }

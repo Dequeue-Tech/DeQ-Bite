@@ -1,13 +1,9 @@
 import { Server as HttpServer } from 'http';
 import { Server as SocketIOServer, Socket } from 'socket.io';
-import jwt from 'jsonwebtoken';
 import { prisma } from '@/config/database';
+import { ensureAuthenticatedUserFromToken } from '@/lib/firebase-user';
 import { logger } from '@/utils/logger';
 import { setSocketServer } from '@/utils/realtime';
-
-type AuthPayload = {
-  id: string;
-};
 
 const getAllowedOrigins = () => {
   return [
@@ -47,19 +43,7 @@ const authenticateSocket = async (socket: Socket, next: (err?: Error) => void) =
       return next(new Error('Unauthorized'));
     }
 
-    if (!process.env.JWT_SECRET) {
-      return next(new Error('Server configuration error'));
-    }
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET) as AuthPayload;
-    const user = await prisma.user.findUnique({
-      where: { id: decoded.id },
-      select: { id: true, role: true },
-    });
-
-    if (!user) {
-      return next(new Error('Unauthorized'));
-    }
+    const user = await ensureAuthenticatedUserFromToken(token);
 
     socket.data.userId = user.id;
     socket.data.userRole = user.role;

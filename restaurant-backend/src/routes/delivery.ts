@@ -5,6 +5,11 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { AuthenticatedRequest } from '@/types/api';
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { sendSMS } from '@/lib/sms';
+import {
+  attachMarketplaceMetadataToOrders,
+  attachMarketplaceOrderMetadata,
+  extractMarketplaceOrderMetadata,
+} from '@/modules/pos/marketplace-order-meta';
 
 const router = Router();
 const TAX_RATE = 0.08;
@@ -111,6 +116,14 @@ const buildOrderEventPayload = (order: any) => ({
     ...(typeof order.subtotalPaise === 'number' ? { subtotalPaise: order.subtotalPaise } : {}),
     ...(typeof order.taxPaise === 'number' ? { taxPaise: order.taxPaise } : {}),
     ...(typeof order.discountPaise === 'number' ? { discountPaise: order.discountPaise } : {}),
+    ...(() => {
+      const metadata = extractMarketplaceOrderMetadata(order.specialInstructions);
+      if (!metadata) return {};
+      return {
+        sourceSystem: metadata.sourceSystem,
+        externalOrderId: metadata.externalOrderId,
+      };
+    })(),
   },
 });
 
@@ -398,7 +411,7 @@ router.post('/orders', async (req: AuthenticatedRequest, res) => {
 
     return res.status(201).json({
       success: true,
-      data: { ...order, deliveryMeta },
+      data: attachMarketplaceOrderMetadata({ ...order, deliveryMeta }),
       message: 'Delivery order created successfully',
     });
   } catch (error) {
@@ -421,7 +434,9 @@ router.get('/orders/restaurant/all', authorizeRestaurantRole('OWNER', 'ADMIN', '
       orderBy: { createdAt: 'desc' },
     });
 
-    const enriched = orders.map((order: any) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }));
+    const enriched = attachMarketplaceMetadataToOrders(
+      orders.map((order: any) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }))
+    );
     return res.json({
       success: true,
       data: enriched,
@@ -449,7 +464,9 @@ router.get('/orders/my', async (req: AuthenticatedRequest, res) => {
       orderBy: { createdAt: 'desc' },
     });
 
-    const enriched = orders.map((order: any) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }));
+    const enriched = attachMarketplaceMetadataToOrders(
+      orders.map((order: any) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }))
+    );
     return res.json({
       success: true,
       data: enriched,
@@ -522,7 +539,7 @@ router.put('/orders/:id/assign-rider', authorizeRestaurantRole('OWNER', 'ADMIN',
 
     return res.json({
       success: true,
-      data: { ...updated, deliveryMeta },
+      data: attachMarketplaceOrderMetadata({ ...updated, deliveryMeta }),
       message: 'Rider assigned successfully',
     });
   } catch (error) {
@@ -597,7 +614,7 @@ router.put('/orders/:id/status', authorizeRestaurantRole('OWNER', 'ADMIN', 'STAF
 
     return res.json({
       success: true,
-      data: { ...updated, deliveryMeta },
+      data: attachMarketplaceOrderMetadata({ ...updated, deliveryMeta }),
       message: 'Delivery status updated successfully',
     });
   } catch (error) {

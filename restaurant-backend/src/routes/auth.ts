@@ -1,79 +1,61 @@
 import { Router, Request, Response } from 'express';
-import bcrypt from 'bcryptjs';
-import jwt from 'jsonwebtoken';
 import { z } from 'zod';
 import { prisma } from '@/config/database';
-import { authenticate } from '@/middleware/auth'; 
+import { authenticate } from '@/middleware/auth';
 import { AppError, asyncHandler } from '@/middleware/errorHandler';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 
 const router = Router();
 
-// Validation schemas
-const registerSchema = z.object({
-  name: z.string().min(2, 'Name must be at least 2 characters').max(50),
-  email: z.string().email('Invalid email address'),
+const firebaseSessionSchema = z.object({
+  name: z.string().min(2, 'Name must be at least 2 characters').max(50).optional(),
   phone: z.string().min(10, 'Phone number must be at least 10 digits').optional(),
-  password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
-  password: z.string().min(1, 'Password is required'),
-});
+// Legacy endpoints retained for backwards compatibility.
+router.post('/register', asyncHandler(async (_req: Request, res: Response) => {
+  const response: ApiResponse = {
+    success: false,
+    message: 'This endpoint is deprecated. Use Firebase Authentication on the client, then call /api/auth/session with a Firebase ID token.',
+  };
 
-const changePasswordSchema = z.object({
-  currentPassword: z.string().min(1, 'Current password is required'),
-  newPassword: z.string().min(6, 'New password must be at least 6 characters'),
-});
+  res.status(410).json(response);
+}));
 
-// Helper function to generate JWT token
-const generateToken = (userId: string): string => {
-  const jwtSecret = process.env.JWT_SECRET;
-  
-  if (!jwtSecret) {
-    throw new AppError('JWT_SECRET environment variable is not configured', 500);
-  }
-  
-  const payload = { id: userId };
-  const expiresIn = process.env.JWT_EXPIRES_IN || '7d';
-  
-  // Using explicit type casting for JWT secret and options
-  return jwt.sign(payload, jwtSecret!, {
-    expiresIn,
-  } as jwt.SignOptions);
-};
+// Legacy endpoints retained for backwards compatibility.
+router.post('/login', asyncHandler(async (_req: Request, res: Response) => {
+  const response: ApiResponse = {
+    success: false,
+    message: 'This endpoint is deprecated. Use Firebase Authentication on the client, then call /api/auth/session with a Firebase ID token.',
+  };
 
-// POST /api/auth/register
-router.post('/register', asyncHandler(async (req: Request, res: Response) => {
-  const { name, email, phone, password } = registerSchema.parse(req.body);
+  res.status(410).json(response);
+}));
 
-  // Check if user already exists
-  const existingUser = await prisma.user.findFirst({
-    where: {
-      OR: [
-        { email },
-        ...(phone ? [{ phone }] : []),
-      ],
-    },
-  });
+// POST /api/auth/session - Sync Firebase-authenticated user profile
+router.post('/session', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const payload = firebaseSessionSchema.parse(req.body ?? {});
+  const userId = req.user!.id;
 
-  if (existingUser) {
-    throw new AppError('User with this email or phone already exists', 409);
+  if (payload.phone) {
+    const phoneOwner = await prisma.user.findFirst({
+      where: {
+        phone: payload.phone,
+        NOT: { id: userId },
+      },
+      select: { id: true },
+    });
+
+    if (phoneOwner) {
+      throw new AppError('Phone number is already in use by another account', 409);
+    }
   }
 
-  // Hash password
-  const saltRounds = 12;
-  const hashedPassword = await bcrypt.hash(password, saltRounds);
-
-  // Create user
-  const user = await prisma.user.create({
+  const user = await prisma.user.update({
+    where: { id: userId },
     data: {
-      name,
-      email,
-      phone: phone || null,
-      password: hashedPassword,
-      role: 'CUSTOMER',
+      ...(payload.name ? { name: payload.name } : {}),
+      ...(payload.phone ? { phone: payload.phone } : {}),
     },
     select: {
       id: true,
@@ -83,75 +65,14 @@ router.post('/register', asyncHandler(async (req: Request, res: Response) => {
       role: true,
       verified: true,
       createdAt: true,
+      updatedAt: true,
     },
   });
 
-  // Generate token
-  const token = generateToken(user.id);
-
   const response: ApiResponse = {
     success: true,
-    message: 'User registered successfully',
-    data: {
-      user,
-      token,
-    },
-  };
-
-  res.status(201).json(response);
-}));
-
-// POST /api/auth/login
-router.post('/login', asyncHandler(async (req: Request, res: Response) => {
-  const { email, password } = loginSchema.parse(req.body);
-
-  // Find user with comprehensive data from Prisma
-  const user = await prisma.user.findUnique({
-    where: { email },
-    include: {
-      orders: {
-        take: 5,
-        orderBy: { createdAt: 'desc' },
-        select: {
-          id: true,
-          status: true,
-          totalPaise: true,
-          createdAt: true,
-        },
-      },
-    },
-  });
-
-  if (!user) {
-    throw new AppError('Invalid email or password', 401);
-  }
-
-  // Verify password
-  const isPasswordValid = await bcrypt.compare(password, user.password);
-
-  if (!isPasswordValid) {
-    throw new AppError('Invalid email or password', 401);
-  }
-
-  // Generate token
-  const token = generateToken(user.id);
-
-  const response: ApiResponse = {
-    success: true,
-    message: 'Login successful',
-    data: {
-      user: {
-        id: user.id,
-        name: user.name,
-        email: user.email,
-        phone: user.phone,
-        role: user.role,
-        verified: user.verified,
-        createdAt: user.createdAt,
-        recentOrders: user.orders,
-      },
-      token,
-    },
+    message: 'Session synchronized successfully',
+    data: { user },
   };
 
   res.json(response);
@@ -335,55 +256,23 @@ router.get('/profile', authenticate, asyncHandler(async (req: AuthenticatedReque
 }));
 
 // PUT /api/auth/change-password
-router.put('/change-password', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  const { currentPassword, newPassword } = changePasswordSchema.parse(req.body);
-
-  // Get current user with password
-  const user = await prisma.user.findUnique({
-    where: { id: req.user!.id },
-  });
-
-  if (!user) {
-    throw new AppError('User not found', 404);
-  }
-
-  // Verify current password
-  const isCurrentPasswordValid = await bcrypt.compare(currentPassword, user.password);
-
-  if (!isCurrentPasswordValid) {
-    throw new AppError('Current password is incorrect', 400);
-  }
-
-  // Hash new password
-  const saltRounds = 12;
-  const hashedNewPassword = await bcrypt.hash(newPassword, saltRounds);
-
-  // Update password
-  await prisma.user.update({
-    where: { id: req.user!.id },
-    data: { password: hashedNewPassword },
-  });
-
+router.put('/change-password', authenticate, asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
   const response: ApiResponse = {
-    success: true,
-    message: 'Password changed successfully',
+    success: false,
+    message: 'Password changes are managed by Firebase Authentication. Use Firebase reset/update flows on the client.',
   };
 
-  res.json(response);
+  res.status(410).json(response);
 }));
 
 // POST /api/auth/refresh
-router.post('/refresh', authenticate, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
-  // Generate new token
-  const token = generateToken(req.user!.id);
-
+router.post('/refresh', authenticate, asyncHandler(async (_req: AuthenticatedRequest, res: Response) => {
   const response: ApiResponse = {
-    success: true,
-    message: 'Token refreshed successfully',
-    data: { token },
+    success: false,
+    message: 'Token refresh is managed by Firebase Authentication. Fetch a fresh Firebase ID token on the client.',
   };
 
-  res.json(response);
+  res.status(410).json(response);
 }));
 
 export default router;

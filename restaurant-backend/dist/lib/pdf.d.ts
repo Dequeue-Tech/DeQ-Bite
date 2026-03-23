@@ -1,6 +1,6 @@
 import { isPrivateBucket as checkPrivateBucket } from './b2-storage';
 export declare const isPrivateBucket: typeof checkPrivateBucket;
-export interface InvoiceData {
+export interface LegacyInvoiceData {
     restaurantName: string;
     restaurantAddress?: string;
     restaurantCity?: string;
@@ -27,6 +27,42 @@ export interface InvoiceData {
     tableNumber: number;
     cashierName?: string;
     paymentMethod?: string;
+}
+export interface InvoiceItem {
+    name: string;
+    quantity: number;
+    price: number;
+    total: number;
+}
+export interface InvoiceData {
+    restaurantName: string;
+    restaurantTagline?: string;
+    restaurantAddress?: string;
+    restaurantCity?: string;
+    restaurantState?: string;
+    restaurantPhone?: string;
+    restaurantEmail?: string;
+    gstNumber?: string;
+    fssaiNumber?: string;
+    customerName?: string;
+    customerEmail?: string;
+    customerPhone?: string;
+    orderDate: string;
+    orderTime?: string;
+    tableNumber?: string;
+    cashierName?: string;
+    invoiceNumber: string;
+    paymentMode?: string;
+    paymentMethod?: string;
+    items: InvoiceItem[];
+    subtotal: number;
+    discount?: number;
+    taxPercent?: number;
+    tax: number;
+    total: number;
+    amountPaid?: number;
+    changeReturned?: number;
+    footerMessage?: string;
 }
 export declare function generateInvoicePDF(invoiceData: InvoiceData): Buffer;
 export declare function savePDFToStorage(pdfBuffer: Buffer, filename: string): Promise<{

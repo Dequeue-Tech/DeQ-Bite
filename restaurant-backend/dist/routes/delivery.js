@@ -6,6 +6,7 @@ const auth_1 = require("../middleware/auth");
 const restaurant_1 = require("../middleware/restaurant");
 const realtime_1 = require("../utils/realtime");
 const sms_1 = require("../lib/sms");
+const marketplace_order_meta_1 = require("../modules/pos/marketplace-order-meta");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 const LEGACY_DELIVERY_META_PREFIX = '[DELIVERY_META]';
@@ -77,6 +78,15 @@ const buildOrderEventPayload = (order) => ({
         ...(typeof order.subtotalPaise === 'number' ? { subtotalPaise: order.subtotalPaise } : {}),
         ...(typeof order.taxPaise === 'number' ? { taxPaise: order.taxPaise } : {}),
         ...(typeof order.discountPaise === 'number' ? { discountPaise: order.discountPaise } : {}),
+        ...(() => {
+            const metadata = (0, marketplace_order_meta_1.extractMarketplaceOrderMetadata)(order.specialInstructions);
+            if (!metadata)
+                return {};
+            return {
+                sourceSystem: metadata.sourceSystem,
+                externalOrderId: metadata.externalOrderId,
+            };
+        })(),
     },
 });
 const parseLegacyDeliveryMeta = (specialInstructions) => {
@@ -337,7 +347,7 @@ router.post('/orders', async (req, res) => {
         });
         return res.status(201).json({
             success: true,
-            data: { ...order, deliveryMeta },
+            data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)({ ...order, deliveryMeta }),
             message: 'Delivery order created successfully',
         });
     }
@@ -359,7 +369,7 @@ router.get('/orders/restaurant/all', (0, restaurant_1.authorizeRestaurantRole)('
             },
             orderBy: { createdAt: 'desc' },
         });
-        const enriched = orders.map((order) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }));
+        const enriched = (0, marketplace_order_meta_1.attachMarketplaceMetadataToOrders)(orders.map((order) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) })));
         return res.json({
             success: true,
             data: enriched,
@@ -386,7 +396,7 @@ router.get('/orders/my', async (req, res) => {
             },
             orderBy: { createdAt: 'desc' },
         });
-        const enriched = orders.map((order) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) }));
+        const enriched = (0, marketplace_order_meta_1.attachMarketplaceMetadataToOrders)(orders.map((order) => ({ ...order, deliveryMeta: getOrderDeliveryMeta(order) })));
         return res.json({
             success: true,
             data: enriched,
@@ -453,7 +463,7 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
         }
         return res.json({
             success: true,
-            data: { ...updated, deliveryMeta },
+            data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)({ ...updated, deliveryMeta }),
             message: 'Rider assigned successfully',
         });
     }
@@ -522,7 +532,7 @@ router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNE
         }
         return res.json({
             success: true,
-            data: { ...updated, deliveryMeta },
+            data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)({ ...updated, deliveryMeta }),
             message: 'Delivery status updated successfully',
         });
     }

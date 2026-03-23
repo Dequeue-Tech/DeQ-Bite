@@ -53,7 +53,7 @@ export default function OrdersPage() {
   const [orders, setOrders] = useState<Order[]>([]);
   const [loading, setLoading] = useState(false);
   const [ordersPage, setOrdersPage] = useState(1);
-  const [ordersLimit] = useState(5);
+  const [ordersLimit] = useState(6); // Changed limit to 6 (looks better in a 3-col grid than 5)
   const [ordersTotal, setOrdersTotal] = useState(0);
   const [ordersTotalPages, setOrdersTotalPages] = useState(1);
   const [selectedOrder, setSelectedOrder] = useState<string | null>(null);
@@ -391,10 +391,11 @@ export default function OrdersPage() {
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] pb-32">
-      <div className="max-w-3xl mx-auto px-4 pt-8">
+      {/* Changed max-w-3xl to max-w-7xl to allow grid to expand on desktop */}
+      <div className="max-w-7xl mx-auto px-4 pt-8">
         
         {/* Header */}
-        <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center justify-between mb-8 max-w-3xl mx-auto">
           <button onClick={() => router.back()} className="p-3 -ml-3 hover:bg-gray-50 rounded-full transition-colors active:scale-95">
             <ArrowLeft className="h-6 w-6 text-gray-900" />
           </button>
@@ -409,7 +410,7 @@ export default function OrdersPage() {
         </div>
 
         {/* High-End Pill Navigation */}
-        <div className="relative mb-6">
+        <div className="relative mb-6 max-w-3xl mx-auto">
           <div className="flex p-1.5 bg-gray-100/80 rounded-2xl border border-gray-200/50">
             <button
               onClick={() => setActiveTab('ACTIVE')}
@@ -436,7 +437,7 @@ export default function OrdersPage() {
 
         {/* Notifications Card */}
         {activeTab === 'ACTIVE' && notifications.length > 0 && (
-          <div className="bg-orange-50/50 rounded-2xl border border-orange-100 p-4 mb-6 shadow-sm">
+          <div className="max-w-3xl mx-auto bg-orange-50/50 rounded-2xl border border-orange-100 p-4 mb-6 shadow-sm">
             <div className="flex items-center justify-between mb-3">
               <h2 className="text-sm font-black text-orange-900 flex items-center gap-2">
                 <BellRing className="h-4 w-4 text-orange-600" />
@@ -464,7 +465,7 @@ export default function OrdersPage() {
         )}
 
         {/* Pagination Controls */}
-        <div className="flex items-center justify-between mb-6">
+        <div className="flex items-center justify-between mb-6 max-w-3xl mx-auto">
           <p className="text-xs font-bold text-gray-400 uppercase tracking-widest">
             Page {ordersPage} of {ordersTotalPages} <span className="mx-1">•</span> {ordersTotal} Total
           </p>
@@ -493,7 +494,7 @@ export default function OrdersPage() {
             <p className="text-gray-500 font-bold text-sm">Syncing orders...</p>
           </div>
         ) : displayOrders.length === 0 ? (
-          <div className="bg-white rounded-[32px] border border-gray-100 p-10 text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] mt-4">
+          <div className="bg-white rounded-[32px] border border-gray-100 p-10 text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] mt-4 max-w-3xl mx-auto">
             <div className="w-20 h-20 bg-gray-50 rounded-full flex items-center justify-center mx-auto mb-4">
               <Receipt className="h-8 w-8 text-gray-300" />
             </div>
@@ -507,22 +508,24 @@ export default function OrdersPage() {
             </button>
           </div>
         ) : (
-          <div className="space-y-6">
+          /* Changed from space-y-6 to grid to allow 3 columns on desktop */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {displayOrders.map((order) => {
               const badge = getStatusBadge(order.status);
               const BadgeIcon = badge.icon;
               const isOngoing = !['COMPLETED', 'CANCELLED'].includes(order.status);
               const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';
               
-              // Ensure order.items exists before mapping to avoid crashes
               const itemsList = Array.isArray(order.items) ? order.items : [];
               const itemSummary = itemsList.length > 0 
                 ? itemsList.map(i => `${i.quantity}x ${i.menuItem?.name || 'Item'}`).join(', ')
                 : 'No items detailed';
 
               return (
-                <div key={order.id} className="bg-white rounded-[32px] p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 transition-all hover:border-orange-200 group">
-                  
+                <div 
+                  key={order.id} 
+                  className="bg-white flex flex-col rounded-[32px] p-6 shadow-[0_8px_30px_rgb(0,0,0,0.04)] border border-gray-100 transition-all hover:border-orange-200 group"
+                >
                   {/* Card Header */}
                   <div className="flex items-start justify-between mb-4 border-b border-dashed border-gray-200 pb-4">
                     <div>
@@ -581,7 +584,7 @@ export default function OrdersPage() {
                           <div key={index} className="flex justify-between items-center text-sm">
                             <div className="flex items-center gap-3">
                               <span className="bg-white/10 px-2 py-1 rounded text-xs font-bold text-gray-300">{item.quantity}x</span>
-                              <span className="font-medium text-gray-200">{item.menuItem?.name || 'Item'}</span>
+                              <span className="font-medium text-gray-200 truncate max-w-[150px]">{item.menuItem?.name || 'Item'}</span>
                             </div>
                             <span className="font-bold">{formatInr(item.pricePaise * item.quantity)}</span>
                           </div>
@@ -614,7 +617,7 @@ export default function OrdersPage() {
                         Complete Payment
                       </h4>
                       
-                      <div className="flex flex-col sm:flex-row gap-3">
+                      <div className="flex flex-col xl:flex-row gap-3">
                         <div className="relative flex-1">
                           <Ticket className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-orange-400" />
                           <input
@@ -624,25 +627,27 @@ export default function OrdersPage() {
                             className="w-full pl-10 pr-4 py-3 bg-white border border-orange-200 rounded-xl text-sm font-bold focus:ring-2 focus:ring-orange-500/20"
                           />
                         </div>
-                        <button
-                          onClick={() => handleApplyCouponToOrder(order.id)}
-                          disabled={applyingCouponOrderId === order.id}
-                          className="px-6 py-3 bg-orange-200 text-orange-900 font-bold rounded-xl hover:bg-orange-300 disabled:opacity-60 text-sm whitespace-nowrap active:scale-95 transition-transform"
-                        >
-                          {applyingCouponOrderId === order.id ? 'Applying...' : 'Apply'}
-                        </button>
-                        <button
-                          onClick={() => router.push(apiClient.buildRestaurantPath(`/checkout?orderId=${order.id}&payNow=1`))}
-                          className="px-8 py-3 bg-orange-600 text-white font-black rounded-xl hover:bg-orange-700 text-sm whitespace-nowrap shadow-md shadow-orange-500/20 active:scale-95 transition-transform"
-                        >
-                          Pay {formatInr(order.totalPaise)}
-                        </button>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleApplyCouponToOrder(order.id)}
+                            disabled={applyingCouponOrderId === order.id}
+                            className="px-4 py-3 bg-orange-200 text-orange-900 font-bold rounded-xl hover:bg-orange-300 disabled:opacity-60 text-sm whitespace-nowrap active:scale-95 transition-transform"
+                          >
+                            {applyingCouponOrderId === order.id ? '...' : 'Apply'}
+                          </button>
+                          <button
+                            onClick={() => router.push(apiClient.buildRestaurantPath(`/checkout?orderId=${order.id}&payNow=1`))}
+                            className="flex-1 px-4 py-3 bg-orange-600 text-white font-black rounded-xl hover:bg-orange-700 text-sm whitespace-nowrap shadow-md shadow-orange-500/20 active:scale-95 transition-transform"
+                          >
+                            Pay
+                          </button>
+                        </div>
                       </div>
                     </div>
                   )}
 
-                  {/* Card Footer Actions */}
-                  <div className="flex flex-wrap items-center justify-between pt-2 gap-4">
+                  {/* Card Footer Actions - Pushed to bottom with mt-auto */}
+                  <div className="flex flex-wrap items-center justify-between pt-4 gap-4 mt-auto border-t border-gray-100">
                     <div>
                       <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-0.5">Total</p>
                       <p className="text-2xl font-black text-gray-900">{formatInr(order.totalPaise)}</p>
@@ -652,17 +657,17 @@ export default function OrdersPage() {
                       {isOngoing && (
                         <button
                           onClick={() => router.push(apiClient.buildRestaurantPath(`/menu?orderId=${order.id}`))}
-                          className="px-4 py-2.5 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-100 font-bold flex items-center text-sm transition-colors"
+                          className="px-3 py-2.5 bg-gray-50 text-gray-900 rounded-xl hover:bg-gray-100 font-bold flex items-center text-sm transition-colors"
                         >
-                          <PlusCircle className="h-4 w-4 mr-2" />
-                          Add Items
+                          <PlusCircle className="h-4 w-4 sm:mr-2" />
+                          <span className="hidden sm:inline">Add Items</span>
                         </button>
                       )}
 
                       {canPayNow && (
                         <button
                           onClick={() => setPayNowOrderId(payNowOrderId === order.id ? null : order.id)}
-                          className={`px-6 py-2.5 rounded-xl font-bold text-sm transition-colors border-2 ${
+                          className={`px-4 py-2.5 rounded-xl font-bold text-sm transition-colors border-2 ${
                             payNowOrderId === order.id 
                             ? 'bg-gray-900 text-white border-gray-900' 
                             : 'bg-white text-orange-600 border-orange-600 hover:bg-orange-50'
@@ -673,31 +678,29 @@ export default function OrdersPage() {
                       )}
 
                       {order.paymentProvider === 'CASH' && order.paymentStatus !== 'COMPLETED' && (
-                        <div className="px-4 py-2.5 bg-orange-50 text-orange-800 rounded-xl border border-orange-200 text-xs font-bold flex items-center">
-                          <Info className="h-4 w-4 mr-2" /> Cash pending confirmation
+                        <div className="px-3 py-2 bg-orange-50 text-orange-800 rounded-xl border border-orange-200 text-xs font-bold flex items-center">
+                          <Info className="h-4 w-4 mr-1.5" /> Cash pending
                         </div>
                       )}
 
                       {/* Download/Send Invoices for Completed Orders */}
                       {order.paymentStatus === 'COMPLETED' && (
-                        <>
+                        <div className="flex gap-2">
                           <button
                             onClick={() => handleDownloadInvoice(order.id)}
                             disabled={downloadingInvoice === order.id}
-                            className="px-4 py-2.5 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 font-bold flex items-center text-sm transition-colors"
+                            className="px-3 py-2 border-2 border-gray-200 text-gray-700 rounded-xl hover:bg-gray-50 hover:border-gray-300 font-bold flex items-center text-sm transition-colors"
                           >
-                            <Download className="h-4 w-4 mr-2" />
-                            {downloadingInvoice === order.id ? '...' : 'PDF'}
+                            <Download className="h-4 w-4" />
                           </button>
                           <button
                             onClick={() => handleSendInvoice(order.id)}
                             disabled={sendingInvoice === order.id}
-                            className="px-4 py-2.5 bg-gray-900 text-white rounded-xl hover:bg-black font-bold flex items-center text-sm transition-colors"
+                            className="px-3 py-2 bg-gray-900 text-white rounded-xl hover:bg-black font-bold flex items-center text-sm transition-colors"
                           >
-                            <Mail className="h-4 w-4 mr-2" />
-                            {sendingInvoice === order.id ? '...' : 'Email'}
+                            <Mail className="h-4 w-4" />
                           </button>
-                        </>
+                        </div>
                       )}
                     </div>
                   </div>

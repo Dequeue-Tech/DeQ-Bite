@@ -368,6 +368,12 @@ export interface CustomerProfile {
   };
 }
 
+export interface AiInsight {
+  type: 'growth' | 'alert';
+  title: string;
+  desc: string;
+}
+
 export interface AnalyticsSnapshot {
   id: string;
   restaurantId: string;
@@ -1448,6 +1454,22 @@ class ApiClient {
       return response.data.data;
     }
     throw new Error(response.data.error || 'Failed to fetch analytics overview');
+  }
+
+  // --- AI Insights Methods ---
+  async generateInsights(payload: {
+    topDishes: string[];
+    pendingDeliveries: number;
+    totalOrders: number;
+  }): Promise<AiInsight[]> {
+    const response = await this.api.post<ApiResponse<AiInsight[]>>(
+      this.buildTenantEndpoint('/analytics/insights'),
+      payload
+    );
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to generate AI insights');
   }
 
   // POS integration methods

@@ -76,7 +76,7 @@ const Navbar = () => {
       { name: 'Orders', href: withRestaurant('/orders') },
       ...(canAccessAdmin ? [{ name: 'Admin', href: withRestaurant('/admin') }] : []),
       ...(canAccessKitchen ? [{ name: 'Kitchen', href: withRestaurant('/kitchen') }] : []),
-      ...(canAccessPos ? [{ name: 'POS Ops', href: withRestaurant('/pos') }] : []),
+      // ...(canAccessPos ? [{ name: 'POS Ops', href: withRestaurant('/pos') }] : []),
     ] : []),
   ];
 

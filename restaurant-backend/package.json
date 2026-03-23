@@ -16,6 +16,7 @@
     "db:reset": "prisma migrate reset --force && npm run db:seed"
   },
   "dependencies": {
+    "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.19.2",
     "@prisma/extension-accelerate": "^3.0.1",
     "@types/multer": "^1.4.12",
@@ -37,6 +38,7 @@
     "morgan": "^1.10.0",
     "multer": "^1.4.5-lts.1",
     "nodemailer": "^8.0.2",
+    "openai": "^6.32.0",
     "pdfkit": "^0.17.2",
     "razorpay": "^2.9.6",
     "socket.io": "^4.8.1",

@@ -3,6 +3,8 @@ import { prisma } from '@/config/database';
 import { getRedisClient } from '@/utils/redis';
 
 const cacheTtlSeconds = 120;
+// Indian Standard Time (IST) offset in milliseconds (+5:30)
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 
 type MetricSnapshot = {
   revenuePaise: number;
@@ -20,38 +22,24 @@ type MetricSnapshot = {
   metrics: Record<string, unknown>;
 };
 
-type MetricsOrderRow = {
-  id: string;
-  totalPaise: number;
-  status: string;
-  paymentStatus: string;
-  userId: string;
-  createdAt: Date;
-  items: Array<{
-    quantity: number;
-    pricePaise: number;
-    menuItemId: string;
-    menuItem: { name: string };
-  }>;
-};
-
 const toIsoDate = (value: Date) => value.toISOString().split('T')[0];
 
+// FIX 1: Timezone Awareness - Adjusted boundaries to local IST midnight instead of UTC midnight
 const getDailyBounds = (date: Date) => {
-  const start = new Date(date);
-  start.setUTCHours(0, 0, 0, 0);
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 1);
+  const localDate = new Date(date.getTime() + IST_OFFSET_MS);
+  localDate.setUTCHours(0, 0, 0, 0); // Midnight local time
+  const start = new Date(localDate.getTime() - IST_OFFSET_MS); // Shift back to UTC for database querying
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
   return { start, end };
 };
 
 const getWeeklyBounds = (date: Date) => {
-  const day = date.getUTCDay() || 7;
-  const start = new Date(date);
-  start.setUTCHours(0, 0, 0, 0);
-  start.setUTCDate(start.getUTCDate() - (day - 1));
-  const end = new Date(start);
-  end.setUTCDate(end.getUTCDate() + 7);
+  const localDate = new Date(date.getTime() + IST_OFFSET_MS);
+  const day = localDate.getUTCDay() || 7; // Treat Sunday as 7
+  localDate.setUTCHours(0, 0, 0, 0);
+  localDate.setUTCDate(localDate.getUTCDate() - (day - 1)); // Go to Monday
+  const start = new Date(localDate.getTime() - IST_OFFSET_MS);
+  const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
   return { start, end };
 };
 
@@ -91,81 +79,84 @@ const buildInsights = (snapshot: MetricSnapshot, periodType: AnalyticsPeriodType
 };
 
 const computeMetrics = async (restaurantId: string, start: Date, end: Date): Promise<MetricSnapshot> => {
-  const orders = (await prisma.order.findMany({
-    where: {
-      restaurantId,
-      createdAt: {
-        gte: start,
-        lt: end,
-      },
-    },
-    select: {
-      id: true,
-      totalPaise: true,
-      status: true,
-      paymentStatus: true,
-      userId: true,
-      createdAt: true,
-      items: {
-        select: {
-          quantity: true,
-          pricePaise: true,
-          menuItemId: true,
-          menuItem: {
-            select: {
-              name: true,
-            },
-          },
-        },
-      },
-    },
-  })) as MetricsOrderRow[];
-
-  const completedOrders = orders.filter((order: MetricsOrderRow) => order.status !== 'CANCELLED');
-  const completedOrderCount = completedOrders.length;
-  const totalOrders = orders.length;
-  const cancelledOrders = totalOrders - completedOrderCount;
-  const revenuePaise = completedOrders.reduce((acc: number, order: MetricsOrderRow) => acc + order.totalPaise, 0);
-  const avgOrderValuePaise = completedOrderCount > 0 ? Math.round(revenuePaise / completedOrderCount) : 0;
-  const uniqueCustomers = new Set(completedOrders.map((order: MetricsOrderRow) => order.userId)).size;
-  const ordersByCustomer = new Map<string, number>();
-  completedOrders.forEach((order: MetricsOrderRow) => {
-    ordersByCustomer.set(order.userId, (ordersByCustomer.get(order.userId) || 0) + 1);
+  
+  // FIX 2: OOM Crash Protection - Delegate heavy counting and sum operations directly to the Database
+  const totalOrdersAggr = await prisma.order.aggregate({
+    where: { restaurantId, createdAt: { gte: start, lt: end } },
+    _count: { id: true }
   });
-  const repeatCustomers = Array.from(ordersByCustomer.values()).filter((count) => count > 1).length;
-  const paymentCompletedOrders = completedOrders.filter((order: MetricsOrderRow) => order.paymentStatus === 'COMPLETED').length;
+
+  const completedOrdersAggr = await prisma.order.aggregate({
+    where: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
+    _count: { id: true },
+    _sum: { totalPaise: true }
+  });
+
+  const paymentCompletedAggr = await prisma.order.aggregate({
+    where: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' }, paymentStatus: 'COMPLETED' },
+    _count: { id: true }
+  });
+
+  const totalOrders = totalOrdersAggr._count.id || 0;
+  const completedOrderCount = completedOrdersAggr._count.id || 0;
+  const revenuePaise = completedOrdersAggr._sum.totalPaise || 0;
+  const cancelledOrders = totalOrders - completedOrderCount;
+  const paymentCompletedOrders = paymentCompletedAggr._count.id || 0;
+
+  const avgOrderValuePaise = completedOrderCount > 0 ? Math.round(revenuePaise / completedOrderCount) : 0;
   const cancellationRatePct = totalOrders > 0 ? Math.round((cancelledOrders / totalOrders) * 100) : 0;
   const paymentCompletionRatePct = completedOrderCount > 0 ? Math.round((paymentCompletedOrders / completedOrderCount) * 100) : 0;
-  const repeatCustomerRatePct = uniqueCustomers > 0 ? Math.round((repeatCustomers / uniqueCustomers) * 100) : 0;
 
-  const topItemsMap = new Map<string, { menuItemId: string; name: string; quantity: number; revenuePaise: number }>();
+  // Lightweight fetch to calculate user retention and peak hours (avoids fetching nested items)
+  const lightOrders = await prisma.order.findMany({
+    where: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
+    select: { userId: true, createdAt: true }
+  });
+
+  const userCounts = new Map<string, number>();
   const hourMap = new Map<number, number>();
 
-  for (const order of completedOrders) {
-    const hour = order.createdAt.getUTCHours();
-    hourMap.set(hour, (hourMap.get(hour) || 0) + 1);
-
-    for (const item of order.items) {
-      const existing = topItemsMap.get(item.menuItemId) || {
-        menuItemId: item.menuItemId,
-        name: item.menuItem.name,
-        quantity: 0,
-        revenuePaise: 0,
-      };
-
-      existing.quantity += item.quantity;
-      existing.revenuePaise += item.quantity * item.pricePaise;
-      topItemsMap.set(item.menuItemId, existing);
+  for (const order of lightOrders) {
+    // Retention
+    if (order.userId) {
+      userCounts.set(order.userId, (userCounts.get(order.userId) || 0) + 1);
     }
+    // Peak Hours - Shift to Local Time!
+    const localHour = new Date(order.createdAt.getTime() + IST_OFFSET_MS).getUTCHours();
+    hourMap.set(localHour, (hourMap.get(localHour) || 0) + 1);
+  }
+
+  const uniqueCustomers = userCounts.size;
+  const repeatCustomers = Array.from(userCounts.values()).filter(count => count > 1).length;
+  const repeatCustomerRatePct = uniqueCustomers > 0 ? Math.round((repeatCustomers / uniqueCustomers) * 100) : 0;
+
+  const peakHours = Array.from(hourMap.entries())
+    .map(([hour, ordersCount]) => ({ hour, orders: ordersCount }))
+    .sort((a, b) => b.orders - a.orders)
+    .slice(0, 5);
+
+  // Lightweight fetch for Top Items (Fetches ONLY the line items, no deeply nested orders)
+  const orderItems = await prisma.orderItem.findMany({
+    where: { order: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } } },
+    select: { menuItemId: true, quantity: true, pricePaise: true, menuItem: { select: { name: true } } }
+  });
+
+  const topItemsMap = new Map<string, { menuItemId: string; name: string; quantity: number; revenuePaise: number }>();
+  
+  for (const item of orderItems) {
+    const existing = topItemsMap.get(item.menuItemId) || {
+      menuItemId: item.menuItemId,
+      name: item.menuItem.name,
+      quantity: 0,
+      revenuePaise: 0,
+    };
+    existing.quantity += item.quantity;
+    existing.revenuePaise += item.quantity * item.pricePaise;
+    topItemsMap.set(item.menuItemId, existing);
   }
 
   const topItems = Array.from(topItemsMap.values())
-    .sort((a, b) => b.quantity - a.quantity)
-    .slice(0, 5);
-
-  const peakHours = Array.from(hourMap.entries())
-    .map(([hour, ordersAtHour]) => ({ hour, orders: ordersAtHour }))
-    .sort((a, b) => b.orders - a.orders)
+    .sort((a, b) => b.revenuePaise - a.revenuePaise) // Sorted by revenue instead of raw quantity for better insights
     .slice(0, 5);
 
   return {
@@ -207,7 +198,12 @@ export const generateAnalyticsSnapshot = async (params: {
   if (redis) {
     const cached = await redis.get(cacheKey);
     if (cached) {
-      return JSON.parse(cached);
+      const parsed = JSON.parse(cached);
+      // FIX 3: Cache Serialization consistency - Rehydrate stringified Dates
+      if (parsed.generatedAt) parsed.generatedAt = new Date(parsed.generatedAt);
+      if (parsed.periodStart) parsed.periodStart = new Date(parsed.periodStart);
+      if (parsed.periodEnd) parsed.periodEnd = new Date(parsed.periodEnd);
+      return parsed;
     }
   }
 

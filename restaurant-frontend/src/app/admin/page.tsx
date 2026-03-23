@@ -1336,6 +1336,7 @@ export default function AdminPage() {
                                 {order.paymentProvider || 'NA'} | {order.paymentStatus}
                               </span>
                             </div>
+                          </div>
 
                           {/* Customer & Address Card */}
                           <div className="bg-gray-50 rounded-2xl p-4 border border-gray-100">

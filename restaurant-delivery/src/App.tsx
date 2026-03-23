@@ -419,11 +419,14 @@ export default function App() {
         await updateProfile(credential.user, { displayName: authForm.name.trim() });
       }
 
-      const data = await fetchJson<{ user: User; token: string }>(`${apiUrl}${endpoint}`, {
+      const idToken = await credential.user.getIdToken();
+
+      await fetchJson<{ user: UserType }>(`${apiUrl}/auth/session`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${idToken}`,
+          ...(selectedSlug ? { 'x-restaurant-slug': selectedSlug } : {}),
         },
         body: JSON.stringify({
           ...(authMode === 'register' && authForm.name.trim() ? { name: authForm.name.trim() } : {}),
@@ -431,21 +434,9 @@ export default function App() {
         }),
       });
 
-      const data = await fetchJson<{ user: User }>(`${apiUrl}/auth/me`, {
-        headers: {
-          Authorization: `Bearer ${idToken}`,
-          ...(selectedSlug ? { 'x-restaurant-slug': selectedSlug } : {}),
-        },
-      });
-
       localStorage.setItem('auth_token', idToken);
       setToken(idToken);
-      setUser(data.user);
-      setCheckout((prev) => ({
-        ...prev,
-        customerName: prev.customerName || data.user.name || '',
-        customerPhone: prev.customerPhone || data.user.phone || '',
-      }));
+      await loadProfile(idToken, selectedSlug || undefined);
       setShowAuthModal(false);
       notify(authMode === 'login' ? 'Logged in successfully' : 'Account created successfully');
       if (selectedSlug) {

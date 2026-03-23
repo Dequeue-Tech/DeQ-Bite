@@ -11,6 +11,7 @@ const getAllowedOrigins = () => {
     'http://localhost:5174',
     'http://localhost:3000',
     'http://localhost:3001',
+    'https://bite-delivery.dequeue.co.in',
     'https://de-q-restaurants-frontend.vercel.app',
     'https://bite.dequeue.co.in',
     'https://demo.bite.dequeue.co.in',

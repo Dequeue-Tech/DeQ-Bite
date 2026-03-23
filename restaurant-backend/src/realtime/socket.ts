@@ -66,9 +66,10 @@ export const initSocketServer = (server: HttpServer) => {
     cors: {
       origin: (origin, callback) => {
         const allowedOrigins = getAllowedOrigins();
-        if (!origin) return callback(null, true);
-        if (allowedOrigins.includes(origin.replace(/\/$/, ''))) {
-          return callback(null, true);
+        if (!origin) return callback(null, { origin: true });
+        const normalizedOrigin = origin.replace(/\/$/, '');
+        if (allowedOrigins.includes(normalizedOrigin)) {
+          return callback(null, { origin: normalizedOrigin });
         }
         return callback(new Error('Not allowed by CORS'));
       },

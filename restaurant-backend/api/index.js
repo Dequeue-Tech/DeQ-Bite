@@ -24,6 +24,15 @@ for (const dir of nodeModulesDirs) {
 }
 process.env.NODE_PATH = existing.join(path.delimiter);
 Module._initPaths();
+
+// Resolve TS path alias imports (e.g. "@/middleware/errorHandler") from compiled dist files.
+const originalResolveFilename = Module._resolveFilename;
+Module._resolveFilename = function (request, parent, isMain, options) {
+  if (typeof request === 'string' && request.startsWith('@/')) {
+    request = path.join(backendRoot, 'dist', request.slice(2));
+  }
+  return originalResolveFilename.call(this, request, parent, isMain, options);
+};
 // ─────────────────────────────────────────────────────────────────────────────
 
 // Load compiled app and database modules using absolute paths

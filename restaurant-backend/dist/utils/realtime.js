@@ -2,8 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.onRestaurantEvent = exports.emitRestaurantEvent = exports.setSocketServer = void 0;
 const events_1 = require("events");
-const redis_1 = require("@/utils/redis");
-const logger_1 = require("@/utils/logger");
+const redis_1 = require("./redis");
+const logger_1 = require("./logger");
 const emitter = new events_1.EventEmitter();
 emitter.setMaxListeners(0);
 let socketServer = null;

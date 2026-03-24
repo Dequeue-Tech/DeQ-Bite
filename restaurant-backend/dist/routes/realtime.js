@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const realtime_1 = require("@/utils/realtime");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const realtime_1 = require("../utils/realtime");
 const router = (0, express_1.Router)();
 router.get('/events', auth_1.authenticate, restaurant_1.requireRestaurant, (req, res) => {
     res.setHeader('Content-Type', 'text/event-stream');

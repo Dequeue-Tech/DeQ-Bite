@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.verifyFirebaseIdToken = void 0;
 const firebase_admin_1 = __importDefault(require("firebase-admin"));
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 let firebaseApp = null;
 const extractProjectIdFromClientEmail = (clientEmail) => {
     if (!clientEmail)

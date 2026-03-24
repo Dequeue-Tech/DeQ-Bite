@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.authorizeRestaurantRole = exports.requireRestaurant = exports.attachRestaurant = void 0;
-const database_1 = require("@/config/database");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const accelerate_cache_1 = require("@/utils/accelerate-cache");
+const database_1 = require("../config/database");
+const errorHandler_1 = require("./errorHandler");
+const accelerate_cache_1 = require("../utils/accelerate-cache");
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
 function pickFields(fields) {
     const out = {};

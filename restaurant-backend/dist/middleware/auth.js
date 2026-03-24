@@ -2,8 +2,8 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.optionalAuth = exports.authorize = exports.authenticate = void 0;
 const client_1 = require("@prisma/client");
-const firebase_user_1 = require("@/lib/firebase-user");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const firebase_user_1 = require("../lib/firebase-user");
+const errorHandler_1 = require("./errorHandler");
 const decodeJwtPayload = (token) => {
     const parts = token.split('.');
     if (parts.length !== 3)

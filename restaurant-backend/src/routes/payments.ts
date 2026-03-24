@@ -103,11 +103,15 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId: string) => {
 
   if (!existingInvoice) {
     const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+    const customerName = order.user?.name || 'Guest';
+    const customerEmail = order.user?.email || undefined;
+    const customerPhone = order.user?.phone || '';
+    const tableNumber = order.table?.number ? String(order.table.number) : 'N/A';
 
     const invoiceData = {
-      customerName: order.user.name,
-      customerEmail: order.user.email,
-      customerPhone: order.user.phone || '',
+      customerName,
+      customerEmail,
+      customerPhone,
       invoiceNumber,
       orderDate: order.createdAt.toLocaleDateString('en-IN'),
       items: order.items.map((item: any) => ({
@@ -119,7 +123,7 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId: string) => {
       subtotal: order.subtotalPaise / 100,
       tax: order.taxPaise / 100,
       total: order.totalPaise / 100,
-      tableNumber: order.table.number,
+      tableNumber,
       restaurantName: order.restaurant.name,
       paymentMethod: `Payment (${order.paymentProvider})`,
       ...(order.restaurant.address ? { restaurantAddress: order.restaurant.address } : {}),

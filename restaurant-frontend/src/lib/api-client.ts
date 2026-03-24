@@ -1566,11 +1566,21 @@ class ApiClient {
     throw new Error(response.data.error || 'Failed to fetch restaurant users');
   }
 
-  async addRestaurantUser(payload: { email: string; role: 'OWNER' | 'ADMIN' | 'STAFF' }): Promise<void> {
-    const response = await this.api.post<ApiResponse>(this.buildTenantEndpoint('/restaurants/users'), payload);
-    if (!response.data.success) {
-      throw new Error(response.data.error || 'Failed to add restaurant user');
+  async addRestaurantUser(payload: { email: string; role: 'OWNER' | 'ADMIN' | 'STAFF' }): Promise<RestaurantUserEntry> {
+    const response = await this.api.post<ApiResponse<{ membership: RestaurantUserEntry }>>(
+      this.buildTenantEndpoint('/restaurants/users'),
+      payload
+    );
+    const membership: any = response.data.data?.membership;
+    if (response.data.success && membership && (membership.membershipId || membership.id) && membership.user) {
+      return {
+        membershipId: membership.membershipId || membership.id,
+        role: membership.role,
+        active: membership.active,
+        user: membership.user,
+      } as RestaurantUserEntry;
     }
+    throw new Error(response.data.error || 'Failed to add restaurant user');
   }
 
   async getCurrentRestaurant(): Promise<any> {

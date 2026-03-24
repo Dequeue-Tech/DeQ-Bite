@@ -2,15 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
+const database_1 = require("@/config/database");
 const client_1 = require("@prisma/client");
-const auth_1 = require("../middleware/auth");
-const restaurant_1 = require("../middleware/restaurant");
-const errorHandler_1 = require("../middleware/errorHandler");
-const audit_1 = require("../utils/audit");
-const accelerate_cache_1 = require("../utils/accelerate-cache");
-const cache_1 = require("../middleware/cache");
-const cache_2 = require("../utils/cache");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const audit_1 = require("@/utils/audit");
+const accelerate_cache_1 = require("@/utils/accelerate-cache");
+const cache_1 = require("@/middleware/cache");
+const cache_2 = require("@/utils/cache");
+const realtime_1 = require("@/utils/realtime");
 const router = (0, express_1.Router)();
 const hasRestaurantStatus = !!database_1.prisma._dmmf?.modelMap?.Restaurant?.fields?.some((f) => f.name === 'status');
 const restaurantFields = (database_1.prisma._dmmf?.modelMap?.Restaurant?.fields || []).map((f) => f.name);
@@ -516,10 +517,18 @@ router.post('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
                         name: true,
                         email: true,
                         phone: true,
+                        role: true,
+                        createdAt: true,
                     },
                 },
             },
         });
+        const membershipEntry = {
+            membershipId: membership.id,
+            role: membership.role,
+            active: membership.active,
+            user: membership.user,
+        };
         await (0, audit_1.safeCreateAuditLog)({
             actorUserId: req.user.id,
             restaurantId: req.restaurant.id,
@@ -531,15 +540,16 @@ router.post('/users', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
                 role: membership.role,
             },
         });
+        (0, realtime_1.emitRestaurantEvent)(req.restaurant.id, {
+            type: 'restaurant.users.updated',
+            payload: {
+                membership: membershipEntry,
+            },
+        });
         return res.status(201).json({
             success: true,
             data: {
-                membership: {
-                    id: membership.id,
-                    role: membership.role,
-                    active: membership.active,
-                    user: membership.user,
-                },
+                membership: membershipEntry,
             },
             message: 'Restaurant user added/updated successfully',
         });

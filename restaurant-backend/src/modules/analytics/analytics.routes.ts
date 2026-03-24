@@ -54,6 +54,29 @@ const insightsResponseSchema = z.object({
 type InsightsRequestPayload = z.infer<typeof insightsBodySchema>;
 type InsightsResponse = z.infer<typeof insightsResponseSchema>;
 
+const buildFallbackInsights = (payload: InsightsRequestPayload): InsightsResponse => {
+  const topDish = payload.topDishes[0] || 'Top dish';
+  const growthTitle = payload.totalOrders >= 20 ? 'Order flow is healthy' : 'Order volume can be improved';
+  const growthDesc =
+    payload.totalOrders >= 20
+      ? `Keep spotlighting ${topDish} and combo offers to sustain this momentum through peak windows.`
+      : `Promote ${topDish} with time-bound offers to lift order count in the next service window.`;
+
+  const alertTitle = payload.pendingDeliveries > 5 ? 'Delivery queue is building up' : 'Delivery queue is under control';
+  const alertDesc =
+    payload.pendingDeliveries > 5
+      ? 'Dispatch more riders or stagger kitchen prep to prevent SLA delays on pending deliveries.'
+      : 'Current pending deliveries are manageable; maintain prep discipline to keep turnaround consistent.';
+
+  return {
+    success: true,
+    data: [
+      { type: 'growth', title: growthTitle, desc: growthDesc },
+      { type: 'alert', title: alertTitle, desc: alertDesc },
+    ],
+  };
+};
+
 const callGemini = async (systemPrompt: string, userPrompt: string): Promise<string> => {
   const apiKey = process.env['GOOGLE_API_KEY'] || process.env['GOOGLE_CLOUD_API_KEY'];
   if (!apiKey) {
@@ -128,7 +151,7 @@ The 'desc' field MUST be a brief, actionable recommendation (1-2 sentences max).
   } else if (process.env['OPENAI_API_KEY']) {
     rawText = await callOpenAI(systemPrompt, userPrompt);
   } else {
-    throw new Error('No LLM provider configured. Set GOOGLE_API_KEY/GOOGLE_CLOUD_API_KEY or OPENAI_API_KEY.');
+    return buildFallbackInsights(payload);
   }
 
   // Bulletproof cleanup: strips out ```json and ``` if the LLM hallucinates them

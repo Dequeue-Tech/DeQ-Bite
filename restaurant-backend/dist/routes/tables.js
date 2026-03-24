@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("../config/database");
-const restaurant_1 = require("../middleware/restaurant");
-const accelerate_cache_1 = require("../utils/accelerate-cache");
-const cache_1 = require("../middleware/cache");
+const database_1 = require("@/config/database");
+const restaurant_1 = require("@/middleware/restaurant");
+const accelerate_cache_1 = require("@/utils/accelerate-cache");
+const cache_1 = require("@/middleware/cache");
 const router = (0, express_1.Router)();
 router.get('/', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(120, 'tables:list'), async (req, res) => {
     try {

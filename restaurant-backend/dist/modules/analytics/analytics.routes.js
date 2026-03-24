@@ -1,46 +1,17 @@
 "use strict";
-var __createBinding = (this && this.__createBinding) || (Object.create ? (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    var desc = Object.getOwnPropertyDescriptor(m, k);
-    if (!desc || ("get" in desc ? !m.__esModule : desc.writable || desc.configurable)) {
-      desc = { enumerable: true, get: function() { return m[k]; } };
-    }
-    Object.defineProperty(o, k2, desc);
-}) : (function(o, m, k, k2) {
-    if (k2 === undefined) k2 = k;
-    o[k2] = m[k];
-}));
-var __setModuleDefault = (this && this.__setModuleDefault) || (Object.create ? (function(o, v) {
-    Object.defineProperty(o, "default", { enumerable: true, value: v });
-}) : function(o, v) {
-    o["default"] = v;
-});
-var __importStar = (this && this.__importStar) || (function () {
-    var ownKeys = function(o) {
-        ownKeys = Object.getOwnPropertyNames || function (o) {
-            var ar = [];
-            for (var k in o) if (Object.prototype.hasOwnProperty.call(o, k)) ar[ar.length] = k;
-            return ar;
-        };
-        return ownKeys(o);
-    };
-    return function (mod) {
-        if (mod && mod.__esModule) return mod;
-        var result = {};
-        if (mod != null) for (var k = ownKeys(mod), i = 0; i < k.length; i++) if (k[i] !== "default") __createBinding(result, mod, k[i]);
-        __setModuleDefault(result, mod);
-        return result;
-    };
-})();
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
 const client_1 = require("@prisma/client");
-const auth_1 = require("../../middleware/auth");
-const restaurant_1 = require("../../middleware/restaurant");
-const analytics_service_1 = require("../../modules/analytics/analytics.service");
-const database_1 = require("../../config/database");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const analytics_service_1 = require("@/modules/analytics/analytics.service");
+const database_1 = require("@/config/database");
 const generative_ai_1 = require("@google/generative-ai");
+const openai_1 = __importDefault(require("openai"));
 const router = (0, express_1.Router)();
 const dateQuerySchema = zod_1.z.object({
     date: zod_1.z.string().optional(),
@@ -74,12 +45,23 @@ const insightsResponseSchema = zod_1.z.object({
     }))
         .length(2),
 });
-const ensureTwoSentences = (text) => {
-    const sentences = text
-        .split(/[.!?]+/)
-        .map((s) => s.trim())
-        .filter(Boolean);
-    return sentences.length === 2;
+const buildFallbackInsights = (payload) => {
+    const topDish = payload.topDishes[0] || 'Top dish';
+    const growthTitle = payload.totalOrders >= 20 ? 'Order flow is healthy' : 'Order volume can be improved';
+    const growthDesc = payload.totalOrders >= 20
+        ? `Keep spotlighting ${topDish} and combo offers to sustain this momentum through peak windows.`
+        : `Promote ${topDish} with time-bound offers to lift order count in the next service window.`;
+    const alertTitle = payload.pendingDeliveries > 5 ? 'Delivery queue is building up' : 'Delivery queue is under control';
+    const alertDesc = payload.pendingDeliveries > 5
+        ? 'Dispatch more riders or stagger kitchen prep to prevent SLA delays on pending deliveries.'
+        : 'Current pending deliveries are manageable; maintain prep discipline to keep turnaround consistent.';
+    return {
+        success: true,
+        data: [
+            { type: 'growth', title: growthTitle, desc: growthDesc },
+            { type: 'alert', title: alertTitle, desc: alertDesc },
+        ],
+    };
 };
 const callGemini = async (systemPrompt, userPrompt) => {
     const apiKey = process.env['GOOGLE_API_KEY'] || process.env['GOOGLE_CLOUD_API_KEY'];
@@ -88,11 +70,11 @@ const callGemini = async (systemPrompt, userPrompt) => {
     }
     const client = new generative_ai_1.GoogleGenerativeAI(apiKey);
     const model = client.getGenerativeModel({
-        model: 'gemini-1.5-pro',
+        model: 'gemini-2.5-flash',
         generationConfig: {
             temperature: 0.2,
-            maxOutputTokens: 512,
-            responseMimeType: 'text/plain',
+            maxOutputTokens: 2048,
+            responseMimeType: 'application/json',
         },
     });
     const response = await model.generateContent({
@@ -115,10 +97,10 @@ const callOpenAI = async (systemPrompt, userPrompt) => {
     if (!key) {
         throw new Error('OpenAI API Key not configured. Set OPENAI_API_KEY.');
     }
-    const { OpenAI } = await Promise.resolve().then(() => __importStar(require('openai')));
-    const client = new OpenAI({ apiKey: key });
+    const client = new openai_1.default({ apiKey: key });
     const completion = await client.chat.completions.create({
         model: 'gpt-4o-mini',
+        response_format: { type: 'json_object' },
         messages: [
             { role: 'system', content: systemPrompt },
             { role: 'user', content: userPrompt },
@@ -133,8 +115,11 @@ const callOpenAI = async (systemPrompt, userPrompt) => {
     return text;
 };
 const generateAIOperationalInsights = async (payload) => {
-    const systemPrompt = 'You are a restaurant operations consultant. Provide exactly 2 concise, actionable insights based on the provided live metrics. Return output as valid JSON with success=true and data array of 2 objects with type (growth|alert), title, desc. desc must be exactly 2 sentences. Do not add any extra fields or top-level commentary.';
-    const userPrompt = `Live data in JSON:\n${JSON.stringify(payload, null, 2)}\n\nReturn response in this exact format:\n{\n  \"success\": true,\n  \"data\": [\n    {\n      \"type\": \"growth\",\n      \"title\": \"Short catchy title\",\n      \"desc\": \"A concise, 2-sentence actionable recommendation based on the data.\"\n    },\n    {\n      \"type\": \"alert\",\n      \"title\": \"Another title\",\n      \"desc\": \"Another 2-sentence recommendation.\"\n    }\n  ]\n}`;
+    const systemPrompt = `You are a restaurant operations consultant. Provide exactly 2 concise, actionable insights based on the provided live metrics. 
+Return output as a valid JSON object matching this schema: 
+{ "success": true, "data": [ { "type": "growth" or "alert", "title": "string", "desc": "string" } ] }. 
+The 'desc' field MUST be a brief, actionable recommendation (1-2 sentences max). Do NOT wrap the JSON in markdown blocks.`;
+    const userPrompt = `Live data:\n${JSON.stringify(payload, null, 2)}`;
     let rawText;
     if (process.env['GOOGLE_API_KEY'] || process.env['GOOGLE_CLOUD_API_KEY']) {
         rawText = await callGemini(systemPrompt, userPrompt);
@@ -143,28 +128,24 @@ const generateAIOperationalInsights = async (payload) => {
         rawText = await callOpenAI(systemPrompt, userPrompt);
     }
     else {
-        throw new Error('No LLM provider configured. Set GOOGLE_API_KEY/GOOGLE_CLOUD_API_KEY or OPENAI_API_KEY.');
+        return buildFallbackInsights(payload);
     }
-    const cleanedText = rawText.trim();
+    const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
     let parsed;
     try {
         parsed = JSON.parse(cleanedText);
     }
     catch (err) {
-        throw new Error(`Failed to parse LLM response as JSON: ${err.message}`);
+        throw new Error(`Failed to parse LLM response as JSON: ${err.message}\nRaw Output: ${cleanedText}`);
     }
     const shaped = insightsResponseSchema.safeParse(parsed);
     if (!shaped.success) {
         throw new Error(`LLM response does not match required schema: ${JSON.stringify(shaped.error.issues)}`);
     }
-    for (const insight of shaped.data.data) {
-        if (!ensureTwoSentences(insight.desc)) {
-            throw new Error('One of the insights does not contain exactly 2 sentences in desc.');
-        }
-    }
     return shaped.data;
 };
 router.post('/insights', async (req, res) => {
+    console.log("Hit");
     try {
         const payload = insightsBodySchema.parse(req.body);
         const result = await generateAIOperationalInsights(payload);
@@ -174,6 +155,7 @@ router.post('/insights', async (req, res) => {
         if (error instanceof zod_1.z.ZodError) {
             return res.status(400).json({ success: false, error: 'Invalid payload', details: error.issues });
         }
+        console.error("AI Insights Error:", error);
         const message = error instanceof Error ? error.message : 'Unexpected error';
         return res.status(500).json({ success: false, error: message });
     }

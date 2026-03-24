@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
-import { subscribeToOrderEvents } from '@/lib/realtime-client';
+import { subscribeToOrderEvents, subscribeToRestaurantEvents } from '@/lib/realtime-client';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, 
   ResponsiveContainer, CartesianGrid 
@@ -70,6 +70,32 @@ const getMarketplaceBadgeText = (order: Pick<Order, 'sourceSystem' | 'externalOr
   if (!order.sourceSystem) return null;
   if (!order.externalOrderId) return order.sourceSystem;
   return `${order.sourceSystem} #${order.externalOrderId}`;
+};
+
+const getOrderContextBadge = (
+  order: Pick<Order, 'isDelivery' | 'sourceSystem' | 'externalOrderId' | 'table'>
+) => {
+  const marketplace = getMarketplaceBadgeText(order);
+  const isDeliveryOrder = Boolean(order.isDelivery || order.sourceSystem);
+
+  if (isDeliveryOrder) {
+    return {
+      label: marketplace ? `Delivery - ${marketplace}` : 'Delivery',
+      className: 'bg-blue-100 text-blue-700 border-blue-200',
+    };
+  }
+
+  if (typeof order.table?.number === 'number') {
+    return {
+      label: `Table ${order.table.number}`,
+      className: 'bg-emerald-100 text-emerald-700 border-emerald-200',
+    };
+  }
+
+  return {
+    label: 'Dine-In',
+    className: 'bg-gray-100 text-gray-700 border-gray-200',
+  };
 };
 
 export default function AdminPage() {
@@ -220,6 +246,22 @@ export default function AdminPage() {
   }, [hasAdminAccess]);
 
   useEffect(() => {
+    if (!hasAdminAccess || typeof window === 'undefined') return;
+    const restaurantSlug = apiClient.getActiveRestaurantSlug();
+    const cleanup = subscribeToRestaurantEvents({
+      restaurant: restaurantSlug,
+      eventTypes: ['restaurant.users.updated'],
+      onEvent: (event) => {
+        const membership = event?.payload?.membership as RestaurantUserEntry | undefined;
+        if (!membership?.membershipId || !membership.user?.id) return;
+        upsertRestaurantUser(membership);
+      },
+    });
+
+    return cleanup;
+  }, [hasAdminAccess]);
+
+  useEffect(() => {
     if (!hasAdminAccess) return;
     loadOrdersPage(ordersPage, orderChannelFilter);
   }, [hasAdminAccess, ordersPage, orderChannelFilter]);
@@ -345,6 +387,28 @@ export default function AdminPage() {
         return nextTotal;
       });
     }
+  };
+
+  const upsertRestaurantUser = (incoming: RestaurantUserEntry) => {
+    setRestaurantUsers((prev) => {
+      if (!incoming.active) {
+        return prev.filter((entry) => entry.membershipId !== incoming.membershipId && entry.user.id !== incoming.user.id);
+      }
+      const index = prev.findIndex((entry) => entry.membershipId === incoming.membershipId || entry.user.id === incoming.user.id);
+      if (index === -1) {
+        return [incoming, ...prev];
+      }
+      const next = [...prev];
+      next[index] = {
+        ...next[index],
+        ...incoming,
+        user: {
+          ...next[index].user,
+          ...incoming.user,
+        },
+      };
+      return next;
+    });
   };
 
   const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }, eventType?: string) => {
@@ -725,10 +789,10 @@ export default function AdminPage() {
   const addRestaurantUser = async () => {
     if (!userEmail) return toast.error('Enter a user email');
     try {
-      await apiClient.addRestaurantUser({ email: userEmail, role: userRole });
+      const membership = await apiClient.addRestaurantUser({ email: userEmail, role: userRole });
+      upsertRestaurantUser(membership);
       toast.success('Restaurant user updated');
       setUserEmail('');
-      await loadBaseData();
     } catch (error: any) { toast.error(error?.message || 'Failed to add restaurant user'); }
   };
 
@@ -1169,7 +1233,17 @@ export default function AdminPage() {
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
                   {orders.map((order) => (
                     <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[28px] p-4 sm:p-5 hover:border-orange-200 transition-all flex flex-col h-full shadow-[0_4px_20px_rgb(0,0,0,0.03)] group">
-                      
+                      {(() => {
+                        const contextBadge = getOrderContextBadge(order);
+                        return (
+                          <div className="mb-3">
+                            <span className={`inline-flex items-center px-2.5 py-1 rounded-md border text-[10px] font-black uppercase tracking-wider ${contextBadge.className}`}>
+                              {contextBadge.label}
+                            </span>
+                          </div>
+                        );
+                      })()}
+                       
                       {/* Order Info (Top) */}
                       <div className="flex-1 flex flex-col">
                         <div className="flex items-start justify-between gap-3 mb-2">

@@ -27,7 +27,10 @@ const getToken = () => {
 const createSocket = (token: string) => {
   const next = io(apiClient.getBaseURL(), {
     path: '/socket.io',
-    transports: ['websocket'],
+    transports: ['websocket', 'polling'],
+    upgrade: true,
+    reconnection: true,
+    timeout: 10000,
     auth: { token },
   });
 

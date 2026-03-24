@@ -8,6 +8,7 @@ import { setSocketServer } from '@/utils/realtime';
 const getAllowedOrigins = () => {
   return [
     process.env.FRONTEND_URL?.replace(/\/$/, ''),
+    'http://localhost:5173',
     'http://localhost:5174',
     'http://localhost:3000',
     'http://localhost:3001',
@@ -16,6 +17,17 @@ const getAllowedOrigins = () => {
     'https://bite.dequeue.co.in',
     'https://demo.bite.dequeue.co.in',
   ].filter(Boolean) as string[];
+};
+
+const isAllowedOrigin = (origin: string, allowedOrigins: string[]) => {
+  if (allowedOrigins.includes(origin)) return true;
+  try {
+    const parsed = new URL(origin);
+    if (parsed.protocol !== 'https:') return false;
+    return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
+  } catch {
+    return false;
+  }
 };
 
 const resolveRestaurantId = async (identifier?: string | null) => {
@@ -68,7 +80,7 @@ export const initSocketServer = (server: HttpServer) => {
         const allowedOrigins = getAllowedOrigins();
         if (!origin) return callback(null, true);
         const normalizedOrigin = origin.replace(/\/$/, '');
-        if (allowedOrigins.includes(normalizedOrigin)) {
+        if (isAllowedOrigin(normalizedOrigin, allowedOrigins)) {
           return callback(null, true);
         }
         return callback(new Error('Not allowed by CORS'));

@@ -1,24 +1,25 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAnalyticsOverview = exports.generateAnalyticsSnapshot = void 0;
-const database_1 = require("../../config/database");
-const redis_1 = require("../../utils/redis");
+const database_1 = require("@/config/database");
+const redis_1 = require("@/utils/redis");
 const cacheTtlSeconds = 120;
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const toIsoDate = (value) => value.toISOString().split('T')[0];
 const getDailyBounds = (date) => {
-    const start = new Date(date);
-    start.setUTCHours(0, 0, 0, 0);
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 1);
+    const localDate = new Date(date.getTime() + IST_OFFSET_MS);
+    localDate.setUTCHours(0, 0, 0, 0);
+    const start = new Date(localDate.getTime() - IST_OFFSET_MS);
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
     return { start, end };
 };
 const getWeeklyBounds = (date) => {
-    const day = date.getUTCDay() || 7;
-    const start = new Date(date);
-    start.setUTCHours(0, 0, 0, 0);
-    start.setUTCDate(start.getUTCDate() - (day - 1));
-    const end = new Date(start);
-    end.setUTCDate(end.getUTCDate() + 7);
+    const localDate = new Date(date.getTime() + IST_OFFSET_MS);
+    const day = localDate.getUTCDay() || 7;
+    localDate.setUTCHours(0, 0, 0, 0);
+    localDate.setUTCDate(localDate.getUTCDate() - (day - 1));
+    const start = new Date(localDate.getTime() - IST_OFFSET_MS);
+    const end = new Date(start.getTime() + 7 * 24 * 60 * 60 * 1000);
     return { start, end };
 };
 const buildInsights = (snapshot, periodType, periodStart, periodEnd) => {
@@ -53,74 +54,65 @@ const buildInsights = (snapshot, periodType, periodStart, periodEnd) => {
     return { insights, recommendations };
 };
 const computeMetrics = async (restaurantId, start, end) => {
-    const orders = (await database_1.prisma.order.findMany({
-        where: {
-            restaurantId,
-            createdAt: {
-                gte: start,
-                lt: end,
-            },
-        },
-        select: {
-            id: true,
-            totalPaise: true,
-            status: true,
-            paymentStatus: true,
-            userId: true,
-            createdAt: true,
-            items: {
-                select: {
-                    quantity: true,
-                    pricePaise: true,
-                    menuItemId: true,
-                    menuItem: {
-                        select: {
-                            name: true,
-                        },
-                    },
-                },
-            },
-        },
-    }));
-    const completedOrders = orders.filter((order) => order.status !== 'CANCELLED');
-    const completedOrderCount = completedOrders.length;
-    const totalOrders = orders.length;
-    const cancelledOrders = totalOrders - completedOrderCount;
-    const revenuePaise = completedOrders.reduce((acc, order) => acc + order.totalPaise, 0);
-    const avgOrderValuePaise = completedOrderCount > 0 ? Math.round(revenuePaise / completedOrderCount) : 0;
-    const uniqueCustomers = new Set(completedOrders.map((order) => order.userId)).size;
-    const ordersByCustomer = new Map();
-    completedOrders.forEach((order) => {
-        ordersByCustomer.set(order.userId, (ordersByCustomer.get(order.userId) || 0) + 1);
+    const totalOrdersAggr = await database_1.prisma.order.aggregate({
+        where: { restaurantId, createdAt: { gte: start, lt: end } },
+        _count: { id: true }
     });
-    const repeatCustomers = Array.from(ordersByCustomer.values()).filter((count) => count > 1).length;
-    const paymentCompletedOrders = completedOrders.filter((order) => order.paymentStatus === 'COMPLETED').length;
+    const completedOrdersAggr = await database_1.prisma.order.aggregate({
+        where: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
+        _count: { id: true },
+        _sum: { totalPaise: true }
+    });
+    const paymentCompletedAggr = await database_1.prisma.order.aggregate({
+        where: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' }, paymentStatus: 'COMPLETED' },
+        _count: { id: true }
+    });
+    const totalOrders = totalOrdersAggr._count.id || 0;
+    const completedOrderCount = completedOrdersAggr._count.id || 0;
+    const revenuePaise = completedOrdersAggr._sum.totalPaise || 0;
+    const cancelledOrders = totalOrders - completedOrderCount;
+    const paymentCompletedOrders = paymentCompletedAggr._count.id || 0;
+    const avgOrderValuePaise = completedOrderCount > 0 ? Math.round(revenuePaise / completedOrderCount) : 0;
     const cancellationRatePct = totalOrders > 0 ? Math.round((cancelledOrders / totalOrders) * 100) : 0;
     const paymentCompletionRatePct = completedOrderCount > 0 ? Math.round((paymentCompletedOrders / completedOrderCount) * 100) : 0;
-    const repeatCustomerRatePct = uniqueCustomers > 0 ? Math.round((repeatCustomers / uniqueCustomers) * 100) : 0;
-    const topItemsMap = new Map();
+    const lightOrders = await database_1.prisma.order.findMany({
+        where: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } },
+        select: { userId: true, createdAt: true }
+    });
+    const userCounts = new Map();
     const hourMap = new Map();
-    for (const order of completedOrders) {
-        const hour = order.createdAt.getUTCHours();
-        hourMap.set(hour, (hourMap.get(hour) || 0) + 1);
-        for (const item of order.items) {
-            const existing = topItemsMap.get(item.menuItemId) || {
-                menuItemId: item.menuItemId,
-                name: item.menuItem.name,
-                quantity: 0,
-                revenuePaise: 0,
-            };
-            existing.quantity += item.quantity;
-            existing.revenuePaise += item.quantity * item.pricePaise;
-            topItemsMap.set(item.menuItemId, existing);
+    for (const order of lightOrders) {
+        if (order.userId) {
+            userCounts.set(order.userId, (userCounts.get(order.userId) || 0) + 1);
         }
+        const localHour = new Date(order.createdAt.getTime() + IST_OFFSET_MS).getUTCHours();
+        hourMap.set(localHour, (hourMap.get(localHour) || 0) + 1);
+    }
+    const uniqueCustomers = userCounts.size;
+    const repeatCustomers = Array.from(userCounts.values()).filter(count => count > 1).length;
+    const repeatCustomerRatePct = uniqueCustomers > 0 ? Math.round((repeatCustomers / uniqueCustomers) * 100) : 0;
+    const peakHours = Array.from(hourMap.entries())
+        .map(([hour, ordersCount]) => ({ hour, orders: ordersCount }))
+        .sort((a, b) => b.orders - a.orders)
+        .slice(0, 5);
+    const orderItems = await database_1.prisma.orderItem.findMany({
+        where: { order: { restaurantId, createdAt: { gte: start, lt: end }, status: { not: 'CANCELLED' } } },
+        select: { menuItemId: true, quantity: true, pricePaise: true, menuItem: { select: { name: true } } }
+    });
+    const topItemsMap = new Map();
+    for (const item of orderItems) {
+        const existing = topItemsMap.get(item.menuItemId) || {
+            menuItemId: item.menuItemId,
+            name: item.menuItem.name,
+            quantity: 0,
+            revenuePaise: 0,
+        };
+        existing.quantity += item.quantity;
+        existing.revenuePaise += item.quantity * item.pricePaise;
+        topItemsMap.set(item.menuItemId, existing);
     }
     const topItems = Array.from(topItemsMap.values())
-        .sort((a, b) => b.quantity - a.quantity)
-        .slice(0, 5);
-    const peakHours = Array.from(hourMap.entries())
-        .map(([hour, ordersAtHour]) => ({ hour, orders: ordersAtHour }))
-        .sort((a, b) => b.orders - a.orders)
+        .sort((a, b) => b.revenuePaise - a.revenuePaise)
         .slice(0, 5);
     return {
         revenuePaise,
@@ -155,7 +147,14 @@ const generateAnalyticsSnapshot = async (params) => {
     if (redis) {
         const cached = await redis.get(cacheKey);
         if (cached) {
-            return JSON.parse(cached);
+            const parsed = JSON.parse(cached);
+            if (parsed.generatedAt)
+                parsed.generatedAt = new Date(parsed.generatedAt);
+            if (parsed.periodStart)
+                parsed.periodStart = new Date(parsed.periodStart);
+            if (parsed.periodEnd)
+                parsed.periodEnd = new Date(parsed.periodEnd);
+            return parsed;
         }
     }
     const snapshot = await computeMetrics(params.restaurantId, bounds.start, bounds.end);

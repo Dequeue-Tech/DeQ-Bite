@@ -5,7 +5,7 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getRedisClient = void 0;
 const ioredis_1 = __importDefault(require("ioredis"));
-const logger_1 = require("./logger");
+const logger_1 = require("@/utils/logger");
 let redisClient = null;
 const getRedisClient = () => {
     const url = process.env.REDIS_URL;

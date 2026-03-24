@@ -2,20 +2,34 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.initSocketServer = void 0;
 const socket_io_1 = require("socket.io");
-const database_1 = require("../config/database");
-const firebase_user_1 = require("../lib/firebase-user");
-const logger_1 = require("../utils/logger");
-const realtime_1 = require("../utils/realtime");
+const database_1 = require("@/config/database");
+const firebase_user_1 = require("@/lib/firebase-user");
+const logger_1 = require("@/utils/logger");
+const realtime_1 = require("@/utils/realtime");
 const getAllowedOrigins = () => {
     return [
         process.env.FRONTEND_URL?.replace(/\/$/, ''),
         'http://localhost:5174',
         'http://localhost:3000',
         'http://localhost:3001',
+        'https://bite-delivery.dequeue.co.in',
         'https://de-q-restaurants-frontend.vercel.app',
         'https://bite.dequeue.co.in',
         'https://demo.bite.dequeue.co.in',
     ].filter(Boolean);
+};
+const isAllowedOrigin = (origin, allowedOrigins) => {
+    if (allowedOrigins.includes(origin))
+        return true;
+    try {
+        const parsed = new URL(origin);
+        if (parsed.protocol !== 'https:')
+            return false;
+        return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
+    }
+    catch {
+        return false;
+    }
 };
 const resolveRestaurantId = async (identifier) => {
     if (!identifier)
@@ -62,7 +76,8 @@ const initSocketServer = (server) => {
                 const allowedOrigins = getAllowedOrigins();
                 if (!origin)
                     return callback(null, true);
-                if (allowedOrigins.includes(origin.replace(/\/$/, ''))) {
+                const normalizedOrigin = origin.replace(/\/$/, '');
+                if (isAllowedOrigin(normalizedOrigin, allowedOrigins)) {
                     return callback(null, true);
                 }
                 return callback(new Error('Not allowed by CORS'));

@@ -47,9 +47,41 @@ export default function SignInPage() {
     };
   }, []);
 
-  const afterAuthNavigate = () => {
+  const afterAuthNavigate = async () => {
+    const authUser = useAuthStore.getState().user;
+    const hasAdminAccess =
+      authUser?.role === 'OWNER' ||
+      authUser?.role === 'ADMIN' ||
+      authUser?.restaurantRole === 'OWNER' ||
+      authUser?.restaurantRole === 'ADMIN';
+
     const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
-    router.push(selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/');
+    if (!hasAdminAccess) {
+      router.push(selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/');
+      return;
+    }
+
+    if (selectedRestaurantSlug) {
+      router.replace(`/${selectedRestaurantSlug}/admin`);
+      return;
+    }
+
+    try {
+      const restaurants = await apiClient.getMyRestaurants();
+      const adminRestaurant = restaurants.find(
+        (restaurant) => restaurant.role === 'OWNER' || restaurant.role === 'ADMIN'
+      );
+      const resolvedSlug = adminRestaurant?.slug || adminRestaurant?.subdomain || adminRestaurant?.id;
+      if (resolvedSlug) {
+        apiClient.setSelectedRestaurantSlug(resolvedSlug);
+        router.replace(`/${resolvedSlug}/admin`);
+        return;
+      }
+    } catch {
+      // ignore errors while trying to resolve admin restaurant
+    }
+
+    router.replace('/admin');
   };
 
   const getRecaptchaVerifier = () => {
@@ -72,7 +104,7 @@ export default function SignInPage() {
 
     try {
       await login({ email, password });
-      afterAuthNavigate();
+      await afterAuthNavigate();
     } catch {
       // Errors are surfaced from the auth store.
     } finally {
@@ -86,7 +118,7 @@ export default function SignInPage() {
 
     try {
       await loginWithOAuth(provider);
-      afterAuthNavigate();
+      await afterAuthNavigate();
     } catch {
       // Errors are surfaced from the auth store.
     } finally {
@@ -141,7 +173,7 @@ export default function SignInPage() {
         phone: normalizedPhoneRef.current || normalizePhoneNumber(phone),
       });
       toast.success('Phone verification successful');
-      afterAuthNavigate();
+      await afterAuthNavigate();
     } catch (otpError) {
       const message = otpError instanceof Error ? otpError.message : 'Failed to verify OTP';
       toast.error(message);
@@ -360,4 +392,3 @@ export default function SignInPage() {
     </div>
   );
 }
-

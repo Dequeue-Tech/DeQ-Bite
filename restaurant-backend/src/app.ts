@@ -52,6 +52,7 @@ app.use(cors({
     const allowedOrigins = [
       process.env.FRONTEND_URL?.replace(/\/$/, ''),
       'http://localhost:5173',
+      'http://localhost:5174',
       'http://localhost:3000',
       'http://localhost:3001',
       'https://bite-delivery.dequeue.co.in',
@@ -60,11 +61,22 @@ app.use(cors({
       'https://demo.bite.dequeue.co.in',
     ].filter(Boolean);
 
+    const isAllowedOrigin = (candidate: string) => {
+      if (allowedOrigins.includes(candidate)) return true;
+      try {
+        const parsed = new URL(candidate);
+        if (parsed.protocol !== 'https:') return false;
+        return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
+      } catch {
+        return false;
+      }
+    };
+
     // Allow requests with no origin (like mobile apps or curl requests)
     if (!origin) return callback(null, true);
 
     const normalizedOrigin = origin.replace(/\/$/, '');
-    if (allowedOrigins.includes(normalizedOrigin)) {
+    if (isAllowedOrigin(normalizedOrigin)) {
       callback(null, true);
     } else {
       console.warn(`CORS blocked request from origin: ${origin}`);

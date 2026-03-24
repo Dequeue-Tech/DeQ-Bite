@@ -10,6 +10,7 @@ import { safeCreateAuditLog } from '@/utils/audit';
 import { accelerateCache } from '@/utils/accelerate-cache';
 import { cacheResponse } from '@/middleware/cache';
 import { invalidateCacheByPrefix } from '@/utils/cache';
+import { emitRestaurantEvent } from '@/utils/realtime';
 
 const router = Router();
 
@@ -609,10 +610,19 @@ router.post('/users', authenticate, requireRestaurant, authorizeRestaurantRole('
             name: true,
             email: true,
             phone: true,
+            role: true,
+            createdAt: true,
           },
         },
       },
     });
+
+    const membershipEntry = {
+      membershipId: membership.id,
+      role: membership.role,
+      active: membership.active,
+      user: membership.user,
+    };
 
     await safeCreateAuditLog({
       actorUserId: req.user!.id,
@@ -626,15 +636,17 @@ router.post('/users', authenticate, requireRestaurant, authorizeRestaurantRole('
       },
     });
 
+    emitRestaurantEvent(req.restaurant!.id, {
+      type: 'restaurant.users.updated',
+      payload: {
+        membership: membershipEntry,
+      },
+    });
+
     return res.status(201).json({
       success: true,
       data: {
-        membership: {
-          id: membership.id,
-          role: membership.role,
-          active: membership.active,
-          user: membership.user,
-        },
+        membership: membershipEntry,
       },
       message: 'Restaurant user added/updated successfully',
     });

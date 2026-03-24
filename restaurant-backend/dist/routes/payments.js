@@ -2,16 +2,16 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
-const errorHandler_1 = require("../middleware/errorHandler");
-const payments_1 = require("../lib/payments");
-const logger_1 = require("../utils/logger");
-const audit_1 = require("../utils/audit");
-const pdf_1 = require("../lib/pdf");
-const restaurant_1 = require("../middleware/restaurant");
-const realtime_1 = require("../utils/realtime");
-const cache_1 = require("../middleware/cache");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const payments_1 = require("@/lib/payments");
+const logger_1 = require("@/utils/logger");
+const audit_1 = require("@/utils/audit");
+const pdf_1 = require("@/lib/pdf");
+const restaurant_1 = require("@/middleware/restaurant");
+const realtime_1 = require("@/utils/realtime");
+const cache_1 = require("@/middleware/cache");
 const router = (0, express_1.Router)();
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
@@ -92,10 +92,14 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
     });
     if (!existingInvoice) {
         const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+        const customerName = order.user?.name || 'Guest';
+        const customerEmail = order.user?.email || undefined;
+        const customerPhone = order.user?.phone || '';
+        const tableNumber = order.table?.number ? String(order.table.number) : 'N/A';
         const invoiceData = {
-            customerName: order.user.name,
-            customerEmail: order.user.email,
-            customerPhone: order.user.phone || '',
+            customerName,
+            customerEmail,
+            customerPhone,
             invoiceNumber,
             orderDate: order.createdAt.toLocaleDateString('en-IN'),
             items: order.items.map((item) => ({
@@ -107,7 +111,7 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
             subtotal: order.subtotalPaise / 100,
             tax: order.taxPaise / 100,
             total: order.totalPaise / 100,
-            tableNumber: order.table.number,
+            tableNumber,
             restaurantName: order.restaurant.name,
             paymentMethod: `Payment (${order.paymentProvider})`,
             ...(order.restaurant.address ? { restaurantAddress: order.restaurant.address } : {}),

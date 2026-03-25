@@ -1,5 +1,5 @@
 import express from 'express';
-import cors from 'cors';
+import cors, { CorsOptions } from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
@@ -47,7 +47,7 @@ app.use(helmet({
   crossOriginEmbedderPolicy: false,
 }));
 
-app.use(cors({
+const corsOptions: CorsOptions = {
   origin: (origin, callback) => {
     const allowedOrigins = [
       process.env.FRONTEND_URL?.replace(/\/$/, ''),
@@ -63,9 +63,17 @@ app.use(cors({
 
     const isAllowedOrigin = (candidate: string) => {
       if (allowedOrigins.includes(candidate)) return true;
+
       try {
         const parsed = new URL(candidate);
+
+        const isLocalDevHost =
+          (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') &&
+          (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+
+        if (isLocalDevHost) return true;
         if (parsed.protocol !== 'https:') return false;
+
         return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
       } catch {
         return false;
@@ -77,16 +85,19 @@ app.use(cors({
 
     const normalizedOrigin = origin.replace(/\/$/, '');
     if (isAllowedOrigin(normalizedOrigin)) {
-      callback(null, true);
-    } else {
-      console.warn(`CORS blocked request from origin: ${origin}`);
-      callback(new Error('Not allowed by CORS'));
+      return callback(null, true);
     }
+
+    console.warn(`CORS blocked request from origin: ${origin}`);
+    return callback(new Error('Not allowed by CORS'));
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
-}));
+};
+
+app.use(cors(corsOptions));
+app.options('*', cors(corsOptions));
 
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,

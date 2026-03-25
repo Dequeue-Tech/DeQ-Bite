@@ -23,6 +23,11 @@ const isAllowedOrigin = (origin: string, allowedOrigins: string[]) => {
   if (allowedOrigins.includes(origin)) return true;
   try {
     const parsed = new URL(origin);
+    const isLocalDevHost =
+      (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') &&
+      (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+
+    if (isLocalDevHost) return true;
     if (parsed.protocol !== 'https:') return false;
     return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
   } catch {

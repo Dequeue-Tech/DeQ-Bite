@@ -45,7 +45,7 @@ app.use((0, helmet_1.default)({
     contentSecurityPolicy: false,
     crossOriginEmbedderPolicy: false,
 }));
-app.use((0, cors_1.default)({
+const corsOptions = {
     origin: (origin, callback) => {
         const allowedOrigins = [
             process.env.FRONTEND_URL?.replace(/\/$/, ''),
@@ -63,6 +63,10 @@ app.use((0, cors_1.default)({
                 return true;
             try {
                 const parsed = new URL(candidate);
+                const isLocalDevHost = (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') &&
+                    (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+                if (isLocalDevHost)
+                    return true;
                 if (parsed.protocol !== 'https:')
                     return false;
                 return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
@@ -75,17 +79,17 @@ app.use((0, cors_1.default)({
             return callback(null, true);
         const normalizedOrigin = origin.replace(/\/$/, '');
         if (isAllowedOrigin(normalizedOrigin)) {
-            callback(null, true);
+            return callback(null, true);
         }
-        else {
-            console.warn(`CORS blocked request from origin: ${origin}`);
-            callback(new Error('Not allowed by CORS'));
-        }
+        console.warn(`CORS blocked request from origin: ${origin}`);
+        return callback(new Error('Not allowed by CORS'));
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
-}));
+};
+app.use((0, cors_1.default)(corsOptions));
+app.options('*', (0, cors_1.default)(corsOptions));
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
     max: 200,

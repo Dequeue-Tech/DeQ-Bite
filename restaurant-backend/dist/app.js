@@ -69,7 +69,7 @@ const corsOptions = {
                     return true;
                 if (parsed.protocol !== 'https:')
                     return false;
-                return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
+                return parsed.hostname === 'dequeue.co.in' || parsed.hostname.endsWith('.dequeue.co.in');
             }
             catch {
                 return false;

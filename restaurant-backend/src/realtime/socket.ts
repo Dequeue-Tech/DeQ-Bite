@@ -15,6 +15,7 @@ const getAllowedOrigins = () => {
     'https://bite-delivery.dequeue.co.in',
     'https://de-q-restaurants-frontend.vercel.app',
     'https://bite.dequeue.co.in',
+    'https://bite-test.dequeue.co.in',
     'https://demo.bite.dequeue.co.in',
   ].filter(Boolean) as string[];
 };
@@ -29,7 +30,7 @@ const isAllowedOrigin = (origin: string, allowedOrigins: string[]) => {
 
     if (isLocalDevHost) return true;
     if (parsed.protocol !== 'https:') return false;
-    return parsed.hostname === 'bite.dequeue.co.in' || parsed.hostname.endsWith('.bite.dequeue.co.in');
+    return parsed.hostname === 'dequeue.co.in' || parsed.hostname.endsWith('.dequeue.co.in');
   } catch {
     return false;
   }

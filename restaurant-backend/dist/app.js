@@ -56,6 +56,7 @@ const corsOptions = {
             'https://bite-delivery.dequeue.co.in',
             'https://de-q-restaurants-frontend.vercel.app',
             'https://bite.dequeue.co.in',
+            'https://bite-test.dequeue.co.in',
             'https://demo.bite.dequeue.co.in',
         ].filter(Boolean);
         const isAllowedOrigin = (candidate) => {
@@ -63,13 +64,19 @@ const corsOptions = {
                 return true;
             try {
                 const parsed = new URL(candidate);
-                const isLocalDevHost = (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') &&
+                const hostname = parsed.hostname.toLowerCase();
+                const isLocalDevHost = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') &&
                     (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+                const isAllowedVercelFrontend = parsed.protocol === 'https:' &&
+                    (hostname === 'de-q-restaurants-frontend.vercel.app' || hostname.startsWith('de-q-restaurants-frontend-')) &&
+                    hostname.endsWith('.vercel.app');
                 if (isLocalDevHost)
+                    return true;
+                if (isAllowedVercelFrontend)
                     return true;
                 if (parsed.protocol !== 'https:')
                     return false;
-                return parsed.hostname === 'dequeue.co.in' || parsed.hostname.endsWith('.dequeue.co.in');
+                return hostname === 'dequeue.co.in' || hostname.endsWith('.dequeue.co.in');
             }
             catch {
                 return false;
@@ -89,7 +96,6 @@ const corsOptions = {
     allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
 };
 app.use((0, cors_1.default)(corsOptions));
-app.options('*', (0, cors_1.default)(corsOptions));
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
     max: 200,

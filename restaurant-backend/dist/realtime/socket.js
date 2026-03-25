@@ -14,9 +14,9 @@ const getAllowedOrigins = () => {
         'http://localhost:3000',
         'http://localhost:3001',
         'https://bite-delivery.dequeue.co.in',
-        'https://bite-test.dequeue.co.in',
         'https://de-q-restaurants-frontend.vercel.app',
         'https://bite.dequeue.co.in',
+        'https://bite-test.dequeue.co.in',
         'https://demo.bite.dequeue.co.in',
     ].filter(Boolean);
 };
@@ -25,13 +25,19 @@ const isAllowedOrigin = (origin, allowedOrigins) => {
         return true;
     try {
         const parsed = new URL(origin);
-        const isLocalDevHost = (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '[::1]') &&
+        const hostname = parsed.hostname.toLowerCase();
+        const isLocalDevHost = (hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]') &&
             (parsed.protocol === 'http:' || parsed.protocol === 'https:');
+        const isAllowedVercelFrontend = parsed.protocol === 'https:' &&
+            (hostname === 'de-q-restaurants-frontend.vercel.app' || hostname.startsWith('de-q-restaurants-frontend-')) &&
+            hostname.endsWith('.vercel.app');
         if (isLocalDevHost)
+            return true;
+        if (isAllowedVercelFrontend)
             return true;
         if (parsed.protocol !== 'https:')
             return false;
-        return parsed.hostname === 'dequeue.co.in' || parsed.hostname.endsWith('.dequeue.co.in');
+        return hostname === 'dequeue.co.in' || hostname.endsWith('.dequeue.co.in');
     }
     catch {
         return false;

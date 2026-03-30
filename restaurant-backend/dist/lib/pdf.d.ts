@@ -1,33 +1,5 @@
 import { isPrivateBucket as checkPrivateBucket } from './b2-storage';
 export declare const isPrivateBucket: typeof checkPrivateBucket;
-export interface LegacyInvoiceData {
-    restaurantName: string;
-    restaurantAddress?: string;
-    restaurantCity?: string;
-    restaurantState?: string;
-    restaurantPhone?: string;
-    restaurantEmail?: string;
-    gstNumber?: string;
-    fssaiNumber?: string;
-    customerName: string;
-    customerEmail?: string;
-    customerPhone?: string;
-    invoiceNumber: string;
-    orderDate: string;
-    items: Array<{
-        name: string;
-        quantity: number;
-        price: number;
-        total: number;
-    }>;
-    subtotal: number;
-    tax: number;
-    taxPercent?: number;
-    total: number;
-    tableNumber: number;
-    cashierName?: string;
-    paymentMethod?: string;
-}
 export interface InvoiceItem {
     name: string;
     quantity: number;

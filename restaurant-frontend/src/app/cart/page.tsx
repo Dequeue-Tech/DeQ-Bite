@@ -4,6 +4,7 @@ import { useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { ShoppingCart, Plus, Minus, Trash2 } from "lucide-react";
 import { useCartStore } from "@/store/cart";
+import { apiClient } from "@/lib/api-client";
 import { formatInr } from "@/lib/currency";
 import toast from "react-hot-toast";
 
@@ -13,7 +14,7 @@ export default function CartPage() {
   
   // Get slug from multiple sources: route param > localStorage > store
   const routeSlug = typeof params?.restaurantSlug === "string" ? params.restaurantSlug : null;
-  const storedSlug = typeof window !== 'undefined' ? localStorage.getItem('selectedRestaurantSlug') : null;
+  const storedSlug = typeof window !== 'undefined' ? apiClient.getSelectedRestaurantSlug() : null;
   const { activeRestaurantSlug } = useCartStore();
   
   const restaurantSlug = routeSlug || storedSlug || activeRestaurantSlug;

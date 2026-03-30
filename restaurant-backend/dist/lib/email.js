@@ -8,6 +8,18 @@ exports.generateInvoiceEmailTemplate = generateInvoiceEmailTemplate;
 exports.sendInvoiceEmail = sendInvoiceEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const logger_1 = require("../utils/logger");
+const getMissingEmailConfig = () => {
+    const missing = [];
+    if (!process.env.SMTP_HOST)
+        missing.push('SMTP_HOST');
+    if (!process.env.SMTP_PORT)
+        missing.push('SMTP_PORT');
+    if (!process.env.SMTP_USER)
+        missing.push('SMTP_USER');
+    if (!process.env.SMTP_PASS)
+        missing.push('SMTP_PASS');
+    return missing;
+};
 const createTransporter = () => {
     return nodemailer_1.default.createTransport({
         host: process.env.SMTP_HOST,
@@ -20,8 +32,14 @@ const createTransporter = () => {
     });
 };
 async function sendEmail(options) {
+    const missingConfig = getMissingEmailConfig();
+    if (missingConfig.length > 0) {
+        logger_1.logger.error('Email configuration incomplete', { missingConfig });
+        return false;
+    }
     try {
         const transporter = createTransporter();
+        await transporter.verify();
         const mailOptions = {
             from: `${process.env.APP_NAME} <${process.env.SMTP_USER}>`,
             to: options.to,

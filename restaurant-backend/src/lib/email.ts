@@ -1,6 +1,15 @@
 import nodemailer from 'nodemailer';
 import { logger } from '@/utils/logger';
 
+const getMissingEmailConfig = () => {
+  const missing: string[] = [];
+  if (!process.env.SMTP_HOST) missing.push('SMTP_HOST');
+  if (!process.env.SMTP_PORT) missing.push('SMTP_PORT');
+  if (!process.env.SMTP_USER) missing.push('SMTP_USER');
+  if (!process.env.SMTP_PASS) missing.push('SMTP_PASS');
+  return missing;
+};
+
 // Email configuration
 const createTransporter = () => {
   return nodemailer.createTransport({
@@ -29,9 +38,16 @@ export interface EmailOptions {
  * Send email with optional PDF attachment
  */
 export async function sendEmail(options: EmailOptions): Promise<boolean> {
+  const missingConfig = getMissingEmailConfig();
+  if (missingConfig.length > 0) {
+    logger.error('Email configuration incomplete', { missingConfig });
+    return false;
+  }
+
   try {
     const transporter = createTransporter();
-    
+    await transporter.verify();
+
     const mailOptions = {
       from: `${process.env.APP_NAME} <${process.env.SMTP_USER}>`,
       to: options.to,

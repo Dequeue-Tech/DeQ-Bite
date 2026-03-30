@@ -32,7 +32,7 @@ function CheckoutPageContent() {
     activeOrderId,
     setActiveOrderId,
   } = useCartStore();
-  const { isAuthenticated, user } = useAuthStore();
+  const { isAuthenticated, user, syncFirebaseUser } = useAuthStore();
 
   const requestedOrderId = searchParams.get('orderId') || activeOrderId;
   const payNow = searchParams.get('payNow') === '1';
@@ -199,8 +199,26 @@ function CheckoutPageContent() {
       toast.error('Please select a table and verify your name');
       return;
     }
+
+    const normalizedPhone = customerInfo.phone.trim();
+    if (normalizedPhone && !/^\+?\d{10,15}$/.test(normalizedPhone)) {
+      toast.error('Enter a valid phone number for SMS updates');
+      return;
+    }
+
     setIsProcessing(true);
     try {
+      const profileUpdates: { name?: string; phone?: string } = {};
+      if (customerInfo.name.trim() && customerInfo.name.trim() !== (user?.name || '')) {
+        profileUpdates.name = customerInfo.name.trim();
+      }
+      if (normalizedPhone && normalizedPhone !== (user?.phone || '')) {
+        profileUpdates.phone = normalizedPhone;
+      }
+      if (Object.keys(profileUpdates).length > 0) {
+        await syncFirebaseUser(profileUpdates);
+      }
+
       if (requestedOrderId) {
         const response = await apiClient.addOrderItems(requestedOrderId, {
           items: cartItems.map((item) => ({ menuItemId: item.id, quantity: item.quantity, notes: '' })),
@@ -350,7 +368,17 @@ function CheckoutPageContent() {
                       className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm sm:text-base"
                       placeholder="Email"
                     />
+                    <input
+                      type="tel"
+                      value={customerInfo.phone}
+                      onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value })}
+                      className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm sm:text-base sm:col-span-2"
+                      placeholder="Phone number for SMS invoice updates"
+                    />
                   </div>
+                  <p className="mt-3 text-xs text-gray-500">
+                    Add your phone number to receive invoice SMS updates later.
+                  </p>
                 </div>
 
                 <div className="bg-white rounded-lg shadow-md p-4 sm:p-6">

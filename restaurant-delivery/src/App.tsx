@@ -7,7 +7,7 @@ import {
   Store, Search, ShoppingBag, MapPin, 
   CreditCard, ChevronRight, User, LogOut, 
   BellRing, X, Plus, Minus, Receipt, CheckCircle, 
-  Clock, ArrowLeft, Ticket 
+  Clock, ArrowLeft, Ticket, Banknote, Smartphone
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 
@@ -130,29 +130,31 @@ export default function App() {
   const [activeCategory, setActiveCategory] = useState<string>('All');
   
   const [cart, setCart] = useState<CartItem[]>([]);
-  const [showMobileCart, setShowMobileCart] = useState(false); // Mobile cart drawer state
+  const [showMobileCart, setShowMobileCart] = useState(false); 
   
   const [myOrders, setMyOrders] = useState<DeliveryOrder[]>([]);
   const [showOrders, setShowOrders] = useState(false);
   
   const [couponCode, setCouponCode] = useState('');
   const [couponPreview, setCouponPreview] = useState<CouponPreview | null>(null);
-  const [couponError, setCouponError] = useState(''); // Local error for coupon input
+  const [couponError, setCouponError] = useState(''); 
 
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [authMode, setAuthMode] = useState<AuthMode>('login');
   const [authForm, setAuthForm] = useState({ name: '', email: '', password: '', phone: '' });
 
+  // Updated address fields in state
   const [checkout, setCheckout] = useState({
     customerName: '',
     customerPhone: '',
-    deliveryAddress: '',
+    flatNumber: '',
+    streetAddress: '',
     landmark: '',
     specialInstructions: '',
   });
   
-  // Invoice state replaces payment providers
-  const [requestInvoice, setRequestInvoice] = useState(true);
+  // Replaced requestInvoice with specific payment methods
+  const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE'>('ONLINE');
 
   const previousStatusByOrderRef = useRef<Record<string, DeliveryStatus>>({});
 
@@ -191,7 +193,6 @@ export default function App() {
 
   const tenantUrl = useMemo(() => (selectedSlug ? `${apiUrl}/restaurants/${selectedSlug}` : ''), [apiUrl, selectedSlug]);
 
-  // Derived logic for Categories
   const uniqueCategories = useMemo(() => {
     const cats = new Set(menuItems.map(item => item.category?.name).filter(Boolean) as string[]);
     return ['All', ...Array.from(cats)];
@@ -202,14 +203,12 @@ export default function App() {
     return menuItems.filter(item => item.category?.name === activeCategory);
   }, [menuItems, activeCategory]);
 
-  // Prevents background scrolling when mobile cart is open
   useEffect(() => {
     if (showMobileCart) document.body.style.overflow = 'hidden';
     else document.body.style.overflow = 'unset';
     return () => { document.body.style.overflow = 'unset'; };
   }, [showMobileCart]);
 
-  // --- Actions ---
   const notify = (nextMessage: string) => {
     setMessage(nextMessage);
     setTimeout(() => setMessage(''), 3500);
@@ -331,12 +330,19 @@ export default function App() {
     }
     if (!tenantUrl || !selectedSlug) return;
     if (!cart.length) return setError('Cart is empty');
-    if (!checkout.customerName || !checkout.customerPhone || !checkout.deliveryAddress) {
+    
+    // Updated validation for the new address structure
+    if (!checkout.customerName || !checkout.customerPhone || !checkout.streetAddress) {
       return setError('Customer name, phone, and delivery address are required');
     }
 
     setBusy(true);
     try {
+      // Concatenate the updated address fields into a single string for the backend
+      const fullDeliveryAddress = checkout.flatNumber 
+        ? `${checkout.flatNumber}, ${checkout.streetAddress}` 
+        : checkout.streetAddress;
+
       await fetchJson(`${tenantUrl}/delivery/orders`, {
         method: 'POST',
         headers: authHeaders,
@@ -347,10 +353,10 @@ export default function App() {
           })),
           customerName: checkout.customerName,
           customerPhone: checkout.customerPhone,
-          deliveryAddress: checkout.deliveryAddress,
+          deliveryAddress: fullDeliveryAddress,
           landmark: checkout.landmark,
           specialInstructions: checkout.specialInstructions,
-          paymentProvider: 'CASH', // Always CASH for Invoice flow
+          paymentProvider: paymentMethod, // Dynamically passing CASH or ONLINE
           ...(couponPreview ? { couponCode: couponPreview.coupon.code } : {}),
         }),
       });
@@ -361,7 +367,7 @@ export default function App() {
       setCouponPreview(null);
       setCheckout((prev) => ({ ...prev, specialInstructions: '' }));
       setShowOrders(true);
-      setShowMobileCart(false); // Close mobile cart automatically
+      setShowMobileCart(false); 
       await loadMyOrders(true);
     } catch (e: any) {
       setError(e?.message || 'Failed to place order');
@@ -389,7 +395,6 @@ export default function App() {
       });
       setCouponPreview(preview);
       
-      // Fire Confetti!
       confetti({
         particleCount: 150,
         spread: 70,
@@ -459,7 +464,6 @@ export default function App() {
     notify('Logged out');
   };
 
-  // --- Effects ---
   useEffect(() => {
     const initialize = async () => {
       setLoading(true);
@@ -536,7 +540,6 @@ export default function App() {
     return () => window.clearInterval(interval);
   }, [selectedSlug, token]);
 
-  // --- Renders ---
   if (loading) {
     return (
       <div className="min-h-screen bg-[#FDFDFD] flex flex-col items-center justify-center gap-4">
@@ -548,7 +551,6 @@ export default function App() {
 
   return (
     <main className="min-h-screen bg-[#F8FAFC] pb-24 relative">
-      {/* High-End Header */}
       <header className="bg-white border-b border-gray-100 sticky top-0 z-30 shadow-sm">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3">
@@ -564,7 +566,6 @@ export default function App() {
           </div>
           
           <div className="flex items-center gap-2 sm:gap-4">
-            {/* Mobile Cart Toggle */}
             {hasSlugRoute && (
               <button
                 onClick={() => setShowMobileCart(true)}
@@ -617,7 +618,6 @@ export default function App() {
         </div>
       </header>
 
-      {/* Floating Notifications */}
       <div className="fixed top-20 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
         {error && (
           <div className="bg-red-500/90 backdrop-blur-md text-white p-4 rounded-2xl shadow-xl flex items-start gap-3 pointer-events-auto animate-in slide-in-from-top-4">
@@ -639,7 +639,6 @@ export default function App() {
       </div>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 sm:py-8">
-        {/* State 1: Select Restaurant */}
         {!hasSlugRoute && (
           <div className="animate-in fade-in duration-500">
             <div className="flex flex-col items-center text-center mb-8 sm:mb-12 mt-4 sm:mt-10">
@@ -680,14 +679,11 @@ export default function App() {
           </div>
         )}
 
-        {/* State 2: Inside a Restaurant */}
         {hasSlugRoute && (
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-start">
             
-            {/* Left Column: Menu & Past Orders */}
             <div className="lg:col-span-7 xl:col-span-8 space-y-8 animate-in fade-in slide-in-from-left-4 duration-500">
               
-              {/* Back & Title Header */}
               <div className="bg-white rounded-[32px] p-5 sm:p-8 shadow-sm border border-gray-100">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
                   <div>
@@ -723,7 +719,6 @@ export default function App() {
                   </button>
                 </div>
 
-                {/* Orders View */}
                 {showOrders && (
                   <div className="mt-8 pt-8 border-t border-dashed border-gray-200 animate-in fade-in duration-300">
                     <h3 className="text-lg font-black text-gray-900 mb-4">Track Deliveries</h3>
@@ -765,7 +760,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Horizontal Category Pills */}
               {uniqueCategories.length > 1 && (
                 <div className="mt-6 mb-2 relative">
                   <div className="flex overflow-x-auto gap-2 pb-2 no-scrollbar" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
@@ -787,17 +781,12 @@ export default function App() {
                 </div>
               )}
 
-              {/* Filtered Menu Grid with Side Images */}
               <div className="grid sm:grid-cols-2 gap-4 sm:gap-6 mt-4">
                 {filteredMenuItems.map((item) => {
                   const cartItem = cart.find(c => c.menuItemId === item.id);
                   return (
                     <div key={item.id} className="bg-white rounded-[28px] p-4 sm:p-5 shadow-[0_4px_20px_rgb(0,0,0,0.03)] border border-gray-100 flex flex-col justify-between h-full hover:border-orange-200 transition-colors">
-                      
-                      {/* Top Section: Text Info (Left) + Image (Right) */}
                       <div className="flex justify-between gap-4 mb-4">
-                        
-                        {/* Text Info */}
                         <div className="flex-1 flex flex-col">
                           <div className="flex items-start gap-2 mb-1.5">
                             <div className={`w-2.5 h-2.5 rounded-full shrink-0 mt-1.5 ${item.available ? 'bg-green-500' : 'bg-gray-300'}`} title={item.available ? 'Available' : 'Out of stock'} />
@@ -815,7 +804,6 @@ export default function App() {
                           </p>
                         </div>
 
-                        {/* High-End Side Image Block */}
                         {item.image && (
                           <div className="relative w-24 h-24 sm:w-28 sm:h-28 rounded-[20px] overflow-hidden bg-gray-50 shrink-0 border border-gray-100 shadow-sm">
                             <img 
@@ -828,7 +816,6 @@ export default function App() {
                         )}
                       </div>
                       
-                      {/* Bottom Section: Price & Action Buttons */}
                       <div className="flex items-center justify-between mt-auto pt-4 border-t border-gray-100">
                         <span className="font-black text-xl text-gray-900">{formatInr(item.pricePaise)}</span>
                         
@@ -860,8 +847,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Right Column: Checkout Sidebar / Mobile Drawer */}
-            {/* Mobile Drawer Overlay */}
             {showMobileCart && (
               <div 
                 className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm z-40 lg:hidden animate-in fade-in duration-300"
@@ -916,7 +901,6 @@ export default function App() {
                     </div>
                   )}
 
-                  {/* Checkout Form */}
                   <form id="checkout-form" onSubmit={placeOrder} className="space-y-4 pt-4 border-t border-gray-100">
                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Delivery Details</p>
                     
@@ -935,14 +919,24 @@ export default function App() {
                         className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20"
                         required
                       />
-                      <textarea
-                        value={checkout.deliveryAddress}
-                        onChange={(e) => setCheckout((prev) => ({ ...prev, deliveryAddress: e.target.value }))}
-                        placeholder="Full Delivery Address"
-                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20 resize-none"
-                        rows={2}
-                        required
-                      />
+                      
+                      {/* --- Address field updated structure --- */}
+                      <div className="grid grid-cols-2 gap-3">
+                        <input
+                          value={checkout.flatNumber}
+                          onChange={(e) => setCheckout((prev) => ({ ...prev, flatNumber: e.target.value }))}
+                          placeholder="Flat/House/Floor No."
+                          className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20"
+                        />
+                        <input
+                          value={checkout.streetAddress}
+                          onChange={(e) => setCheckout((prev) => ({ ...prev, streetAddress: e.target.value }))}
+                          placeholder="Street/Area Name"
+                          className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20"
+                          required
+                        />
+                      </div>
+                      
                       <div className="grid grid-cols-2 gap-3">
                         <input
                           value={checkout.landmark}
@@ -961,30 +955,44 @@ export default function App() {
 
                     <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mt-6 mb-2">Checkout Method</p>
                     
-                    {/* Replaced Payment Provider Map with Invoice Toggle */}
-                    <label
-                      className={`w-full flex items-center justify-between p-5 rounded-2xl border-2 transition-all cursor-pointer ${
-                        requestInvoice
-                          ? 'border-gray-900 bg-gray-900 text-white'
-                          : 'border-gray-100 bg-white text-gray-700 hover:border-gray-200'
-                      }`}
-                    >
-                      <input
-                        type="checkbox"
-                        checked={requestInvoice}
-                        onChange={(e) => setRequestInvoice(e.target.checked)}
-                        className="sr-only"
-                      />
-                      <div className="flex flex-col">
-                        <span className="font-bold text-base sm:text-lg">Ask for Invoice</span>
-                        <span className={`text-xs sm:text-sm mt-0.5 font-medium ${requestInvoice ? 'text-gray-300' : 'text-gray-500'}`}>
-                          Bill will be brought to your table
-                        </span>
-                      </div>
-                      <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center shrink-0 ${requestInvoice ? 'border-white' : 'border-gray-300'}`}>
-                        {requestInvoice && <div className="w-2 h-2 rounded-full bg-white" />}
-                      </div>
-                    </label>
+                    {/* --- Payment options replacing "Ask for Invoice" --- */}
+                    <div className="grid grid-cols-2 gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('CASH')}
+                        className={`p-4 rounded-2xl border-2 text-left transition-all flex flex-col items-start ${
+                          paymentMethod === 'CASH' 
+                            ? 'border-gray-900 bg-gray-900 text-white' 
+                            : 'border-gray-100 bg-white text-gray-700 hover:border-gray-200'
+                        }`}
+                      >
+                        <Banknote className={`h-5 w-5 mb-2 ${paymentMethod === 'CASH' ? 'text-white' : 'text-gray-400'}`} />
+                        <span className="font-bold text-sm">Cash on Delivery</span>
+                        <span className={`text-[10px] mt-1 font-medium ${paymentMethod === 'CASH' ? 'text-gray-300' : 'text-gray-400'}`}>Pay with cash at door</span>
+                      </button>
+                      
+                      <button
+                        type="button"
+                        onClick={() => setPaymentMethod('ONLINE')}
+                        className={`p-4 rounded-2xl border-2 text-left transition-all flex flex-col items-start ${
+                          paymentMethod === 'ONLINE' 
+                            ? 'border-gray-900 bg-gray-900 text-white' 
+                            : 'border-gray-100 bg-white text-gray-700 hover:border-gray-200'
+                        }`}
+                      >
+                        <Smartphone className={`h-5 w-5 mb-2 ${paymentMethod === 'ONLINE' ? 'text-white' : 'text-gray-400'}`} />
+                        <span className="font-bold text-sm">Pay Online</span>
+                        <span className={`text-[10px] mt-1 font-medium ${paymentMethod === 'ONLINE' ? 'text-gray-300' : 'text-gray-400'}`}>UPI, Credit or Debit Card</span>
+                      </button>
+                    </div>
+
+                    {/* Notice for Invoice/SMS update as requested */}
+                    <div className="flex items-start gap-2 bg-blue-50/50 border border-blue-100 p-3 rounded-xl mt-3">
+                       <Receipt className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
+                       <p className="text-xs font-medium text-blue-700 leading-tight">
+                         An electronic invoice and live tracking updates will be sent to your phone via SMS.
+                       </p>
+                    </div>
 
                     <div className="mt-4">
                       <div className="relative">
@@ -1010,14 +1018,12 @@ export default function App() {
                         </button>
                       </div>
                       
-                      {/* Local Coupon Error */}
                       {couponError && (
                         <p className="text-xs font-bold text-red-500 mt-2 ml-2 animate-in slide-in-from-top-1">
                           {couponError}
                         </p>
                       )}
                       
-                      {/* Coupon Success Info */}
                       {couponPreview && (
                         <p className="text-xs font-bold text-green-600 mt-2 ml-2 animate-in slide-in-from-top-1">
                           Applied: {couponPreview.coupon.code} (-{formatInr(couponPreview.discountPaise)})
@@ -1027,7 +1033,6 @@ export default function App() {
                   </form>
                 </div>
 
-                {/* Footer Action */}
                 <div className="p-6 bg-white border-t border-gray-100 shrink-0">
                    <div className="flex justify-between items-center mb-4">
                       <span className="text-gray-500 font-bold uppercase tracking-widest text-xs">Total Due</span>
@@ -1050,7 +1055,6 @@ export default function App() {
         )}
       </div>
 
-      {/* Modern Auth Modal */}
       {showAuthModal && (
         <div className="fixed inset-0 bg-gray-900/40 backdrop-blur-sm p-4 flex items-center justify-center z-50 animate-in fade-in duration-200">
           <form onSubmit={submitAuth} className="w-full max-w-sm bg-white rounded-[32px] p-8 shadow-2xl animate-in zoom-in-95 slide-in-from-bottom-4 duration-300 relative">

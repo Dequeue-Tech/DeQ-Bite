@@ -12,12 +12,14 @@ const sms_1 = require("../lib/sms");
 const logger_1 = require("../utils/logger");
 const accelerate_cache_1 = require("../utils/accelerate-cache");
 const router = (0, express_1.Router)();
+const getInvoiceSmsPhone = (order) => order.user?.phone || order.deliveryCustomerPhone || null;
 const generateInvoiceSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
     methods: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS'])).default([]),
 });
 router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { orderId, methods } = generateInvoiceSchema.parse(req.body);
+    const requestedMethods = methods || [];
     const order = await database_1.prisma.order.findFirst({
         where: {
             id: orderId,
@@ -69,15 +71,25 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
         let invoice = await database_1.prisma.invoice.findUnique({
             where: { orderId },
         });
-        if (invoice && invoice.sentVia.length > 0) {
-            logger_1.logger.info('Invoice already exists and was sent automatically', {
+        const alreadyDeliveredForRequestedMethods = invoice
+            ? requestedMethods.length === 0 || requestedMethods.every((method) => {
+                if (method === 'EMAIL')
+                    return invoice.emailSent;
+                if (method === 'SMS')
+                    return invoice.smsSent;
+                return false;
+            })
+            : false;
+        if (invoice && alreadyDeliveredForRequestedMethods) {
+            logger_1.logger.info('Invoice already exists and requested delivery methods are already sent', {
                 orderId,
                 invoiceId: invoice.id,
+                requestedMethods,
                 sentVia: invoice.sentVia,
             });
             const response = {
                 success: true,
-                message: 'Invoice already generated and sent',
+                message: 'Invoice already generated',
                 data: {
                     invoice: {
                         id: invoice.id,
@@ -129,6 +141,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             tableNumber: order.table.number,
             paymentMethod: `${order.paymentProvider || 'RAZORPAY'}`,
         };
+        const smsPhone = getInvoiceSmsPhone(order);
         const pdfBuffer = (0, pdf_1.generateInvoicePDF)(invoiceData);
         const pdfFileName = `invoice-${invoiceNumber}.pdf`;
         const pdfStorageResult = await (0, pdf_1.savePDFToStorage)(pdfBuffer, pdfFileName);
@@ -138,8 +151,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             pdfGenerated: true,
             pdfPath: pdfStorageResult.pdfPath,
         };
-        const deliveryMethods = methods || [];
-        if (deliveryMethods.includes('EMAIL') && order.user.email) {
+        if (requestedMethods.includes('EMAIL') && order.user.email) {
             results.emailSent = await (0, email_1.sendInvoiceEmail)(order.user.email, {
                 customerName: order.user.name,
                 invoiceNumber,
@@ -149,20 +161,24 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
                 restaurantName: invoiceData.restaurantName,
             }, pdfBuffer);
         }
-        if (deliveryMethods.includes('SMS') && order.user.phone) {
-            results.smsSent = await (0, sms_1.sendInvoiceSMS)(order.user.phone, {
+        if (requestedMethods.includes('SMS') && smsPhone) {
+            results.smsSent = await (0, sms_1.sendInvoiceSMS)(smsPhone, {
                 customerName: order.user.name,
                 invoiceNumber,
                 total: order.totalPaise / 100,
                 restaurantName: invoiceData.restaurantName,
             });
         }
+        const successfulMethods = [
+            ...(results.emailSent ? ['EMAIL'] : []),
+            ...(results.smsSent ? ['SMS'] : []),
+        ];
         if (!invoice) {
             invoice = await database_1.prisma.invoice.create({
                 data: {
                     orderId,
                     invoiceNumber,
-                    sentVia: deliveryMethods,
+                    sentVia: successfulMethods,
                     emailSent: results.emailSent,
                     smsSent: results.smsSent,
                     pdfPath: pdfStorageResult.pdfPath,
@@ -172,7 +188,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             });
         }
         else {
-            const updatedSentVia = [...new Set([...invoice.sentVia, ...deliveryMethods])];
+            const updatedSentVia = [...new Set([...invoice.sentVia, ...successfulMethods])];
             invoice = await database_1.prisma.invoice.update({
                 where: { id: invoice.id },
                 data: {
@@ -189,7 +205,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             orderId,
             invoiceNumber,
             userId: req.user.id,
-            methods,
+            methods: requestedMethods,
             results,
         });
         const response = {
@@ -206,7 +222,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
                     issuedAt: invoice.issuedAt,
                 },
                 deliveryResults: results,
-                warnings: generateWarnings(deliveryMethods, order.user.email, order.user.phone, results),
+                warnings: generateWarnings(requestedMethods, order.user.email, order.user.phone, results),
             },
         };
         return res.status(201).json(response);
@@ -304,6 +320,7 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
     const { methods } = zod_1.z.object({
         methods: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS'])).default([]),
     }).parse(req.body);
+    const requestedMethods = methods || [];
     if (!invoiceId) {
         throw new errorHandler_1.AppError('Invoice ID is required', 400);
     }
@@ -362,8 +379,8 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             tableNumber: invoice.order.table.number,
             restaurantName: resendRestaurantName,
         };
-        const deliveryMethods = methods || [];
-        if (deliveryMethods.includes('EMAIL') && invoice.order.user.email) {
+        const smsPhone = getInvoiceSmsPhone(invoice.order);
+        if (requestedMethods.includes('EMAIL') && invoice.order.user.email) {
             const resendTaxPercent = invoice.order.subtotalPaise > 0
                 ? Math.round((invoice.order.taxPaise / invoice.order.subtotalPaise) * 100)
                 : undefined;
@@ -379,14 +396,18 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
                 subtotal: invoice.order.subtotalPaise / 100,
                 tax: invoice.order.taxPaise / 100,
                 customerEmail: invoice.order.user.email,
-                ...(invoice.order.user.phone ? { customerPhone: invoice.order.user.phone } : {}),
+                ...(smsPhone ? { customerPhone: smsPhone } : {}),
             });
             results.emailSent = await (0, email_1.sendInvoiceEmail)(invoice.order.user.email, invoiceData, pdfBuffer);
         }
-        if (deliveryMethods.includes('SMS') && invoice.order.user.phone) {
-            results.smsSent = await (0, sms_1.sendInvoiceSMS)(invoice.order.user.phone, invoiceData);
+        if (requestedMethods.includes('SMS') && smsPhone) {
+            results.smsSent = await (0, sms_1.sendInvoiceSMS)(smsPhone, invoiceData);
         }
-        const updatedSentVia = [...new Set([...invoice.sentVia, ...deliveryMethods])];
+        const successfulMethods = [
+            ...(results.emailSent ? ['EMAIL'] : []),
+            ...(results.smsSent ? ['SMS'] : []),
+        ];
+        const updatedSentVia = [...new Set([...invoice.sentVia, ...successfulMethods])];
         await database_1.prisma.invoice.update({
             where: { id: invoiceId },
             data: {
@@ -399,7 +420,7 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             invoiceId,
             invoiceNumber: invoice.invoiceNumber,
             userId: req.user.id,
-            methods: deliveryMethods,
+            methods: requestedMethods,
             results,
         });
         const response = {
@@ -407,7 +428,7 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             message: 'Invoice resent successfully',
             data: {
                 deliveryResults: results,
-                warnings: generateWarnings(deliveryMethods, invoice.order.user.email, invoice.order.user.phone, results),
+                warnings: generateWarnings(requestedMethods, invoice.order.user.email, invoice.order.user.phone, results),
             },
         };
         res.json(response);

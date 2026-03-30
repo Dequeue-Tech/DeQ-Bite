@@ -4,6 +4,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import { motion } from 'framer-motion';
 import { MapPin, Star } from 'lucide-react';
+import { apiClient } from '@/lib/api-client';
 
 export type RestaurantCardProps = {
   id: string;
@@ -23,7 +24,7 @@ export default function RestaurantCard({
 }) {
   const handleClick = () => {
     try {
-      localStorage.setItem('selectedRestaurantSlug', restaurant.slug);
+      apiClient.setSelectedRestaurantSlug(restaurant.slug);
     } catch {}
   };
 

@@ -221,7 +221,7 @@ export default function RestaurantLandingPage() {
       const identifier = (id || slug || '').toString();
       if (!identifier) return;
 
-      try { localStorage.setItem('selectedRestaurantSlug', identifier); } catch {}
+      try { apiClient.setSelectedRestaurantSlug(identifier); } catch {}
 
       // -- Restaurant details --
       const restaurantCacheKey = `restaurant_${identifier}`;

@@ -1,23 +1,139 @@
-import { Twilio } from 'twilio';
+import axios from 'axios';
 import { logger } from '@/utils/logger';
 
-// Initialize Twilio client
-let twilioClient: Twilio | null = null;
+type SMSProviderName = 'textbelt' | 'fast2sms' | 'disabled';
 
-const initializeTwilio = () => {
-  if (!process.env.TWILIO_ACCOUNT_SID || !process.env.TWILIO_AUTH_TOKEN) {
-    logger.warn('Twilio credentials not configured, SMS service disabled');
-    return null;
+interface SMSProvider {
+  name: SMSProviderName;
+  getMissingConfig: () => string[];
+  send: (options: SMSOptions) => Promise<boolean>;
+}
+
+const isValidE164 = (value: string) => /^\+\d{10,15}$/.test(value);
+const normalizePhone = (value: string) => {
+  // 1. Strip absolutely everything that is NOT a digit or a plus sign 
+  // (This instantly fixes any hidden invisible Unicode characters from copy-pasting)
+  let cleaned = value.replace(/[^\d+]/g, '');
+  
+  // 2. QoL fix: If the customer just typed a 10-digit number, automatically append +91
+  if (cleaned.length === 10 && !cleaned.startsWith('+')) {
+    cleaned = '+91' + cleaned;
+  } 
+  // 3. If they typed the country code but forgot the plus (e.g., 918700203952)
+  else if (cleaned.length > 10 && !cleaned.startsWith('+')) {
+    cleaned = '+' + cleaned;
   }
   
-  if (!twilioClient) {
-    twilioClient = new Twilio(
-      process.env.TWILIO_ACCOUNT_SID,
-      process.env.TWILIO_AUTH_TOKEN
-    );
+  return cleaned;
+};
+const getConfiguredSMSProvider = () => (process.env['SMS_PROVIDER'] || 'textbelt').trim().toLowerCase();
+const toFast2SMSNumber = (value: string) => {
+  const digits = value.replace(/\D/g, '');
+  if (digits.length === 10) return digits;
+  if (digits.length === 12 && digits.startsWith('91')) return digits.slice(2);
+  return null;
+};
+
+const sendViaTextbelt = async (options: SMSOptions): Promise<boolean> => {
+  const endpoint = process.env['TEXTBELT_API_URL'] || 'https://textbelt.com/text';
+  const key = process.env['TEXTBELT_KEY']!;
+
+  const response = await axios.post(
+    endpoint,
+    {
+      phone: options.to,
+      message: options.message,
+      key,
+    },
+    {
+      headers: { 'Content-Type': 'application/json' },
+      timeout: 10000,
+    }
+  );
+
+  const payload = response.data as {
+    success?: boolean;
+    textId?: string | number;
+    quotaRemaining?: number;
+    error?: string;
+  };
+
+  if (!payload?.success) {
+    logger.error('Textbelt SMS send failed', {
+      to: options.to,
+      error: payload?.error || 'Unknown Textbelt error',
+      quotaRemaining: payload?.quotaRemaining,
+    });
+    return false;
   }
-  
-  return twilioClient;
+
+  logger.info('SMS sent successfully', {
+    provider: 'textbelt',
+    to: options.to,
+    textId: payload.textId,
+    quotaRemaining: payload.quotaRemaining,
+  });
+
+  return true;
+};
+
+const sendViaFast2SMS = async (options: SMSOptions): Promise<boolean> => {
+  const endpoint = process.env['FAST2SMS_API_URL'] || 'https://www.fast2sms.com/dev/bulkV2';
+  const apiKey = process.env['FAST2SMS_API_KEY']!;
+  // Switched back to 'q' (Quick Route) now that the wallet is unlocked!
+  const route = process.env['FAST2SMS_ROUTE'] || 'q'; 
+  const language = process.env['FAST2SMS_LANGUAGE'] || 'english';
+  const number = toFast2SMSNumber(options.to);
+
+  if (!number) {
+    logger.error('Fast2SMS requires a valid 10-digit Indian mobile number', { to: options.to });
+    return false;
+  }
+
+  const payload = new URLSearchParams({
+    message: options.message,
+    language,
+    route,
+    numbers: number,
+  });
+
+  try {
+    const response = await axios.post(endpoint, payload.toString(), {
+      headers: {
+        authorization: apiKey,
+        'Content-Type': 'application/x-www-form-urlencoded',
+        'Cache-Control': 'no-cache',
+      },
+      timeout: 10000,
+    });
+
+    const data = response.data;
+
+    // If Fast2SMS explicitly says return is false, log the ENTIRE object
+    if (data.return === false) {
+      logger.error('Fast2SMS rejected the message', {
+        to: options.to,
+        raw_response: data 
+      });
+      return false;
+    }
+
+    logger.info('SMS sent successfully', {
+      provider: 'fast2sms',
+      to: options.to,
+      requestId: data.request_id,
+    });
+
+    return true;
+
+  } catch (error: any) {
+    logger.error('Fast2SMS API Request Failed', {
+      to: options.to,
+      status: error.response?.status,
+      fast2sms_error: error.response?.data || error.message,
+    });
+    return false;
+  }
 };
 
 export interface SMSOptions {
@@ -25,40 +141,78 @@ export interface SMSOptions {
   message: string;
 }
 
+const smsProviders: Record<SMSProviderName, SMSProvider> = {
+  textbelt: {
+    name: 'textbelt',
+    getMissingConfig: () => {
+      const missing: string[] = [];
+      if (!process.env['TEXTBELT_KEY']) missing.push('TEXTBELT_KEY');
+      return missing;
+    },
+    send: sendViaTextbelt,
+  },
+  fast2sms: {
+    name: 'fast2sms',
+    getMissingConfig: () => {
+      const missing: string[] = [];
+      if (!process.env['FAST2SMS_API_KEY']) missing.push('FAST2SMS_API_KEY');
+      return missing;
+    },
+    send: sendViaFast2SMS,
+  },
+  disabled: {
+    name: 'disabled',
+    getMissingConfig: () => [],
+    send: async () => {
+      logger.warn('SMS service disabled by configuration');
+      return false;
+    },
+  },
+};
+
+const resolveSMSProvider = (): SMSProvider | null => {
+  const providerName = getConfiguredSMSProvider();
+  if (providerName === 'textbelt' || providerName === 'fast2sms' || providerName === 'disabled') {
+    return smsProviders[providerName];
+  }
+
+  logger.error('Unsupported SMS provider configured', {
+    provider: providerName,
+    supportedProviders: Object.keys(smsProviders),
+  });
+  return null;
+};
+
 /**
  * Send SMS message
  */
 export async function sendSMS(options: SMSOptions): Promise<boolean> {
+  const normalizedTo = normalizePhone(options.to);
+  if (!isValidE164(normalizedTo)) {
+    logger.error('Invalid destination phone number', { to: options.to, normalizedTo });
+    return false;
+  }
+
+  const provider = resolveSMSProvider();
+  if (!provider) return false;
+
+  const missingConfig = provider.getMissingConfig();
+  if (missingConfig.length > 0) {
+    logger.error('SMS configuration incomplete', { provider: provider.name, missingConfig });
+    return false;
+  }
+
   try {
-    const client = initializeTwilio();
-    
-    if (!client) {
-      logger.error('SMS service not available - Twilio not configured');
-      return false;
-    }
-    
-    if (!process.env.TWILIO_PHONE_NUMBER) {
-      logger.error('Twilio phone number not configured');
-      return false;
-    }
-    
-    const result = await client.messages.create({
-      body: options.message,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: options.to,
-    });
-    
-    logger.info('SMS sent successfully', {
-      to: options.to,
-      sid: result.sid,
-      status: result.status,
-    });
-    
-    return true;
+    const smsPayload = {
+      to: normalizedTo,
+      message: options.message,
+    };
+    return await provider.send(smsPayload);
   } catch (error) {
     logger.error('Failed to send SMS', {
+      provider: provider.name,
       error: error instanceof Error ? error.message : 'Unknown error',
-      to: options.to,
+      to: normalizedTo,
     });
     
     return false;

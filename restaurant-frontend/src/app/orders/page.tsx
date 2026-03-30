@@ -327,15 +327,23 @@ export default function OrdersPage() {
         return;
       }
 
+      let sendResult: any;
       try {
         const invoiceResponse = await apiClient.getInvoice(orderId);
         if (invoiceResponse?.invoice) {
-          await apiClient.resendInvoice(invoiceResponse.invoice.id, ['EMAIL']);
+          sendResult = await apiClient.resendInvoice(invoiceResponse.invoice.id, ['EMAIL']);
         } else {
-          await apiClient.generateInvoice(orderId, ['EMAIL']);
+          sendResult = await apiClient.generateInvoice(orderId, ['EMAIL']);
         }
       } catch {
-        await apiClient.generateInvoice(orderId, ['EMAIL']);
+        sendResult = await apiClient.generateInvoice(orderId, ['EMAIL']);
+      }
+
+      if (!sendResult?.deliveryResults?.emailSent) {
+        const emailWarning = Array.isArray(sendResult?.warnings)
+          ? sendResult.warnings.find((warning: string) => warning.toLowerCase().includes('email'))
+          : null;
+        throw new Error(emailWarning || 'Email delivery failed. Please check email configuration and try again.');
       }
       toast.success('Invoice sent to your email');
     } catch (error: any) {

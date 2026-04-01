@@ -27,6 +27,9 @@ const notifyOrderStatusChange = async (input) => {
     if (!input.orderId || input.previousStatus === input.nextStatus) {
         return { emailSent: false, smsSent: false };
     }
+    if (input.nextStatus !== 'CONFIRMED') {
+        return { emailSent: false, smsSent: false };
+    }
     const order = await database_1.prisma.order.findUnique({
         where: { id: input.orderId },
         include: {

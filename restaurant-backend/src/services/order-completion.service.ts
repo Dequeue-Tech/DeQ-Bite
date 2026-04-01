@@ -135,11 +135,6 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   if (!order) return;
   if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED') return;
 
-  const placementContact = resolveOrderPlacementContact(order);
-  const placedOrderEmail = placementContact.email;
-  const placedOrderPhone = placementContact.phone;
-  const placedOrderName = placementContact.name || 'Guest';
-
   const { invoice } = await ensureInvoiceRecord(order);
   let invoiceUrl = invoice.pdfPath || null;
 
@@ -153,6 +148,11 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
 
   let emailSent = invoice.emailSent;
   let smsSent = invoice.smsSent;
+
+  const placementContact = resolveOrderPlacementContact(order);
+  const placedOrderEmail = placementContact.email;
+  const placedOrderPhone = placementContact.phone;
+  const placedOrderName = placementContact.name || 'Guest';
 
   if (!emailSent && placedOrderEmail) {
     emailSent = await withRetries('invoice-email-send', async () =>

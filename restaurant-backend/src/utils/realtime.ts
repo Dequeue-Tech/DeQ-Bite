@@ -2,12 +2,15 @@ import { EventEmitter } from 'events';
 import { getRedisClient } from '@/utils/redis';
 import { logger } from '@/utils/logger';
 
+export type RealtimeRoleScope = 'admin' | 'staff' | 'customer' | 'rider';
+
 export type RealtimeEvent = {
   eventId?: string;
   sourceInstanceId?: string;
   type: string;
   restaurantId: string;
   userId?: string;
+  roleScopes?: RealtimeRoleScope[];
   payload: any;
 };
 
@@ -107,6 +110,17 @@ export const emitRestaurantEvent = (restaurantId: string, event: Omit<RealtimeEv
       // ignore redis publish errors to keep request flow resilient
     });
   }
+};
+
+export const emitRoleScopedRestaurantEvent = (
+  restaurantId: string,
+  event: Omit<RealtimeEvent, 'restaurantId' | 'roleScopes'>,
+  roleScopes: RealtimeRoleScope[]
+) => {
+  emitRestaurantEvent(restaurantId, {
+    ...event,
+    roleScopes,
+  });
 };
 
 export const onRestaurantEvent = (restaurantId: string, listener: (event: RealtimeEvent) => void) => {

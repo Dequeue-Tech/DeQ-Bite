@@ -93,7 +93,15 @@ const corsOptions = {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-api-key',
+        'x-restaurant-subdomain',
+        'x-restaurant-slug',
+        'idempotency-key',
+        'x-expected-updated-at',
+    ],
 };
 app.use((0, cors_1.default)(corsOptions));
 const limiter = (0, express_rate_limit_1.default)({

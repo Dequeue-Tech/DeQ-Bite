@@ -67,6 +67,7 @@ model Restaurant {
   menuItems               MenuItem[]
   offers                  Offer[]
   orders                  Order[]
+  deliveryRiders          DeliveryRider[]
   users                   RestaurantUser[]
   tables                  Table[]
   earnings                Earning[]              @relation("earnings")
@@ -229,6 +230,24 @@ model Order {
   @@index([restaurantId, paymentStatus, createdAt])
   @@index([restaurantId, isDelivery, deliveryStatus, createdAt])
   @@index([restaurantId, userId, isDelivery, createdAt])
+}
+
+model DeliveryRider {
+  id           String                  @id @default(cuid())
+  restaurantId String
+  branchId     String?
+  name         String
+  phone        String
+  vehicleType  String
+  availability RiderAvailabilityStatus @default(ONLINE)
+  active       Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  restaurant   Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId, branchId, availability, active])
+  @@map("delivery_riders")
 }
 
 model OrderItem {
@@ -678,6 +697,12 @@ enum DeliveryStatus {
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
+}
+
+enum RiderAvailabilityStatus {
+  ONLINE
+  BUSY
+  OFFLINE
 }
 
 enum SpiceLevel {

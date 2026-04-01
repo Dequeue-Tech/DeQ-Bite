@@ -7,9 +7,12 @@ const restaurant_1 = require("../middleware/restaurant");
 const realtime_1 = require("../utils/realtime");
 const sms_1 = require("../lib/sms");
 const marketplace_order_meta_1 = require("../modules/pos/marketplace-order-meta");
+const idempotency_1 = require("../utils/idempotency");
+const order_lock_1 = require("../utils/order-lock");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 const LEGACY_DELIVERY_META_PREFIX = '[DELIVERY_META]';
+const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 router.use(auth_1.authenticate);
 router.use(restaurant_1.requireRestaurant);
 const toInr = (paise) => (paise / 100).toFixed(2);
@@ -59,9 +62,48 @@ const applyCoupon = async (restaurantId, code, subtotalPaise) => {
     const discountPaise = calculateDiscountFromCoupon(coupon, subtotalPaise);
     return { couponId: coupon.id, discountPaise };
 };
+const ensureMutationIdempotency = async (req, scope) => {
+    const key = (0, idempotency_1.extractIdempotencyKey)(req);
+    if (!key) {
+        return {
+            ok: false,
+            statusCode: 400,
+            error: 'Idempotency-Key header is required for order mutations',
+        };
+    }
+    const claimed = await (0, idempotency_1.claimIdempotencyKey)({ scope, key });
+    if (!claimed) {
+        return {
+            ok: false,
+            statusCode: 409,
+            error: 'Duplicate order mutation ignored',
+        };
+    }
+    return { ok: true };
+};
+const ensureOrderVersion = (req, currentUpdatedAt) => {
+    const expectedUpdatedAt = (0, order_lock_1.extractExpectedUpdatedAt)(req);
+    if (!expectedUpdatedAt) {
+        return {
+            ok: false,
+            statusCode: 400,
+            error: 'expectedUpdatedAt is required for order mutations',
+        };
+    }
+    if ((0, order_lock_1.hasVersionConflict)({ expectedUpdatedAt, currentUpdatedAt })) {
+        return {
+            ok: false,
+            statusCode: 409,
+            error: staleWriteMessage,
+        };
+    }
+    return { ok: true };
+};
 const buildOrderEventPayload = (order) => ({
     order: {
         id: order.id,
+        orderId: order.id,
+        order_id: order.id,
         userId: order.userId,
         tableId: order.tableId,
         status: order.status,
@@ -210,10 +252,14 @@ const notifyOnDeliveryApproval = async (restaurantId, payload) => {
 };
 router.post('/orders', async (req, res) => {
     try {
+        const idempotency = await ensureMutationIdempotency(req, `delivery:create:${req.restaurant.id}`);
+        if (!idempotency.ok) {
+            return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+        }
         const userId = req.user?.id;
         if (!userId)
             return res.status(401).json({ success: false, error: 'Unauthorized' });
-        const { items, customerName, customerPhone, deliveryAddress, landmark, specialInstructions, paymentProvider, couponCode } = req.body;
+        const { items, customerName, customerPhone, customerEmail, deliveryAddress, landmark, specialInstructions, paymentProvider, couponCode, } = req.body;
         if (!customerName || !customerPhone || !deliveryAddress) {
             return res.status(400).json({
                 success: false,
@@ -306,7 +352,14 @@ router.post('/orders', async (req, res) => {
             paidAmountPaise: 0,
             dueAmountPaise: totalPaise,
             paymentCollectionTiming: req.restaurant.paymentCollectionTiming,
-            specialInstructions: specialInstructions || '',
+            specialInstructions: [
+                typeof specialInstructions === 'string' ? specialInstructions.trim() : '',
+                typeof customerEmail === 'string' && customerEmail.trim()
+                    ? `[DELIVERY_EMAIL]${customerEmail.trim().toLowerCase()}`
+                    : '',
+            ]
+                .filter(Boolean)
+                .join(' '),
             items: {
                 create: orderItemsData,
             },
@@ -357,10 +410,14 @@ router.post('/orders', async (req, res) => {
 });
 router.get('/orders/restaurant/all', (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
     try {
+        const updatedAfterRaw = typeof req.query['updatedAfter'] === 'string' ? req.query['updatedAfter'] : '';
+        const updatedAfter = updatedAfterRaw ? new Date(updatedAfterRaw) : null;
+        const hasValidUpdatedAfter = Boolean(updatedAfter && !Number.isNaN(updatedAfter.getTime()));
         const orders = await database_1.prisma.order.findMany({
             where: {
                 restaurantId: req.restaurant.id,
                 isDelivery: true,
+                ...(hasValidUpdatedAfter ? { updatedAt: { gt: updatedAfter } } : {}),
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -384,11 +441,15 @@ router.get('/orders/my', async (req, res) => {
     try {
         if (!req.user?.id)
             return res.status(401).json({ success: false, error: 'Unauthorized' });
+        const updatedAfterRaw = typeof req.query['updatedAfter'] === 'string' ? req.query['updatedAfter'] : '';
+        const updatedAfter = updatedAfterRaw ? new Date(updatedAfterRaw) : null;
+        const hasValidUpdatedAfter = Boolean(updatedAfter && !Number.isNaN(updatedAfter.getTime()));
         const orders = await database_1.prisma.order.findMany({
             where: {
                 userId: req.user.id,
                 restaurantId: req.restaurant.id,
                 isDelivery: true,
+                ...(hasValidUpdatedAfter ? { updatedAt: { gt: updatedAfter } } : {}),
             },
             include: {
                 items: { include: { menuItem: true } },
@@ -407,15 +468,112 @@ router.get('/orders/my', async (req, res) => {
         return res.status(500).json({ success: false, error: 'Failed to fetch your delivery orders' });
     }
 });
+router.get('/riders', (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
+    try {
+        const branchId = typeof req.query['branchId'] === 'string' ? req.query['branchId'].trim() : '';
+        const riders = await database_1.prisma.deliveryRider.findMany({
+            where: {
+                restaurantId: req.restaurant.id,
+                active: true,
+                ...(branchId ? { branchId } : {}),
+            },
+            orderBy: [{ availability: 'asc' }, { createdAt: 'desc' }],
+        });
+        return res.json({
+            success: true,
+            data: riders,
+            message: 'Riders fetched successfully',
+        });
+    }
+    catch {
+        return res.status(500).json({ success: false, error: 'Failed to fetch riders' });
+    }
+});
+router.post('/riders', (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
+    try {
+        const idempotency = await ensureMutationIdempotency(req, `delivery:create-rider:${req.restaurant.id}`);
+        if (!idempotency.ok) {
+            return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+        }
+        const { name, phone, vehicleType, branchId, availability, } = req.body;
+        if (!name?.trim() || !phone?.trim() || !vehicleType?.trim()) {
+            return res.status(400).json({
+                success: false,
+                error: 'name, phone and vehicleType are required',
+            });
+        }
+        const rider = await database_1.prisma.deliveryRider.create({
+            data: {
+                restaurantId: req.restaurant.id,
+                name: name.trim(),
+                phone: phone.trim(),
+                vehicleType: vehicleType.trim(),
+                branchId: branchId?.trim() || null,
+                availability: availability || 'ONLINE',
+            },
+        });
+        (0, realtime_1.emitRestaurantEvent)(req.restaurant.id, {
+            type: 'rider.pool.updated',
+            payload: { rider },
+        });
+        return res.status(201).json({
+            success: true,
+            data: rider,
+            message: 'Rider created successfully',
+        });
+    }
+    catch {
+        return res.status(500).json({ success: false, error: 'Failed to create rider' });
+    }
+});
+router.put('/riders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
+    try {
+        const riderId = req.params['id'];
+        const { availability } = req.body;
+        if (!riderId) {
+            return res.status(400).json({ success: false, error: 'Rider ID is required' });
+        }
+        if (!availability || !['ONLINE', 'BUSY', 'OFFLINE'].includes(availability)) {
+            return res.status(400).json({ success: false, error: 'Valid availability is required' });
+        }
+        const rider = await database_1.prisma.deliveryRider.findFirst({
+            where: {
+                id: riderId,
+                restaurantId: req.restaurant.id,
+                active: true,
+            },
+        });
+        if (!rider) {
+            return res.status(404).json({ success: false, error: 'Rider not found' });
+        }
+        const updated = await database_1.prisma.deliveryRider.update({
+            where: { id: rider.id },
+            data: { availability },
+        });
+        (0, realtime_1.emitRestaurantEvent)(req.restaurant.id, {
+            type: 'rider.pool.updated',
+            payload: { rider: updated },
+        });
+        return res.json({
+            success: true,
+            data: updated,
+            message: 'Rider status updated',
+        });
+    }
+    catch {
+        return res.status(500).json({ success: false, error: 'Failed to update rider status' });
+    }
+});
 router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
     try {
+        const idempotency = await ensureMutationIdempotency(req, `delivery:assign-rider:${req.restaurant.id}`);
+        if (!idempotency.ok) {
+            return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+        }
         const { id } = req.params;
-        const { riderName, riderPhone } = req.body;
+        const { riderName, riderPhone, riderId, branchId } = req.body;
         if (!id)
             return res.status(400).json({ success: false, error: 'Order ID is required' });
-        if (!riderName || !riderPhone) {
-            return res.status(400).json({ success: false, error: 'riderName and riderPhone are required' });
-        }
         const existingOrder = await database_1.prisma.order.findFirst({
             where: {
                 id,
@@ -430,13 +588,43 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
         });
         if (!existingOrder)
             return res.status(404).json({ success: false, error: 'Delivery order not found' });
+        const versionCheck = ensureOrderVersion(req, existingOrder.updatedAt);
+        if (!versionCheck.ok) {
+            return res.status(versionCheck.statusCode).json({ success: false, error: versionCheck.error });
+        }
+        let resolvedRiderName = riderName?.trim() || '';
+        let resolvedRiderPhone = riderPhone?.trim() || '';
+        let assignedRiderId = null;
+        if (riderId?.trim()) {
+            const rider = await database_1.prisma.deliveryRider.findFirst({
+                where: {
+                    id: riderId.trim(),
+                    restaurantId: req.restaurant.id,
+                    active: true,
+                    ...(branchId?.trim() ? { branchId: branchId.trim() } : {}),
+                },
+            });
+            if (!rider) {
+                return res.status(404).json({ success: false, error: 'Selected rider not found for this restaurant' });
+            }
+            resolvedRiderName = rider.name;
+            resolvedRiderPhone = rider.phone;
+            assignedRiderId = rider.id;
+            await database_1.prisma.deliveryRider.update({
+                where: { id: rider.id },
+                data: { availability: 'BUSY' },
+            });
+        }
+        if (!resolvedRiderName || !resolvedRiderPhone) {
+            return res.status(400).json({ success: false, error: 'riderId or riderName + riderPhone are required' });
+        }
         const currentDeliveryStatus = existingOrder.deliveryStatus || 'PLACED';
         const nextDeliveryStatus = currentDeliveryStatus === 'PLACED' ? 'CONFIRMED' : currentDeliveryStatus;
         const updated = await database_1.prisma.order.update({
             where: { id: existingOrder.id },
             data: {
-                deliveryRiderName: riderName.trim(),
-                deliveryRiderPhone: riderPhone.trim(),
+                deliveryRiderName: resolvedRiderName,
+                deliveryRiderPhone: resolvedRiderPhone,
                 deliveryStatus: nextDeliveryStatus,
                 deliveryApprovedAt: nextDeliveryStatus === 'CONFIRMED' ? new Date() : existingOrder.deliveryApprovedAt,
                 status: mapDeliveryToOrderStatus(nextDeliveryStatus),
@@ -452,6 +640,17 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
             userId: updated.userId,
             payload: buildOrderEventPayload(updated),
         });
+        (0, realtime_1.emitRoleScopedRestaurantEvent)(updated.restaurantId, {
+            type: 'rider.assigned',
+            payload: {
+                orderId: updated.id,
+                order_id: updated.id,
+                riderId: assignedRiderId,
+                riderName: resolvedRiderName,
+                riderPhone: resolvedRiderPhone,
+                assignedAt: new Date().toISOString(),
+            },
+        }, ['rider']);
         const deliveryMeta = getOrderDeliveryMeta(updated);
         if (nextDeliveryStatus === 'CONFIRMED') {
             await notifyOnDeliveryApproval(updated.restaurantId, {
@@ -473,6 +672,10 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
 });
 router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN', 'STAFF'), async (req, res) => {
     try {
+        const idempotency = await ensureMutationIdempotency(req, `delivery:update-status:${req.restaurant.id}`);
+        if (!idempotency.ok) {
+            return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+        }
         const { id } = req.params;
         const { deliveryStatus } = req.body;
         const allowed = [
@@ -502,6 +705,10 @@ router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNE
         });
         if (!existingOrder)
             return res.status(404).json({ success: false, error: 'Delivery order not found' });
+        const versionCheck = ensureOrderVersion(req, existingOrder.updatedAt);
+        if (!versionCheck.ok) {
+            return res.status(versionCheck.statusCode).json({ success: false, error: versionCheck.error });
+        }
         const updated = await database_1.prisma.order.update({
             where: { id: existingOrder.id },
             data: {
@@ -516,6 +723,16 @@ router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNE
                 user: { select: { id: true, name: true, email: true } },
             },
         });
+        if (updated.deliveryRiderPhone && ['DELIVERED', 'CANCELLED'].includes(deliveryStatus)) {
+            await database_1.prisma.deliveryRider.updateMany({
+                where: {
+                    restaurantId: req.restaurant.id,
+                    phone: updated.deliveryRiderPhone,
+                    active: true,
+                },
+                data: { availability: 'ONLINE' },
+            });
+        }
         (0, realtime_1.emitRestaurantEvent)(updated.restaurantId, {
             type: 'order.updated',
             userId: updated.userId,

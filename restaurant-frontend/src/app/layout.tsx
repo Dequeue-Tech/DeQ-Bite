@@ -5,6 +5,7 @@ import { Toaster } from 'react-hot-toast'
 import Navbar from '@/components/Navbar'
 import RestaurantContextSync from '@/components/RestaurantContextSync'
 import RestaurantStaffGuard from '@/components/RestaurantStaffGuard'
+import RouteHaptics from '@/components/RouteHaptics'
 
 export const metadata: Metadata = {
   title: 'Restaurant Online Ordering',
@@ -37,6 +38,9 @@ export default function RootLayout({
           </Suspense>
           <Suspense fallback={null}>
             <RestaurantStaffGuard />
+          </Suspense>
+          <Suspense fallback={null}>
+            <RouteHaptics />
           </Suspense>
           <Navbar />
           {/* main content area now flexes; padding applied on root to push pages up above fixed nav */}

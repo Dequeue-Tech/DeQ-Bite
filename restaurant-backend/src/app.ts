@@ -100,7 +100,15 @@ const corsOptions: CorsOptions = {
   },
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
+  allowedHeaders: [
+    'Content-Type',
+    'Authorization',
+    'x-api-key',
+    'x-restaurant-subdomain',
+    'x-restaurant-slug',
+    'idempotency-key',
+    'x-expected-updated-at',
+  ],
 };
 
 app.use(cors(corsOptions));

@@ -1,16 +1,20 @@
 import { Router } from 'express';
 import { authenticate } from '@/middleware/auth';
 import { requireRestaurant } from '@/middleware/restaurant';
-import { getBufferedEvents, onRestaurantEvent, onUserEvent } from '@/utils/realtime';
+import { getBufferedEvents, onRestaurantEvent, onUserEvent, RealtimeEvent } from '@/utils/realtime';
 import { AuthenticatedRequest } from '@/types/api';
 import { logger } from '@/utils/logger';
 
 const router = Router();
+const allowedRoleScopes = new Set(['admin', 'staff', 'customer', 'rider']);
 
 // GET /api/:restaurantSlug/events
 router.get('/events', authenticate, requireRestaurant, (req: AuthenticatedRequest, res) => {
   const requestedScope = typeof req.query['scope'] === 'string' ? req.query['scope'].trim().toLowerCase() : 'restaurant';
   const scope = requestedScope === 'user' || requestedScope === 'both' ? requestedScope : 'restaurant';
+  const requestedRole =
+    typeof req.query['role'] === 'string' ? req.query['role'].trim().toLowerCase() : '';
+  const roleScope = allowedRoleScopes.has(requestedRole) ? requestedRole : null;
   const userId = req.user?.id;
   const restaurantId = req.restaurant!.id;
   const eventsRaw = typeof req.query['events'] === 'string' ? req.query['events'] : '';
@@ -33,11 +37,16 @@ router.get('/events', authenticate, requireRestaurant, (req: AuthenticatedReques
     res.write(`event: ping\ndata: ${JSON.stringify({ ts: Date.now() })}\n\n`);
   };
 
-  const writeEvent = (event: { eventId?: string; type: string; userId?: string; [key: string]: any }) => {
+  const writeEvent = (event: RealtimeEvent) => {
     if (eventFilter.size > 0 && !eventFilter.has(event.type)) {
       return;
     }
     if (scope === 'user' && event.userId !== userId) return;
+    if (roleScope && Array.isArray(event.roleScopes) && event.roleScopes.length > 0) {
+      if (!event.roleScopes.includes(roleScope as any)) {
+        return;
+      }
+    }
 
     const idLine = event.eventId ? `id: ${event.eventId}\n` : '';
     res.write(`${idLine}event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
@@ -45,6 +54,7 @@ router.get('/events', authenticate, requireRestaurant, (req: AuthenticatedReques
       eventId: event.eventId,
       eventType: event.type,
       scope,
+      roleScope,
       restaurantId,
       userId,
     });

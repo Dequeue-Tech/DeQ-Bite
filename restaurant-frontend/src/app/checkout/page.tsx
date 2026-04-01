@@ -220,10 +220,18 @@ function CheckoutPageContent() {
       }
 
       if (requestedOrderId) {
+        let expectedUpdatedAt = createdOrder?.updatedAt as string | undefined;
+        if (!expectedUpdatedAt) {
+          const latest = await apiClient.getOrder(requestedOrderId);
+          if (latest.success && latest.data) {
+            expectedUpdatedAt = latest.data.updatedAt;
+            setCreatedOrder(latest.data);
+          }
+        }
         const response = await apiClient.addOrderItems(requestedOrderId, {
           items: cartItems.map((item) => ({ menuItemId: item.id, quantity: item.quantity, notes: '' })),
           specialInstructions: specialInstructions || '',
-        });
+        }, expectedUpdatedAt ? { expectedUpdatedAt } : undefined);
         if (!response.success || !response.data) throw new Error(response.error);
         setCreatedOrder(response.data);
         setOrderSummary({

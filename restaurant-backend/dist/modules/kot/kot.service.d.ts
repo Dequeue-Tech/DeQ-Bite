@@ -31,6 +31,7 @@ export declare const updateKOTStatus: (params: {
     status: KOTStatus;
     changedByUserId?: string | undefined;
     note?: string | undefined;
+    expectedOrderUpdatedAt?: string | undefined;
 }) => Promise<any>;
 export declare const updateKOTPriority: (params: {
     restaurantId: string;

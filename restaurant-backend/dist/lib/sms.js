@@ -10,6 +10,19 @@ exports.sendOrderConfirmationSMS = sendOrderConfirmationSMS;
 exports.sendOrderCompletionSMS = sendOrderCompletionSMS;
 const axios_1 = __importDefault(require("axios"));
 const logger_1 = require("../utils/logger");
+const shortenUrl = async (longUrl) => {
+    try {
+        const response = await axios_1.default.get('https://tinyurl.com/api/create.php', {
+            params: { url: longUrl },
+            timeout: 5000,
+        });
+        return typeof response.data === 'string' && response.data.trim() ? response.data : longUrl;
+    }
+    catch (error) {
+        logger_1.logger.warn('Failed to shorten URL, using original', { url: longUrl, error: error instanceof Error ? error.message : 'Unknown error' });
+        return longUrl;
+    }
+};
 const isValidE164 = (value) => /^\+\d{10,15}$/.test(value);
 const normalizePhone = (value) => {
     let cleaned = value.replace(/[^\d+]/g, '');
@@ -21,7 +34,13 @@ const normalizePhone = (value) => {
     }
     return cleaned;
 };
-const getConfiguredSMSProvider = () => (process.env['SMS_PROVIDER'] || 'textbelt').trim().toLowerCase();
+const getConfiguredSMSProvider = () => {
+    const configured = (process.env['SMS_PROVIDER'] || 'fast2sms').trim().toLowerCase();
+    if (configured !== 'fast2sms') {
+        logger_1.logger.warn('Overriding SMS_PROVIDER to fast2sms', { configured });
+    }
+    return 'fast2sms';
+};
 const toFast2SMSNumber = (value) => {
     const digits = value.replace(/\D/g, '');
     if (digits.length === 10)
@@ -29,34 +48,6 @@ const toFast2SMSNumber = (value) => {
     if (digits.length === 12 && digits.startsWith('91'))
         return digits.slice(2);
     return null;
-};
-const sendViaTextbelt = async (options) => {
-    const endpoint = process.env['TEXTBELT_API_URL'] || 'https://textbelt.com/text';
-    const key = process.env['TEXTBELT_KEY'];
-    const response = await axios_1.default.post(endpoint, {
-        phone: options.to,
-        message: options.message,
-        key,
-    }, {
-        headers: { 'Content-Type': 'application/json' },
-        timeout: 10000,
-    });
-    const payload = response.data;
-    if (!payload?.success) {
-        logger_1.logger.error('Textbelt SMS send failed', {
-            to: options.to,
-            error: payload?.error || 'Unknown Textbelt error',
-            quotaRemaining: payload?.quotaRemaining,
-        });
-        return false;
-    }
-    logger_1.logger.info('SMS sent successfully', {
-        provider: 'textbelt',
-        to: options.to,
-        textId: payload.textId,
-        quotaRemaining: payload.quotaRemaining,
-    });
-    return true;
 };
 const sendViaFast2SMS = async (options) => {
     const endpoint = process.env['FAST2SMS_API_URL'] || 'https://www.fast2sms.com/dev/bulkV2';
@@ -108,16 +99,6 @@ const sendViaFast2SMS = async (options) => {
     }
 };
 const smsProviders = {
-    textbelt: {
-        name: 'textbelt',
-        getMissingConfig: () => {
-            const missing = [];
-            if (!process.env['TEXTBELT_KEY'])
-                missing.push('TEXTBELT_KEY');
-            return missing;
-        },
-        send: sendViaTextbelt,
-    },
     fast2sms: {
         name: 'fast2sms',
         getMissingConfig: () => {
@@ -139,7 +120,7 @@ const smsProviders = {
 };
 const resolveSMSProvider = () => {
     const providerName = getConfiguredSMSProvider();
-    if (providerName === 'textbelt' || providerName === 'fast2sms' || providerName === 'disabled') {
+    if (providerName === 'fast2sms' || providerName === 'disabled') {
         return smsProviders[providerName];
     }
     logger_1.logger.error('Unsupported SMS provider configured', {
@@ -231,7 +212,8 @@ This is an automated message.`;
     });
 }
 async function sendOrderCompletionSMS(phone, data) {
-    const message = `Hi ${data.customerName}, your order is completed at ${data.restaurantName}. Invoice ${data.invoiceNumber} (Rs.${data.total.toFixed(2)}): ${data.invoiceUrl}`;
+    const shortUrl = await shortenUrl(data.invoiceUrl);
+    const message = `Hi ${data.customerName}, your order is completed at ${data.restaurantName}. Invoice ${data.invoiceNumber} (Rs.${data.total.toFixed(2)}): ${shortUrl}`;
     return sendSMS({ to: phone, message });
 }
 //# sourceMappingURL=sms.js.map

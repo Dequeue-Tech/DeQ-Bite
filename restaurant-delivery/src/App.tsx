@@ -57,6 +57,7 @@ type DeliveryOrder = {
   paymentStatus: string;
   paymentProvider?: string;
   createdAt: string;
+  updatedAt: string;
   items: Array<{ id: string; quantity: number; menuItem: { name: string } }>;
   deliveryMeta: {
     customerName: string;
@@ -111,6 +112,18 @@ const getSlugFromPath = () => {
   return segments[0] || '';
 };
 
+const DELIVERY_HAPTICS_KEY = 'customer_vibration_feedback';
+
+const hapticPatterns = {
+  navigation: [30],
+  tabSwitch: [20],
+  primaryAction: [40],
+  orderConfirmed: [100],
+  statusUpdate: [50, 30, 50],
+  delivered: [200, 100, 200],
+  error: [80, 40, 80],
+} as const;
+
 // --- Main Component ---
 export default function App() {
   const [apiUrl] = useState((import.meta.env?.VITE_API_URL || 'http://localhost:5000/api').replace(/\/$/, ''));
@@ -147,6 +160,7 @@ export default function App() {
   const [checkout, setCheckout] = useState({
     customerName: '',
     customerPhone: '',
+    customerEmail: '',
     flatNumber: '',
     streetAddress: '',
     landmark: '',
@@ -155,8 +169,12 @@ export default function App() {
   
   // Replaced requestInvoice with specific payment methods
   const [paymentMethod, setPaymentMethod] = useState<'CASH' | 'ONLINE'>('ONLINE');
+  const [hapticsEnabled, setHapticsEnabled] = useState(true);
 
   const previousStatusByOrderRef = useRef<Record<string, DeliveryStatus>>({});
+  const eventStreamRef = useRef<EventSource | null>(null);
+  const lastSyncTimestampRef = useRef<string | null>(null);
+  const lastEventIdRef = useRef<string | null>(null);
 
   const hasSlugRoute = Boolean(selectedSlug);
   
@@ -214,6 +232,13 @@ export default function App() {
     setTimeout(() => setMessage(''), 3500);
   };
 
+  const triggerHaptic = (pattern: keyof typeof hapticPatterns) => {
+    if (typeof window === 'undefined') return;
+    if (!hapticsEnabled) return;
+    if (typeof window.navigator.vibrate !== 'function') return;
+    window.navigator.vibrate(hapticPatterns[pattern]);
+  };
+
   const fetchJson = async <T,>(url: string, init?: RequestInit) => {
     const response = await fetch(url, init);
     const body = (await response.json()) as ApiResponse<T>;
@@ -251,35 +276,71 @@ export default function App() {
       ...prev,
       customerName: prev.customerName || data.user.name || '',
       customerPhone: prev.customerPhone || data.user.phone || '',
+      customerEmail: prev.customerEmail || data.user.email || '',
     }));
   };
 
-  const loadMyOrders = async (silent = false) => {
+  const mergeOrdersAndNotify = (incomingOrders: DeliveryOrder[], replace = false) => {
+    setMyOrders((prev) => {
+      const map = new Map<string, DeliveryOrder>();
+      if (!replace) {
+        prev.forEach((order) => map.set(order.id, order));
+      }
+      incomingOrders.forEach((order) => {
+        const existing = map.get(order.id);
+        map.set(order.id, existing ? { ...existing, ...order } : order);
+      });
+      return Array.from(map.values()).sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+      );
+    });
+
+    const previous = previousStatusByOrderRef.current;
+    const next = replace ? {} as Record<string, DeliveryStatus> : { ...previous };
+
+    incomingOrders.forEach((order) => {
+      const status = order.deliveryMeta.deliveryStatus;
+      next[order.id] = status;
+      if (order.updatedAt) {
+        const updatedAtTs = new Date(order.updatedAt).getTime();
+        const lastSyncTs = lastSyncTimestampRef.current ? new Date(lastSyncTimestampRef.current).getTime() : 0;
+        if (!lastSyncTs || updatedAtTs > lastSyncTs) {
+          lastSyncTimestampRef.current = order.updatedAt;
+        }
+      }
+      if (previous[order.id] && previous[order.id] !== status) {
+        const msg = `Order #${order.id.slice(0, 8).toUpperCase()} updated: ${statusText[status]}`;
+        notify(msg);
+        if (status === 'DELIVERED') triggerHaptic('delivered');
+        else triggerHaptic('statusUpdate');
+        if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+          new Notification('Delivery Update', { body: msg });
+        }
+      }
+    });
+
+    previousStatusByOrderRef.current = next;
+  };
+
+  const loadMyOrders = async (silent = false, updatedAfter?: string) => {
     if (!tenantUrl || !token) return;
     if (!silent) setBusy(true);
     try {
-      const orders = await fetchJson<DeliveryOrder[]>(`${tenantUrl}/delivery/orders/my`, {
+      const params = new URLSearchParams();
+      if (updatedAfter) params.set('updatedAfter', updatedAfter);
+      const suffix = params.toString() ? `?${params.toString()}` : '';
+      const orders = await fetchJson<DeliveryOrder[]>(`${tenantUrl}/delivery/orders/my${suffix}`, {
         headers: authHeaders,
       });
-      setMyOrders(orders || []);
-
-      const previous = previousStatusByOrderRef.current;
-      const next: Record<string, DeliveryStatus> = {};
-
-      orders.forEach((order) => {
-        const status = order.deliveryMeta.deliveryStatus;
-        next[order.id] = status;
-        if (previous[order.id] && previous[order.id] !== status) {
-          const msg = `Order #${order.id.slice(0, 8).toUpperCase()} updated: ${statusText[status]}`;
-          notify(msg);
-          if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
-            new Notification('Delivery Update', { body: msg });
-          }
-        }
-      });
-      previousStatusByOrderRef.current = next;
+      if (orders?.length) {
+        mergeOrdersAndNotify(orders, !updatedAfter);
+      } else if (!updatedAfter) {
+        setMyOrders([]);
+        previousStatusByOrderRef.current = {};
+      }
     } catch (e: any) {
       if (!silent) setError(e?.message || 'Failed to load your orders');
+      triggerHaptic('error');
     } finally {
       if (!silent) setBusy(false);
     }
@@ -288,6 +349,7 @@ export default function App() {
   const onRestaurantSelect = async (restaurant: RestaurantSummary) => {
     const slug = restaurant.slug;
     if (!slug) return;
+    triggerHaptic('navigation');
     window.history.pushState({}, '', `/${slug}`);
     setSelectedSlug(slug);
     setSelectedRestaurantName(restaurant.name);
@@ -295,6 +357,9 @@ export default function App() {
     setShowOrders(false);
     setError('');
     setActiveCategory('All');
+    previousStatusByOrderRef.current = {};
+    lastSyncTimestampRef.current = null;
+    lastEventIdRef.current = null;
     await loadMenu(slug);
     if (token) {
       await loadProfile(token, slug).catch(() => undefined);
@@ -323,6 +388,7 @@ export default function App() {
   const placeOrder = async (event: FormEvent) => {
     event.preventDefault();
     setError('');
+    triggerHaptic('primaryAction');
     if (!token) {
       setShowAuthModal(true);
       setAuthMode('login');
@@ -353,6 +419,7 @@ export default function App() {
           })),
           customerName: checkout.customerName,
           customerPhone: checkout.customerPhone,
+          ...(checkout.customerEmail.trim() ? { customerEmail: checkout.customerEmail.trim() } : {}),
           deliveryAddress: fullDeliveryAddress,
           landmark: checkout.landmark,
           specialInstructions: checkout.specialInstructions,
@@ -362,6 +429,7 @@ export default function App() {
       });
 
       notify('Order placed. Waiting for restaurant approval.');
+      triggerHaptic('orderConfirmed');
       setCart([]);
       setCouponCode('');
       setCouponPreview(null);
@@ -371,6 +439,7 @@ export default function App() {
       await loadMyOrders(true);
     } catch (e: any) {
       setError(e?.message || 'Failed to place order');
+      triggerHaptic('error');
     } finally {
       setBusy(false);
     }
@@ -461,12 +530,22 @@ export default function App() {
     setUser(null);
     setMyOrders([]);
     previousStatusByOrderRef.current = {};
+    lastSyncTimestampRef.current = null;
+    lastEventIdRef.current = null;
+    eventStreamRef.current?.close();
+    eventStreamRef.current = null;
     notify('Logged out');
   };
 
   useEffect(() => {
     const initialize = async () => {
       setLoading(true);
+      try {
+        const storedHaptics = localStorage.getItem(DELIVERY_HAPTICS_KEY);
+        setHapticsEnabled(storedHaptics !== 'off');
+      } catch {
+        // ignore local preference parse issues
+      }
       try {
         const slug = getSlugFromPath();
         const firebaseUser = auth.currentUser;
@@ -534,11 +613,57 @@ export default function App() {
   useEffect(() => {
     if (!selectedSlug || !token) return;
     loadMyOrders(true).catch(() => undefined);
-    const interval = window.setInterval(() => {
-      loadMyOrders(true).catch(() => undefined);
-    }, 12000);
-    return () => window.clearInterval(interval);
-  }, [selectedSlug, token]);
+    const params = new URLSearchParams({
+      token,
+      scope: 'user',
+      role: 'customer',
+      events: 'order.created,order.updated,invoice.ready',
+    });
+    if (lastEventIdRef.current) {
+      params.set('lastEventId', lastEventIdRef.current);
+    }
+
+    const stream = new EventSource(`${tenantUrl}/events?${params.toString()}`);
+    eventStreamRef.current = stream;
+
+    const syncFromEvent = (rawEvent: MessageEvent) => {
+      try {
+        const payload = JSON.parse(rawEvent.data) as {
+          eventId?: string;
+          payload?: { order?: { updatedAt?: string } };
+        };
+        const previousSync = lastSyncTimestampRef.current || undefined;
+        if (payload?.eventId) {
+          lastEventIdRef.current = payload.eventId;
+        }
+        if (payload?.payload?.order?.updatedAt) {
+          lastSyncTimestampRef.current = payload.payload.order.updatedAt;
+        }
+        void loadMyOrders(true, previousSync);
+      } catch {
+        void loadMyOrders(true);
+      }
+    };
+
+    stream.addEventListener('order.created', syncFromEvent);
+    stream.addEventListener('order.updated', syncFromEvent);
+    stream.addEventListener('invoice.ready', (rawEvent) => {
+      syncFromEvent(rawEvent as MessageEvent);
+      notify('Invoice is ready for your completed order');
+    });
+    stream.addEventListener('open', () => {
+      if (lastSyncTimestampRef.current) {
+        void loadMyOrders(true, lastSyncTimestampRef.current);
+      }
+    });
+
+    return () => {
+      stream.close();
+      if (eventStreamRef.current === stream) {
+        eventStreamRef.current = null;
+      }
+    };
+  }, [selectedSlug, token, tenantUrl]);
 
   if (loading) {
     return (
@@ -568,7 +693,10 @@ export default function App() {
           <div className="flex items-center gap-2 sm:gap-4">
             {hasSlugRoute && (
               <button
-                onClick={() => setShowMobileCart(true)}
+                onClick={() => {
+                  triggerHaptic('tabSwitch');
+                  setShowMobileCart(true);
+                }}
                 className="lg:hidden relative p-2 sm:p-2.5 rounded-xl bg-orange-50 text-orange-600 hover:bg-orange-100 transition-colors"
               >
                 <ShoppingBag className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -592,6 +720,19 @@ export default function App() {
                 Alerts
               </button>
             )}
+            <button
+              onClick={() => {
+                const next = !hapticsEnabled;
+                setHapticsEnabled(next);
+                localStorage.setItem(DELIVERY_HAPTICS_KEY, next ? 'on' : 'off');
+                notify(next ? 'Vibration feedback enabled' : 'Vibration feedback disabled');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold transition-colors ${
+                hapticsEnabled ? 'bg-gray-900 text-white' : 'bg-gray-100 text-gray-700'
+              }`}
+            >
+              Vibrate
+            </button>
             
             {user ? (
               <div className="flex items-center gap-3 bg-gray-50 px-2 sm:px-3 py-1.5 rounded-xl border border-gray-100">
@@ -608,7 +749,7 @@ export default function App() {
               </div>
             ) : (
               <button
-                onClick={() => { setShowAuthModal(true); setAuthMode('login'); }}
+                onClick={() => { triggerHaptic('primaryAction'); setShowAuthModal(true); setAuthMode('login'); }}
                 className="px-4 py-2 sm:py-2.5 rounded-xl bg-gray-900 text-white text-xs sm:text-sm font-bold shadow-md hover:bg-black active:scale-95 transition-all"
               >
                 Login / Sign Up
@@ -689,6 +830,7 @@ export default function App() {
                   <div>
                     <button
                       onClick={() => {
+                        triggerHaptic('navigation');
                         window.history.pushState({}, '', '/');
                         setSelectedSlug('');
                         setSelectedRestaurantName('');
@@ -696,6 +838,8 @@ export default function App() {
                         setCart([]);
                         setMyOrders([]);
                         previousStatusByOrderRef.current = {};
+                        lastSyncTimestampRef.current = null;
+                        lastEventIdRef.current = null;
                       }}
                       className="flex items-center text-xs font-bold text-gray-400 hover:text-gray-900 uppercase tracking-widest mb-3 transition-colors"
                     >
@@ -707,6 +851,7 @@ export default function App() {
                   </div>
                   <button
                     onClick={() => {
+                      triggerHaptic('tabSwitch');
                       setShowOrders((prev) => !prev);
                       if (!showOrders) loadMyOrders().catch(() => undefined);
                     }}
@@ -919,6 +1064,13 @@ export default function App() {
                         className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20"
                         required
                       />
+                      <input
+                        type="email"
+                        value={checkout.customerEmail}
+                        onChange={(e) => setCheckout((prev) => ({ ...prev, customerEmail: e.target.value }))}
+                        placeholder="Email (for invoice)"
+                        className="w-full bg-gray-50 border-none rounded-2xl p-4 text-sm font-bold focus:ring-2 focus:ring-orange-500/20"
+                      />
                       
                       {/* --- Address field updated structure --- */}
                       <div className="grid grid-cols-2 gap-3">
@@ -990,9 +1142,9 @@ export default function App() {
                     <div className="flex items-start gap-2 bg-blue-50/50 border border-blue-100 p-3 rounded-xl mt-3">
                        <Receipt className="h-4 w-4 text-blue-500 shrink-0 mt-0.5" />
                        <p className="text-xs font-medium text-blue-700 leading-tight">
-                         An electronic invoice and live tracking updates will be sent to your phone via SMS.
-                       </p>
-                    </div>
+                         Invoice and live tracking updates are sent to the phone and email entered above.
+                        </p>
+                     </div>
 
                     <div className="mt-4">
                       <div className="relative">

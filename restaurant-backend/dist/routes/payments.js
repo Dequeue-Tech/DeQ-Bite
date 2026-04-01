@@ -13,7 +13,10 @@ const restaurant_1 = require("../middleware/restaurant");
 const realtime_1 = require("../utils/realtime");
 const cache_1 = require("../middleware/cache");
 const order_completion_service_1 = require("../services/order-completion.service");
+const idempotency_1 = require("../utils/idempotency");
+const order_lock_1 = require("../utils/order-lock");
 const router = (0, express_1.Router)();
+const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
     paymentProvider: zod_1.z.enum(['RAZORPAY', 'PAYTM', 'PHONEPE']).optional(),
@@ -156,6 +159,8 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
 const buildOrderEventPayload = (order) => {
     const payloadOrder = {
         id: order.id,
+        orderId: order.id,
+        order_id: order.id,
         userId: order.userId,
         tableId: order.tableId,
         status: order.status,
@@ -180,6 +185,43 @@ const buildOrderEventPayload = (order) => {
     if (typeof order.discountPaise === 'number')
         payloadOrder.discountPaise = order.discountPaise;
     return { order: payloadOrder };
+};
+const ensureMutationIdempotency = async (req, scope) => {
+    const key = (0, idempotency_1.extractIdempotencyKey)(req);
+    if (!key) {
+        return {
+            ok: false,
+            statusCode: 400,
+            error: 'Idempotency-Key header is required for order mutations',
+        };
+    }
+    const claimed = await (0, idempotency_1.claimIdempotencyKey)({ scope, key });
+    if (!claimed) {
+        return {
+            ok: false,
+            statusCode: 409,
+            error: 'Duplicate order mutation ignored',
+        };
+    }
+    return { ok: true };
+};
+const ensureOrderVersion = (req, currentUpdatedAt) => {
+    const expectedUpdatedAt = (0, order_lock_1.extractExpectedUpdatedAt)(req);
+    if (!expectedUpdatedAt) {
+        return {
+            ok: false,
+            statusCode: 400,
+            error: 'expectedUpdatedAt is required for order mutations',
+        };
+    }
+    if ((0, order_lock_1.hasVersionConflict)({ expectedUpdatedAt, currentUpdatedAt })) {
+        return {
+            ok: false,
+            statusCode: 409,
+            error: staleWriteMessage,
+        };
+    }
+    return { ok: true };
 };
 router.get('/providers', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(300, 'payments:providers'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const providers = [
@@ -527,6 +569,10 @@ router.get('/status/:orderId', auth_1.authenticate, restaurant_1.requireRestaura
     res.json(response);
 }));
 router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const idempotency = await ensureMutationIdempotency(req, `payments:cash-confirm:${req.restaurant.id}`);
+    if (!idempotency.ok) {
+        throw new errorHandler_1.AppError(idempotency.error, idempotency.statusCode);
+    }
     const payload = cashConfirmSchema.parse(req.body);
     const order = await database_1.prisma.order.findFirst({
         where: {
@@ -540,6 +586,10 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
     });
     if (!order) {
         throw new errorHandler_1.AppError('Cash order not found or already fully paid', 404);
+    }
+    const versionCheck = ensureOrderVersion(req, order.updatedAt);
+    if (!versionCheck.ok) {
+        throw new errorHandler_1.AppError(versionCheck.error, versionCheck.statusCode);
     }
     const amountToAdd = Math.min(payload.amountPaise ?? order.dueAmountPaise, order.dueAmountPaise);
     const nextPaid = order.paidAmountPaise + amountToAdd;
@@ -602,6 +652,10 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
     });
 }));
 router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const idempotency = await ensureMutationIdempotency(req, `payments:update-status:${req.restaurant.id}`);
+    if (!idempotency.ok) {
+        throw new errorHandler_1.AppError(idempotency.error, idempotency.statusCode);
+    }
     const payload = updatePaymentStatusSchema.parse(req.body);
     const order = await database_1.prisma.order.findFirst({
         where: {
@@ -611,6 +665,10 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
     });
     if (!order) {
         throw new errorHandler_1.AppError('Order not found', 404);
+    }
+    const versionCheck = ensureOrderVersion(req, order.updatedAt);
+    if (!versionCheck.ok) {
+        throw new errorHandler_1.AppError(versionCheck.error, versionCheck.statusCode);
     }
     const totalPaise = order.totalPaise;
     let paidAmountPaise = order.paidAmountPaise;

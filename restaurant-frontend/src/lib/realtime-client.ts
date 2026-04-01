@@ -14,13 +14,16 @@ export type OrderRealtimeEvent = {
 
 type OrderEventHandler = (event: OrderRealtimeEvent) => void;
 type StreamScope = 'restaurant' | 'user' | 'both';
+type StreamRole = 'admin' | 'staff' | 'customer' | 'rider';
 
 type StreamSubscription = {
   id: string;
   scope: StreamScope;
+  role?: StreamRole;
   restaurant?: string | null;
   eventTypes?: Set<string>;
   onEvent: OrderEventHandler;
+  onReconnect?: (state: { lastSyncTimestamp?: string; lastEventId?: string }) => void;
 };
 
 let stream: EventSource | null = null;
@@ -32,6 +35,8 @@ let lastEventId: string | null = null;
 let healthTimer: ReturnType<typeof setInterval> | null = null;
 let bootstrapTimer: ReturnType<typeof setInterval> | null = null;
 let streamSubscriptionId = 0;
+let lastSyncTimestamp: string | null = null;
+let hasOpenedStreamAtLeastOnce = false;
 const activeSubscriptions = new Map<string, StreamSubscription>();
 const processedEventIds = new Map<string, number>();
 const MAX_TRACKED_EVENT_IDS = 250;
@@ -44,6 +49,8 @@ const knownEventTypes = [
   'kot.updated',
   'kot.priority.updated',
   'restaurant.users.updated',
+  'rider.assigned',
+  'rider.pool.updated',
 ] as const;
 
 const getToken = () => {
@@ -101,10 +108,20 @@ const getWantedEventTypes = () => {
   return eventTypes;
 };
 
+const getRoleForAllSubscribers = (): StreamRole | null => {
+  const roles = new Set<StreamRole>();
+  activeSubscriptions.forEach((subscription) => {
+    if (subscription.role) roles.add(subscription.role);
+  });
+  if (roles.size === 1) return Array.from(roles)[0]!;
+  return null;
+};
+
 const buildStreamUrl = (input: {
   token: string;
   restaurant: string;
   scope: StreamScope;
+  role?: StreamRole | null;
   eventTypes: Set<string>;
   lastEventId?: string | null;
 }) => {
@@ -117,6 +134,9 @@ const buildStreamUrl = (input: {
   }
   if (input.lastEventId) {
     search.set('lastEventId', input.lastEventId);
+  }
+  if (input.role) {
+    search.set('role', input.role);
   }
 
   const separator = base.includes('?') ? '&' : '?';
@@ -136,6 +156,8 @@ const closeIfUnused = () => {
   streamToken = null;
   lastPingAt = 0;
   lastEventId = null;
+  lastSyncTimestamp = null;
+  hasOpenedStreamAtLeastOnce = false;
 
   if (healthTimer) {
     clearInterval(healthTimer);
@@ -201,10 +223,12 @@ const ensureStream = () => {
   if (!restaurant) return null;
 
   const nextScope = getScopeForAllSubscribers();
+  const nextRole = getRoleForAllSubscribers();
   const nextStreamUrl = buildStreamUrl({
     token,
     restaurant,
     scope: nextScope,
+    role: nextRole,
     eventTypes: getWantedEventTypes(),
     lastEventId,
   });
@@ -221,7 +245,17 @@ const ensureStream = () => {
   lastPingAt = Date.now();
 
   stream.addEventListener('open', () => {
+    const isReconnect = hasOpenedStreamAtLeastOnce;
+    hasOpenedStreamAtLeastOnce = true;
     lastPingAt = Date.now();
+    if (isReconnect) {
+      activeSubscriptions.forEach((subscription) => {
+        subscription.onReconnect?.({
+          ...(lastSyncTimestamp ? { lastSyncTimestamp } : {}),
+          ...(lastEventId ? { lastEventId } : {}),
+        });
+      });
+    }
   });
 
   stream.addEventListener('ping', () => {
@@ -246,6 +280,14 @@ const ensureStream = () => {
     if (event.eventId) {
       lastEventId = event.eventId;
     }
+    const updatedAtFromPayload =
+      (event.payload?.order?.updatedAt as string | undefined) ||
+      (event.payload?.ticket?.order?.updatedAt as string | undefined);
+    if (updatedAtFromPayload) {
+      lastSyncTimestamp = updatedAtFromPayload;
+    } else {
+      lastSyncTimestamp = new Date().toISOString();
+    }
 
     activeSubscriptions.forEach((subscription) => {
       if (!isMatchingScope(subscription.scope, event)) return;
@@ -265,8 +307,10 @@ const ensureStream = () => {
 const subscribe = (options: {
   restaurant?: string | null;
   scope: StreamScope;
+  role?: StreamRole;
   eventTypes?: string[];
   onEvent: OrderEventHandler;
+  onReconnect?: (state: { lastSyncTimestamp?: string; lastEventId?: string }) => void;
 }) => {
   const restaurant = toTenantSlug(options.restaurant);
   if (restaurant) {
@@ -277,9 +321,11 @@ const subscribe = (options: {
   activeSubscriptions.set(id, {
     id,
     scope: options.scope,
+    role: options.role,
     restaurant,
     eventTypes: options.eventTypes?.length ? new Set(options.eventTypes) : undefined,
     onEvent: options.onEvent,
+    onReconnect: options.onReconnect,
   });
 
   ensureBootstrapTimer();
@@ -295,25 +341,33 @@ const subscribe = (options: {
 export const subscribeToOrderEvents = (options: {
   restaurant?: string | null;
   scope?: 'restaurant' | 'user' | 'both';
+  role?: StreamRole;
   onEvent: OrderEventHandler;
+  onReconnect?: (state: { lastSyncTimestamp?: string; lastEventId?: string }) => void;
 }) => {
   return subscribe({
     restaurant: options.restaurant,
     scope: options.scope || 'restaurant',
+    role: options.role,
     eventTypes: ['order.created', 'order.updated', 'invoice.ready'],
     onEvent: options.onEvent,
+    onReconnect: options.onReconnect,
   });
 };
 
 export const subscribeToRestaurantEvents = (options: {
   restaurant?: string | null;
+  role?: StreamRole;
   eventTypes: string[];
   onEvent: OrderEventHandler;
+  onReconnect?: (state: { lastSyncTimestamp?: string; lastEventId?: string }) => void;
 }) => {
   return subscribe({
     restaurant: options.restaurant,
     scope: 'restaurant',
+    role: options.role,
     eventTypes: options.eventTypes,
     onEvent: options.onEvent,
+    onReconnect: options.onReconnect,
   });
 };

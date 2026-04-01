@@ -72,10 +72,14 @@ export default function KitchenPage() {
     const restaurantSlug = apiClient.getActiveRestaurantSlug();
     const cleanup = subscribeToRestaurantEvents({
       restaurant: restaurantSlug,
+      role: 'staff',
       eventTypes: ['kot.created', 'kot.updated', 'kot.priority.updated', 'order.created', 'order.updated'],
       onEvent: (event) => {
         const ticket = (event?.payload as any)?.ticket as KOTTicket | undefined;
-        const orderId = (event?.payload as any)?.orderId as string | undefined;
+        const orderId =
+          ((event?.payload as any)?.orderId as string | undefined) ||
+          ((event?.payload as any)?.order_id as string | undefined) ||
+          ((event?.payload as any)?.order?.id as string | undefined);
 
         if (ticket?.orderId) {
           mergeTicket(ticket);
@@ -89,9 +93,14 @@ export default function KitchenPage() {
           return;
         }
 
-        if (event.type === 'order.created' || event.type === 'order.updated') {
-          void refreshBoard(false);
+        if ((event.type === 'order.created' || event.type === 'order.updated') && orderId) {
+          void refreshSingleTicket(orderId);
+          void loadSummary();
         }
+      },
+      onReconnect: ({ lastSyncTimestamp }) => {
+        if (!lastSyncTimestamp) return;
+        void syncDeltaFromTimestamp(lastSyncTimestamp);
       },
     });
 
@@ -128,6 +137,19 @@ export default function KitchenPage() {
       mergeTicket(ticket);
     } catch {
       setTickets((prev) => prev.filter((ticket) => ticket.orderId !== orderId));
+    }
+  };
+
+  const syncDeltaFromTimestamp = async (updatedAfter: string) => {
+    try {
+      const response = await apiClient.getRestaurantOrders('ALL', updatedAfter);
+      if (!response.success || !response.data?.length) return;
+      response.data.forEach((order) => {
+        void refreshSingleTicket(order.id);
+      });
+      void loadSummary();
+    } catch {
+      // Ignore reconnect delta failures; stream events continue.
     }
   };
 
@@ -169,7 +191,12 @@ export default function KitchenPage() {
 
     try {
       setUpdatingOrderId(ticket.orderId);
-      const updated = await apiClient.updateKotStatus(ticket.orderId, nextStatus);
+      const updated = await apiClient.updateKotStatus(
+        ticket.orderId,
+        nextStatus,
+        undefined,
+        ticket.order?.updatedAt ? { expectedUpdatedAt: ticket.order.updatedAt } : undefined
+      );
       mergeTicket(updated);
       if (nextStatus === 'SERVED') {
         toast.success(`Ticket #${ticket.id.slice(0, 8).toUpperCase()} served`);

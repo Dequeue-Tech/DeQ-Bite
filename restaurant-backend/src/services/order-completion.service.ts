@@ -6,6 +6,7 @@ import { emitRestaurantEvent } from '@/utils/realtime';
 import { logger } from '@/utils/logger';
 
 const DELIVERY_METHODS = ['EMAIL', 'SMS'] as const;
+const DELIVERY_EMAIL_MARKER = '[DELIVERY_EMAIL]';
 
 const withRetries = async <T>(label: string, fn: () => Promise<T>, retries = 2): Promise<T> => {
   let attempt = 0;
@@ -129,6 +130,21 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   if (!order) return;
   if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED') return;
 
+  const placedOrderEmail = (() => {
+    if (order.isDelivery && order.specialInstructions?.includes(DELIVERY_EMAIL_MARKER)) {
+      const markerIndex = order.specialInstructions.lastIndexOf(DELIVERY_EMAIL_MARKER);
+        const extracted = order.specialInstructions
+          .slice(markerIndex + DELIVERY_EMAIL_MARKER.length)
+          .split(/\s|\||\n/)
+          .map((entry: string) => entry.trim())
+          .find(Boolean);
+      if (extracted) return extracted;
+    }
+    return order.user?.email || '';
+  })();
+  const placedOrderPhone = order.deliveryCustomerPhone || order.user?.phone || '';
+  const placedOrderName = order.deliveryCustomerName || order.user?.name || 'Guest';
+
   const { invoice } = await ensureInvoiceRecord(order);
   let invoiceUrl = invoice.pdfPath || null;
 
@@ -143,11 +159,11 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   let emailSent = invoice.emailSent;
   let smsSent = invoice.smsSent;
 
-  if (!emailSent && order.user?.email) {
+  if (!emailSent && placedOrderEmail) {
     emailSent = await withRetries('invoice-email-send', async () =>
       sendOrderCompletionEmail({
-        to: order.user!.email,
-        customerName: order.user?.name || 'Guest',
+        to: placedOrderEmail,
+        customerName: placedOrderName,
         restaurantName: order.restaurant?.name || 'Restaurant',
         invoiceNumber: invoice.invoiceNumber,
         orderId: order.id,
@@ -157,10 +173,10 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
     );
   }
 
-  if (!smsSent && order.user?.phone && invoiceUrl) {
+  if (!smsSent && placedOrderPhone && invoiceUrl) {
     smsSent = await withRetries('invoice-sms-send', async () =>
-      sendOrderCompletionSMS(order.user!.phone, {
-        customerName: order.user?.name || 'Guest',
+      sendOrderCompletionSMS(placedOrderPhone, {
+        customerName: placedOrderName,
         restaurantName: order.restaurant?.name || 'Restaurant',
         invoiceNumber: invoice.invoiceNumber,
         total: order.totalPaise / 100,

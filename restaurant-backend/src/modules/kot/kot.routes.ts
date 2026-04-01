@@ -5,6 +5,7 @@ import { authenticate } from '@/middleware/auth';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { AuthenticatedRequest } from '@/types/api';
 import { prisma } from '@/config/database';
+import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
 import {
   getKOTOperationalSummary,
   updateKOTPriority,
@@ -17,6 +18,7 @@ const router = Router();
 const statusSchema = z.object({
   status: z.nativeEnum(KOTStatus),
   note: z.string().max(300).optional(),
+  expectedOrderUpdatedAt: z.string().optional(),
 });
 
 const summaryQuerySchema = z.object({
@@ -103,6 +105,18 @@ router.get('/tickets/order/:orderId', authorizeRestaurantRole('OWNER', 'ADMIN', 
 
 router.patch('/tickets/order/:orderId/status', authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
   try {
+    const idempotencyKey = extractIdempotencyKey(req);
+    if (!idempotencyKey) {
+      return res.status(400).json({ success: false, error: 'Idempotency-Key header is required for order mutations' });
+    }
+    const claimed = await claimIdempotencyKey({
+      scope: `kot:update-status:${req.restaurant!.id}`,
+      key: idempotencyKey,
+    });
+    if (!claimed) {
+      return res.status(409).json({ success: false, error: 'Duplicate order mutation ignored' });
+    }
+
     const orderId = req.params['orderId'] as string;
     if (!orderId || !orderId.trim()) {
       return res.status(400).json({ success: false, error: 'Order ID is required' });
@@ -114,12 +128,14 @@ router.patch('/tickets/order/:orderId/status', authorizeRestaurantRole('OWNER', 
       status: KOTStatus;
       note?: string | undefined;
       changedByUserId?: string | undefined;
+      expectedOrderUpdatedAt?: string | undefined;
     } = {
       restaurantId: req.restaurant!.id,
       orderId,
       status: payload.status,
     };
     if (payload.note) updatePayload.note = payload.note;
+    if (payload.expectedOrderUpdatedAt) updatePayload.expectedOrderUpdatedAt = payload.expectedOrderUpdatedAt;
     if (req.user?.id) updatePayload.changedByUserId = req.user.id;
 
     const updated = await updateKOTStatus(updatePayload);

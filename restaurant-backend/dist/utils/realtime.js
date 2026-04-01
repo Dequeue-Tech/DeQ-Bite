@@ -1,6 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBufferedEvents = exports.onUserEvent = exports.onRestaurantEvent = exports.emitRestaurantEvent = void 0;
+exports.getBufferedEvents = exports.onUserEvent = exports.onRestaurantEvent = exports.emitRoleScopedRestaurantEvent = exports.emitRestaurantEvent = void 0;
 const events_1 = require("events");
 const redis_1 = require("./redis");
 const logger_1 = require("./logger");
@@ -92,6 +92,13 @@ const emitRestaurantEvent = (restaurantId, event) => {
     }
 };
 exports.emitRestaurantEvent = emitRestaurantEvent;
+const emitRoleScopedRestaurantEvent = (restaurantId, event, roleScopes) => {
+    (0, exports.emitRestaurantEvent)(restaurantId, {
+        ...event,
+        roleScopes,
+    });
+};
+exports.emitRoleScopedRestaurantEvent = emitRoleScopedRestaurantEvent;
 const onRestaurantEvent = (restaurantId, listener) => {
     initRedisRealtimeBridge();
     const channel = getRestaurantChannel(restaurantId);

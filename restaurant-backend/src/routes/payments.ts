@@ -12,8 +12,11 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { cacheResponse } from '@/middleware/cache';
 import { processOrderCompletionNotifications } from '@/services/order-completion.service';
+import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
+import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
 
 const router = Router();
+const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 
 const createPaymentSchema = z.object({
   orderId: z.string().min(1, 'Order ID is required'),
@@ -174,6 +177,8 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId: string) => {
 const buildOrderEventPayload = (order: any) => {
   const payloadOrder: any = {
     id: order.id,
+    orderId: order.id,
+    order_id: order.id,
     userId: order.userId,
     tableId: order.tableId,
     status: order.status,
@@ -194,6 +199,49 @@ const buildOrderEventPayload = (order: any) => {
   if (typeof order.discountPaise === 'number') payloadOrder.discountPaise = order.discountPaise;
 
   return { order: payloadOrder };
+};
+
+const ensureMutationIdempotency = async (req: AuthenticatedRequest, scope: string) => {
+  const key = extractIdempotencyKey(req);
+  if (!key) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'Idempotency-Key header is required for order mutations',
+    } as const;
+  }
+
+  const claimed = await claimIdempotencyKey({ scope, key });
+  if (!claimed) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'Duplicate order mutation ignored',
+    } as const;
+  }
+
+  return { ok: true } as const;
+};
+
+const ensureOrderVersion = (req: AuthenticatedRequest, currentUpdatedAt: Date) => {
+  const expectedUpdatedAt = extractExpectedUpdatedAt(req);
+  if (!expectedUpdatedAt) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'expectedUpdatedAt is required for order mutations',
+    } as const;
+  }
+
+  if (hasVersionConflict({ expectedUpdatedAt, currentUpdatedAt })) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: staleWriteMessage,
+    } as const;
+  }
+
+  return { ok: true } as const;
 };
 
 // GET /api/payments/providers
@@ -598,6 +646,11 @@ router.get('/status/:orderId', authenticate, requireRestaurant, asyncHandler(asy
 
 // POST /api/payments/cash/confirm
 router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const idempotency = await ensureMutationIdempotency(req, `payments:cash-confirm:${req.restaurant!.id}`);
+  if (!idempotency.ok) {
+    throw new AppError(idempotency.error, idempotency.statusCode);
+  }
+
   const payload = cashConfirmSchema.parse(req.body);
 
   const order = await prisma.order.findFirst({
@@ -613,6 +666,10 @@ router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestauran
 
   if (!order) {
     throw new AppError('Cash order not found or already fully paid', 404);
+  }
+  const versionCheck = ensureOrderVersion(req, order.updatedAt);
+  if (!versionCheck.ok) {
+    throw new AppError(versionCheck.error, versionCheck.statusCode);
   }
 
   const amountToAdd = Math.min(payload.amountPaise ?? order.dueAmountPaise, order.dueAmountPaise);
@@ -683,6 +740,11 @@ router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestauran
 
 // PUT /api/payments/status
 router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN'), asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  const idempotency = await ensureMutationIdempotency(req, `payments:update-status:${req.restaurant!.id}`);
+  if (!idempotency.ok) {
+    throw new AppError(idempotency.error, idempotency.statusCode);
+  }
+
   const payload = updatePaymentStatusSchema.parse(req.body);
 
   const order = await prisma.order.findFirst({
@@ -694,6 +756,10 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
 
   if (!order) {
     throw new AppError('Order not found', 404);
+  }
+  const versionCheck = ensureOrderVersion(req, order.updatedAt);
+  if (!versionCheck.ok) {
+    throw new AppError(versionCheck.error, versionCheck.statusCode);
   }
 
   const totalPaise = order.totalPaise;

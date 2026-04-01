@@ -8,6 +8,7 @@ const sms_1 = require("../lib/sms");
 const realtime_1 = require("../utils/realtime");
 const logger_1 = require("../utils/logger");
 const DELIVERY_METHODS = ['EMAIL', 'SMS'];
+const DELIVERY_EMAIL_MARKER = '[DELIVERY_EMAIL]';
 const withRetries = async (label, fn, retries = 2) => {
     let attempt = 0;
     let lastError;
@@ -118,6 +119,21 @@ const processOrderCompletionNotifications = async (orderId) => {
         return;
     if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED')
         return;
+    const placedOrderEmail = (() => {
+        if (order.isDelivery && order.specialInstructions?.includes(DELIVERY_EMAIL_MARKER)) {
+            const markerIndex = order.specialInstructions.lastIndexOf(DELIVERY_EMAIL_MARKER);
+            const extracted = order.specialInstructions
+                .slice(markerIndex + DELIVERY_EMAIL_MARKER.length)
+                .split(/\s|\||\n/)
+                .map((entry) => entry.trim())
+                .find(Boolean);
+            if (extracted)
+                return extracted;
+        }
+        return order.user?.email || '';
+    })();
+    const placedOrderPhone = order.deliveryCustomerPhone || order.user?.phone || '';
+    const placedOrderName = order.deliveryCustomerName || order.user?.name || 'Guest';
     const { invoice } = await ensureInvoiceRecord(order);
     let invoiceUrl = invoice.pdfPath || null;
     if (invoice.pdfName) {
@@ -129,10 +145,10 @@ const processOrderCompletionNotifications = async (orderId) => {
     }
     let emailSent = invoice.emailSent;
     let smsSent = invoice.smsSent;
-    if (!emailSent && order.user?.email) {
+    if (!emailSent && placedOrderEmail) {
         emailSent = await withRetries('invoice-email-send', async () => (0, email_1.sendOrderCompletionEmail)({
-            to: order.user.email,
-            customerName: order.user?.name || 'Guest',
+            to: placedOrderEmail,
+            customerName: placedOrderName,
             restaurantName: order.restaurant?.name || 'Restaurant',
             invoiceNumber: invoice.invoiceNumber,
             orderId: order.id,
@@ -140,9 +156,9 @@ const processOrderCompletionNotifications = async (orderId) => {
             invoiceUrl,
         }));
     }
-    if (!smsSent && order.user?.phone && invoiceUrl) {
-        smsSent = await withRetries('invoice-sms-send', async () => (0, sms_1.sendOrderCompletionSMS)(order.user.phone, {
-            customerName: order.user?.name || 'Guest',
+    if (!smsSent && placedOrderPhone && invoiceUrl) {
+        smsSent = await withRetries('invoice-sms-send', async () => (0, sms_1.sendOrderCompletionSMS)(placedOrderPhone, {
+            customerName: placedOrderName,
             restaurantName: order.restaurant?.name || 'Restaurant',
             invoiceNumber: invoice.invoiceNumber,
             total: order.totalPaise / 100,

@@ -38,6 +38,7 @@ const Navbar = () => {
   
   // Role definitions
   const canAccessAdmin = user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN';
+  const canAccessStaffDash = canAccessAdmin || user?.restaurantRole === 'STAFF';
   const canAccessKitchen = canAccessAdmin || user?.restaurantRole === 'STAFF';
   const canAccessPos = canAccessKitchen;
   
@@ -98,12 +99,12 @@ const Navbar = () => {
   const desktopNavLinks = [
     { name: 'Home', href: activeRestaurantSlug ? `/${activeRestaurantSlug}` : '/' },
     { name: 'Menu', href: withRestaurant('/menu') },
-    ...(isAuthenticated ? [
-      { name: 'Orders', href: withRestaurant('/orders') },
-      ...(canAccessAdmin ? [{ name: 'Admin', href: withRestaurant('/admin') }] : []),
-      ...(canAccessKitchen ? [{ name: 'Kitchen', href: withRestaurant('/kitchen') }] : []),
-      // ...(canAccessPos ? [{ name: 'POS Ops', href: withRestaurant('/pos') }] : []),
-    ] : []),
+      ...(isAuthenticated ? [
+        { name: 'Orders', href: withRestaurant('/orders') },
+        ...(canAccessStaffDash ? [{ name: canAccessAdmin ? 'Admin' : 'Staff Dash', href: withRestaurant('/admin') }] : []),
+        ...(canAccessKitchen ? [{ name: 'Kitchen', href: withRestaurant('/kitchen') }] : []),
+        // ...(canAccessPos ? [{ name: 'POS Ops', href: withRestaurant('/pos') }] : []),
+      ] : []),
   ];
 
   // Mobile bottom navigation links (max 4 items, profile is in top nav)
@@ -234,15 +235,15 @@ const Navbar = () => {
 
                       {/* Action Buttons */}
                       <div className="py-2">
-                        {/* Admin Link - Only visible if canAccessAdmin */}
-                        {canAccessAdmin && (
+                        {/* Staff/Admin dashboard link */}
+                        {canAccessStaffDash && (
                           <Link
                             href={withRestaurant('/admin')}
                             onClick={() => setShowUserDropdown(false)}
                             className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors"
                           >
                             <LayoutDashboard className="h-4 w-4" />
-                            <span>Admin Dashboard</span>
+                            <span>{canAccessAdmin ? 'Admin Dashboard' : 'Staff Dashboard'}</span>
                           </Link>
                         )}
                         

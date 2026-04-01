@@ -126,10 +126,7 @@ export default function RestaurantStaffGuard() {
       if (identifier && allowedIdentifiers.has(identifier)) {
         return;
       }
-      const destination =
-        user?.role === 'STAFF' || user?.role === 'KITCHEN_STAFF'
-          ? '/kitchen'
-          : `/${preferredSlug}/admin`;
+      const destination = `/${preferredSlug}/admin`;
 
       if (pathname !== destination) {
         router.replace(destination);
@@ -138,10 +135,7 @@ export default function RestaurantStaffGuard() {
     }
 
     if (pathSlug && !allowedIdentifiers.has(pathSlug)) {
-      const destination =
-        user?.role === 'STAFF' || user?.role === 'KITCHEN_STAFF'
-          ? '/kitchen'
-          : `/${preferredSlug}/admin`;
+      const destination = `/${preferredSlug}/admin`;
 
       if (pathname !== destination) {
         router.replace(destination);

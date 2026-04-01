@@ -112,8 +112,11 @@ export default function HomePage() {
       user?.role === 'ADMIN' ||
       user?.restaurantRole === 'OWNER' ||
       user?.restaurantRole === 'ADMIN';
+    const hasStaffDashAccess =
+      user?.role === 'STAFF' ||
+      user?.restaurantRole === 'STAFF';
 
-    if (!isAuthenticated || !hasAdminAccess) return;
+    if (!isAuthenticated || (!hasAdminAccess && !hasStaffDashAccess)) return;
 
     const redirectToAdmin = async () => {
       const selectedSlug = apiClient.getSelectedRestaurantSlug();
@@ -124,10 +127,10 @@ export default function HomePage() {
 
       try {
         const restaurants = await apiClient.getMyRestaurants();
-        const adminRestaurant = restaurants.find(
-          (r) => r.role === 'OWNER' || r.role === 'ADMIN'
+        const dashboardRestaurant = restaurants.find(
+          (r) => r.role === 'OWNER' || r.role === 'ADMIN' || r.role === 'STAFF'
         );
-        const slug = adminRestaurant?.slug || adminRestaurant?.subdomain || adminRestaurant?.id;
+        const slug = dashboardRestaurant?.slug || dashboardRestaurant?.subdomain || dashboardRestaurant?.id;
         if (slug) {
           apiClient.setSelectedRestaurantSlug(slug);
           router.replace(`/${slug}/admin`);

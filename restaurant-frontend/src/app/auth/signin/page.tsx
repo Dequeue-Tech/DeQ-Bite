@@ -54,9 +54,12 @@ export default function SignInPage() {
       authUser?.role === 'ADMIN' ||
       authUser?.restaurantRole === 'OWNER' ||
       authUser?.restaurantRole === 'ADMIN';
+    const hasStaffDashAccess =
+      authUser?.role === 'STAFF' ||
+      authUser?.restaurantRole === 'STAFF';
 
     const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
-    if (!hasAdminAccess) {
+    if (!hasAdminAccess && !hasStaffDashAccess) {
       router.push(selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/');
       return;
     }
@@ -68,10 +71,13 @@ export default function SignInPage() {
 
     try {
       const restaurants = await apiClient.getMyRestaurants();
-      const adminRestaurant = restaurants.find(
-        (restaurant) => restaurant.role === 'OWNER' || restaurant.role === 'ADMIN'
+      const dashboardRestaurant = restaurants.find(
+        (restaurant) =>
+          restaurant.role === 'OWNER' ||
+          restaurant.role === 'ADMIN' ||
+          restaurant.role === 'STAFF'
       );
-      const resolvedSlug = adminRestaurant?.slug || adminRestaurant?.subdomain || adminRestaurant?.id;
+      const resolvedSlug = dashboardRestaurant?.slug || dashboardRestaurant?.subdomain || dashboardRestaurant?.id;
       if (resolvedSlug) {
         apiClient.setSelectedRestaurantSlug(resolvedSlug);
         router.replace(`/${resolvedSlug}/admin`);

@@ -32,13 +32,15 @@ const formatOrderDate = (dateString: string) => {
 const getStatusBadge = (status: string) => {
   switch (status) {
     case 'PENDING':
+      return { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock, label: 'Pending' };
     case 'CONFIRMED':
-      return { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock, label: 'In Queue' };
+      return { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Clock, label: 'Confirmed' };
     case 'PREPARING':
       return { color: 'bg-purple-100 text-purple-800 border-purple-200', icon: ChefHat, label: 'Preparing' };
     case 'READY':
       return { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: ShoppingBag, label: 'Ready' };
     case 'SERVED':
+      return { color: 'bg-teal-100 text-teal-800 border-teal-200', icon: MapPin, label: 'Served' };
     case 'COMPLETED':
       return { color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle, label: 'Completed' };
     case 'CANCELLED':
@@ -65,8 +67,6 @@ const orderTimelineSteps = [
   { key: 'CONFIRMED', label: 'Confirmed' },
   { key: 'PREPARING', label: 'Preparing' },
   { key: 'READY', label: 'Ready' },
-  { key: 'OUT_FOR_DELIVERY', label: 'Out for Delivery' },
-  { key: 'DELIVERED', label: 'Delivered' },
 ] as const;
 
 const toRelativeTime = (timestamp: number) => {
@@ -76,14 +76,6 @@ const toRelativeTime = (timestamp: number) => {
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
   return `${Math.floor(seconds / 86400)}d ago`;
-};
-
-const getTimelineStage = (order: Order): (typeof orderTimelineSteps)[number]['key'] => {
-  if (order.deliveryStatus === 'OUT_FOR_DELIVERY') return 'OUT_FOR_DELIVERY';
-  if (order.deliveryStatus === 'DELIVERED') return 'DELIVERED';
-  if (order.status === 'COMPLETED' || order.status === 'SERVED') return 'DELIVERED';
-  if (statusTimeline.includes(order.status as any)) return order.status as any;
-  return 'PENDING';
 };
 
 export default function OrdersPage() {
@@ -891,10 +883,7 @@ export default function OrdersPage() {
               const badge = getStatusBadge(order.status);
               const BadgeIcon = badge.icon;
               const isOngoing = !['COMPLETED', 'CANCELLED'].includes(order.status);
-              const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';
-              const timelineStage = getTimelineStage(order);
-              const timelineIndex = orderTimelineSteps.findIndex((step) => step.key === timelineStage);
-              
+              const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';              
               const itemsList = Array.isArray(order.items) ? order.items : [];
               const itemSummary = itemsList.length > 0 
                 ? itemsList.map(i => `${i.quantity}x ${i.menuItem?.name || 'Item'}`).join(', ')

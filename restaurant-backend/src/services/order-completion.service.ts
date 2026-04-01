@@ -4,9 +4,9 @@ import { sendOrderCompletionEmail } from '@/lib/email';
 import { sendOrderCompletionSMS } from '@/lib/sms';
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { logger } from '@/utils/logger';
+import { resolveOrderPlacementContact } from '@/services/order-contact.service';
 
 const DELIVERY_METHODS = ['EMAIL', 'SMS'] as const;
-const DELIVERY_EMAIL_MARKER = '[DELIVERY_EMAIL]';
 
 const withRetries = async <T>(label: string, fn: () => Promise<T>, retries = 2): Promise<T> => {
   let attempt = 0;
@@ -26,7 +26,11 @@ const withRetries = async <T>(label: string, fn: () => Promise<T>, retries = 2):
   throw new Error(`${label} failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 };
 
-const buildInvoiceData = (order: any, invoiceNumber: string) => {
+const buildInvoiceData = (
+  order: any,
+  invoiceNumber: string,
+  placementContact: { name: string; email: string; phone: string }
+) => {
   const taxPercent = order.subtotalPaise > 0
     ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
     : undefined;
@@ -40,9 +44,9 @@ const buildInvoiceData = (order: any, invoiceNumber: string) => {
     ...(order.restaurant?.email ? { restaurantEmail: order.restaurant.email } : {}),
     ...(order.restaurant?.gstNumber ? { gstNumber: order.restaurant.gstNumber } : {}),
     ...(taxPercent !== undefined ? { taxPercent } : {}),
-    customerName: order.user?.name || 'Guest',
-    customerEmail: order.user?.email || '',
-    ...(order.user?.phone ? { customerPhone: order.user.phone } : {}),
+    customerName: placementContact.name || 'Guest',
+    customerEmail: placementContact.email || '',
+    ...(placementContact.phone ? { customerPhone: placementContact.phone } : {}),
     invoiceNumber,
     orderDate: order.createdAt.toLocaleDateString('en-IN'),
     items: (order.items || []).map((item: any) => ({
@@ -65,7 +69,8 @@ const ensureInvoiceRecord = async (order: any) => {
   });
 
   const invoiceNumber = existing?.invoiceNumber || `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-  const invoiceData = buildInvoiceData(order, invoiceNumber);
+  const placementContact = resolveOrderPlacementContact(order);
+  const invoiceData = buildInvoiceData(order, invoiceNumber, placementContact);
 
   if (existing?.pdfName && existing?.pdfPath) {
     return { invoice: existing, invoiceData };
@@ -130,20 +135,10 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   if (!order) return;
   if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED') return;
 
-  const placedOrderEmail = (() => {
-    if (order.isDelivery && order.specialInstructions?.includes(DELIVERY_EMAIL_MARKER)) {
-      const markerIndex = order.specialInstructions.lastIndexOf(DELIVERY_EMAIL_MARKER);
-        const extracted = order.specialInstructions
-          .slice(markerIndex + DELIVERY_EMAIL_MARKER.length)
-          .split(/\s|\||\n/)
-          .map((entry: string) => entry.trim())
-          .find(Boolean);
-      if (extracted) return extracted;
-    }
-    return order.user?.email || '';
-  })();
-  const placedOrderPhone = order.deliveryCustomerPhone || order.user?.phone || '';
-  const placedOrderName = order.deliveryCustomerName || order.user?.name || 'Guest';
+  const placementContact = resolveOrderPlacementContact(order);
+  const placedOrderEmail = placementContact.email;
+  const placedOrderPhone = placementContact.phone;
+  const placedOrderName = placementContact.name || 'Guest';
 
   const { invoice } = await ensureInvoiceRecord(order);
   let invoiceUrl = invoice.pdfPath || null;

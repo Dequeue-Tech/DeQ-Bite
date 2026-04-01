@@ -56,6 +56,28 @@ function CheckoutPageContent() {
   const [discountPaise, setDiscountPaise] = useState(0);
   const [restaurantPolicy, setRestaurantPolicy] = useState<{ paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL'; cashPaymentEnabled: boolean } | null>(null);
   const [requestInvoice, setRequestInvoice] = useState(true);
+  const ORDER_CONTACT_MARKER = '[ORDER_CONTACT]';
+
+  const buildSpecialInstructionsWithPlacementContact = () => {
+    const userNotes = (specialInstructions || '').trim();
+    const notesWithoutMarker = userNotes.includes(ORDER_CONTACT_MARKER)
+      ? userNotes.slice(0, userNotes.lastIndexOf(ORDER_CONTACT_MARKER)).trim()
+      : userNotes;
+
+    const contactPayload = {
+      name: (customerInfo.name || '').trim(),
+      email: (customerInfo.email || '').trim().toLowerCase(),
+      phone: (customerInfo.phone || '').trim(),
+    };
+
+    const hasAnyContact = Boolean(contactPayload.name || contactPayload.email || contactPayload.phone);
+    if (!hasAnyContact) {
+      return notesWithoutMarker;
+    }
+
+    const marker = `${ORDER_CONTACT_MARKER}${JSON.stringify(contactPayload)}`;
+    return [notesWithoutMarker, marker].filter(Boolean).join('\n');
+  };
 
   const selectedTableInfo = tables.find((table) => table.id === selectedTable);
 
@@ -230,7 +252,7 @@ function CheckoutPageContent() {
         }
         const response = await apiClient.addOrderItems(requestedOrderId, {
           items: cartItems.map((item) => ({ menuItemId: item.id, quantity: item.quantity, notes: '' })),
-          specialInstructions: specialInstructions || '',
+          specialInstructions: buildSpecialInstructionsWithPlacementContact(),
         }, expectedUpdatedAt ? { expectedUpdatedAt } : undefined);
         if (!response.success || !response.data) throw new Error(response.error);
         setCreatedOrder(response.data);
@@ -247,7 +269,7 @@ function CheckoutPageContent() {
         const orderData = {
           tableId: selectedTable,
           items: cartItems.map((item) => ({ menuItemId: item.id, quantity: item.quantity, notes: '' })),
-          specialInstructions: specialInstructions || '',
+          specialInstructions: buildSpecialInstructionsWithPlacementContact(),
           couponCode: couponCode || undefined,
           paymentProvider: 'CASH' as const,
         };

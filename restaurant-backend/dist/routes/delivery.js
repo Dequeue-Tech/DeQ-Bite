@@ -7,6 +7,7 @@ const restaurant_1 = require("../middleware/restaurant");
 const realtime_1 = require("../utils/realtime");
 const sms_1 = require("../lib/sms");
 const marketplace_order_meta_1 = require("../modules/pos/marketplace-order-meta");
+const order_status_notification_service_1 = require("../services/order-status-notification.service");
 const idempotency_1 = require("../utils/idempotency");
 const order_lock_1 = require("../utils/order-lock");
 const router = (0, express_1.Router)();
@@ -649,6 +650,12 @@ router.put('/orders/:id/assign-rider', (0, restaurant_1.authorizeRestaurantRole)
             },
         });
         emitAcceptedNotificationIfNeeded(existingOrder.status, updated);
+        await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+            orderId: updated.id,
+            previousStatus: existingOrder.status,
+            nextStatus: updated.status,
+            source: 'delivery.assign-rider',
+        }).catch(() => undefined);
         (0, realtime_1.emitRestaurantEvent)(updated.restaurantId, {
             type: 'order.updated',
             userId: updated.userId,
@@ -738,6 +745,12 @@ router.put('/orders/:id/status', (0, restaurant_1.authorizeRestaurantRole)('OWNE
             },
         });
         emitAcceptedNotificationIfNeeded(existingOrder.status, updated);
+        await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+            orderId: updated.id,
+            previousStatus: existingOrder.status,
+            nextStatus: updated.status,
+            source: 'delivery.update-status',
+        }).catch(() => undefined);
         if (updated.deliveryRiderPhone && ['DELIVERED', 'CANCELLED'].includes(deliveryStatus)) {
             await database_1.prisma.deliveryRider.updateMany({
                 where: {

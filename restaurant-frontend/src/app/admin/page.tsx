@@ -77,9 +77,12 @@ const getDeliveryStatusColor = (status: DeliveryStatus) => {
 
 const getPlainInstructions = (specialInstructions?: string) => {
   if (!specialInstructions) return '';
-  const marker = '[DELIVERY_META]';
-  const idx = specialInstructions.lastIndexOf(marker);
-  return (idx === -1 ? specialInstructions : specialInstructions.slice(0, idx)).trim();
+  const markerIndexes = ['[DELIVERY_META]', '[ORDER_CONTACT]', '[DELIVERY_EMAIL]']
+    .map((marker) => specialInstructions.lastIndexOf(marker))
+    .filter((idx) => idx >= 0);
+  if (markerIndexes.length === 0) return specialInstructions.trim();
+  const firstMarkerIndex = Math.min(...markerIndexes);
+  return specialInstructions.slice(0, firstMarkerIndex).trim();
 };
 
 const getMarketplaceBadgeText = (order: Pick<Order, 'sourceSystem' | 'externalOrderId'>) => {

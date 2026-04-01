@@ -29,4 +29,11 @@ export declare function sendOrderCompletionSMS(phone: string, data: {
     total: number;
     invoiceUrl: string;
 }): Promise<boolean>;
+export declare function sendOrderStatusUpdateSMS(phone: string, data: {
+    customerName: string;
+    restaurantName: string;
+    orderId: string;
+    previousStatus: string;
+    nextStatus: string;
+}): Promise<boolean>;
 //# sourceMappingURL=sms.d.ts.map

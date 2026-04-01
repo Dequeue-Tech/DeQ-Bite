@@ -7,6 +7,7 @@ exports.sendEmail = sendEmail;
 exports.generateInvoiceEmailTemplate = generateInvoiceEmailTemplate;
 exports.sendInvoiceEmail = sendInvoiceEmail;
 exports.sendOrderCompletionEmail = sendOrderCompletionEmail;
+exports.sendOrderStatusUpdateEmail = sendOrderStatusUpdateEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const logger_1 = require("../utils/logger");
 const getMissingEmailConfig = () => {
@@ -603,6 +604,25 @@ async function sendOrderCompletionEmail(input) {
       <p><strong>Total:</strong> ₹${input.totalInr.toFixed(2)}</p>
       ${invoiceLink}
       <p>Thanks for ordering with us.</p>
+    </div>
+  `;
+    return sendEmail({
+        to: input.to,
+        subject,
+        html,
+    });
+}
+async function sendOrderStatusUpdateEmail(input) {
+    const orderCode = input.orderId.slice(0, 8).toUpperCase();
+    const subject = `Order #${orderCode} update: ${input.nextStatus}`;
+    const html = `
+    <div style="font-family: Arial, sans-serif; color: #222;">
+      <h2>${input.restaurantName}</h2>
+      <p>Hello ${input.customerName}, your order status has been updated.</p>
+      <p><strong>Order:</strong> #${orderCode}</p>
+      <p><strong>Previous status:</strong> ${input.previousStatus}</p>
+      <p><strong>Current status:</strong> ${input.nextStatus}</p>
+      <p>You can track live progress on your customer dashboard.</p>
     </div>
   `;
     return sendEmail({

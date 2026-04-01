@@ -16,6 +16,7 @@ import {
   MarketplaceSourceSystem,
 } from '@/modules/pos/marketplace-order-meta';
 import { processOrderCompletionNotifications } from '@/services/order-completion.service';
+import { notifyOrderStatusChange } from '@/services/order-status-notification.service';
 import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
 import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
 
@@ -624,6 +625,12 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
         skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
       });
       emitAcceptedNotificationIfNeeded(existingOrder.status, updatedOrder);
+      await notifyOrderStatusChange({
+        orderId: updatedOrder.id,
+        previousStatus: existingOrder.status,
+        nextStatus: updatedOrder.status,
+        source: 'orders.add-items',
+      }).catch(() => undefined);
     }
 
     emitRestaurantEvent(updatedOrder.restaurantId, {
@@ -1007,6 +1014,12 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
       skipForDeliveryOrder: Boolean(order.isDelivery),
     });
     emitAcceptedNotificationIfNeeded(existing.status, order);
+    await notifyOrderStatusChange({
+      orderId: order.id,
+      previousStatus: existing.status,
+      nextStatus: order.status,
+      source: 'orders.update-status',
+    }).catch(() => undefined);
 
     emitRestaurantEvent(order.restaurantId, {
       type: 'order.updated',
@@ -1100,6 +1113,12 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
       createIfMissing: !cancelled.isDelivery,
       skipForDeliveryOrder: Boolean(cancelled.isDelivery),
     });
+    await notifyOrderStatusChange({
+      orderId: cancelled.id,
+      previousStatus: order.status,
+      nextStatus: cancelled.status,
+      source: 'orders.cancel',
+    }).catch(() => undefined);
 
     emitRestaurantEvent(cancelled.restaurantId, {
       type: 'order.updated',

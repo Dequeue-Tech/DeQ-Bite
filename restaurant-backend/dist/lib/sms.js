@@ -8,6 +8,7 @@ exports.generateInvoiceSMSMessage = generateInvoiceSMSMessage;
 exports.sendInvoiceSMS = sendInvoiceSMS;
 exports.sendOrderConfirmationSMS = sendOrderConfirmationSMS;
 exports.sendOrderCompletionSMS = sendOrderCompletionSMS;
+exports.sendOrderStatusUpdateSMS = sendOrderStatusUpdateSMS;
 const axios_1 = __importDefault(require("axios"));
 const logger_1 = require("../utils/logger");
 const shortenUrl = async (longUrl) => {
@@ -214,6 +215,11 @@ This is an automated message.`;
 async function sendOrderCompletionSMS(phone, data) {
     const shortUrl = await shortenUrl(data.invoiceUrl);
     const message = `Hi ${data.customerName}, your order is completed at ${data.restaurantName}. Invoice ${data.invoiceNumber} (Rs.${data.total.toFixed(2)}): ${shortUrl}`;
+    return sendSMS({ to: phone, message });
+}
+async function sendOrderStatusUpdateSMS(phone, data) {
+    const orderCode = data.orderId.slice(0, 8).toUpperCase();
+    const message = `Hi ${data.customerName}, order #${orderCode} at ${data.restaurantName} moved from ${data.previousStatus} to ${data.nextStatus}.`;
     return sendSMS({ to: phone, message });
 }
 //# sourceMappingURL=sms.js.map

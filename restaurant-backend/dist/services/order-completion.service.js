@@ -7,8 +7,8 @@ const email_1 = require("../lib/email");
 const sms_1 = require("../lib/sms");
 const realtime_1 = require("../utils/realtime");
 const logger_1 = require("../utils/logger");
+const order_contact_service_1 = require("../services/order-contact.service");
 const DELIVERY_METHODS = ['EMAIL', 'SMS'];
-const DELIVERY_EMAIL_MARKER = '[DELIVERY_EMAIL]';
 const withRetries = async (label, fn, retries = 2) => {
     let attempt = 0;
     let lastError;
@@ -26,7 +26,7 @@ const withRetries = async (label, fn, retries = 2) => {
     }
     throw new Error(`${label} failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 };
-const buildInvoiceData = (order, invoiceNumber) => {
+const buildInvoiceData = (order, invoiceNumber, placementContact) => {
     const taxPercent = order.subtotalPaise > 0
         ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
         : undefined;
@@ -39,9 +39,9 @@ const buildInvoiceData = (order, invoiceNumber) => {
         ...(order.restaurant?.email ? { restaurantEmail: order.restaurant.email } : {}),
         ...(order.restaurant?.gstNumber ? { gstNumber: order.restaurant.gstNumber } : {}),
         ...(taxPercent !== undefined ? { taxPercent } : {}),
-        customerName: order.user?.name || 'Guest',
-        customerEmail: order.user?.email || '',
-        ...(order.user?.phone ? { customerPhone: order.user.phone } : {}),
+        customerName: placementContact.name || 'Guest',
+        customerEmail: placementContact.email || '',
+        ...(placementContact.phone ? { customerPhone: placementContact.phone } : {}),
         invoiceNumber,
         orderDate: order.createdAt.toLocaleDateString('en-IN'),
         items: (order.items || []).map((item) => ({
@@ -62,7 +62,8 @@ const ensureInvoiceRecord = async (order) => {
         where: { orderId: order.id },
     });
     const invoiceNumber = existing?.invoiceNumber || `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-    const invoiceData = buildInvoiceData(order, invoiceNumber);
+    const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
+    const invoiceData = buildInvoiceData(order, invoiceNumber, placementContact);
     if (existing?.pdfName && existing?.pdfPath) {
         return { invoice: existing, invoiceData };
     }
@@ -119,21 +120,10 @@ const processOrderCompletionNotifications = async (orderId) => {
         return;
     if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED')
         return;
-    const placedOrderEmail = (() => {
-        if (order.isDelivery && order.specialInstructions?.includes(DELIVERY_EMAIL_MARKER)) {
-            const markerIndex = order.specialInstructions.lastIndexOf(DELIVERY_EMAIL_MARKER);
-            const extracted = order.specialInstructions
-                .slice(markerIndex + DELIVERY_EMAIL_MARKER.length)
-                .split(/\s|\||\n/)
-                .map((entry) => entry.trim())
-                .find(Boolean);
-            if (extracted)
-                return extracted;
-        }
-        return order.user?.email || '';
-    })();
-    const placedOrderPhone = order.deliveryCustomerPhone || order.user?.phone || '';
-    const placedOrderName = order.deliveryCustomerName || order.user?.name || 'Guest';
+    const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
+    const placedOrderEmail = placementContact.email;
+    const placedOrderPhone = placementContact.phone;
+    const placedOrderName = placementContact.name || 'Guest';
     const { invoice } = await ensureInvoiceRecord(order);
     let invoiceUrl = invoice.pdfPath || null;
     if (invoice.pdfName) {

@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.getKOTOperationalSummary = exports.updateKOTPriority = exports.updateKOTStatus = exports.syncKOTTicketFromOrderStatus = exports.createKOTTicketForOrder = exports.KOTError = void 0;
 const realtime_1 = require("../../utils/realtime");
 const database_1 = require("../../config/database");
+const order_status_notification_service_1 = require("../../services/order-status-notification.service");
 class KOTError extends Error {
     statusCode;
     constructor(message, statusCode = 400) {
@@ -323,7 +324,7 @@ const updateKOTStatus = async (params) => {
                 },
             },
         });
-        return { ticket: updated, order: updatedOrder };
+        return { ticket: updated, order: updatedOrder, previousOrderStatus: ticket.order.status };
     });
     (0, realtime_1.emitRestaurantEvent)(params.restaurantId, {
         type: 'kot.updated',
@@ -360,6 +361,12 @@ const updateKOTStatus = async (params) => {
             },
         },
     });
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: result.order.id,
+        previousStatus: result.previousOrderStatus,
+        nextStatus: result.order.status,
+        source: 'kot.update-status',
+    }).catch(() => undefined);
     return result.ticket;
 };
 exports.updateKOTStatus = updateKOTStatus;

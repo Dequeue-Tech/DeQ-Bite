@@ -10,6 +10,7 @@ import {
   attachMarketplaceOrderMetadata,
   extractMarketplaceOrderMetadata,
 } from '@/modules/pos/marketplace-order-meta';
+import { notifyOrderStatusChange } from '@/services/order-status-notification.service';
 import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
 import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
 
@@ -774,6 +775,12 @@ router.put('/orders/:id/assign-rider', authorizeRestaurantRole('OWNER', 'ADMIN',
       },
     });
     emitAcceptedNotificationIfNeeded(existingOrder.status, updated);
+    await notifyOrderStatusChange({
+      orderId: updated.id,
+      previousStatus: existingOrder.status,
+      nextStatus: updated.status,
+      source: 'delivery.assign-rider',
+    }).catch(() => undefined);
 
     emitRestaurantEvent(updated.restaurantId, {
       type: 'order.updated',
@@ -874,6 +881,12 @@ router.put('/orders/:id/status', authorizeRestaurantRole('OWNER', 'ADMIN', 'STAF
       },
     });
     emitAcceptedNotificationIfNeeded(existingOrder.status, updated);
+    await notifyOrderStatusChange({
+      orderId: updated.id,
+      previousStatus: existingOrder.status,
+      nextStatus: updated.status,
+      source: 'delivery.update-status',
+    }).catch(() => undefined);
 
     if (updated.deliveryRiderPhone && ['DELIVERED', 'CANCELLED'].includes(deliveryStatus)) {
       await prisma.deliveryRider.updateMany({

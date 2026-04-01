@@ -12,6 +12,7 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { cacheResponse } from '@/middleware/cache';
 import { processOrderCompletionNotifications } from '@/services/order-completion.service';
+import { notifyOrderStatusChange } from '@/services/order-status-notification.service';
 import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
 import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
 import { syncKOTTicketFromOrderStatus } from '@/modules/kot/kot.service';
@@ -488,6 +489,12 @@ router.post('/verify', authenticate, requireRestaurant, asyncHandler(async (req:
     skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
   });
   emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+  await notifyOrderStatusChange({
+    orderId: updatedOrder.id,
+    previousStatus: order.status,
+    nextStatus: updatedOrder.status,
+    source: 'payments.verify',
+  }).catch(() => undefined);
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
@@ -590,6 +597,12 @@ router.post('/refund', authenticate, requireRestaurant, asyncHandler(async (req:
     createIfMissing: !updatedOrder.isDelivery,
     skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
   });
+  await notifyOrderStatusChange({
+    orderId: updatedOrder.id,
+    previousStatus: order.status,
+    nextStatus: updatedOrder.status,
+    source: 'payments.refund',
+  }).catch(() => undefined);
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
@@ -758,6 +771,12 @@ router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestauran
     skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
   });
   emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+  await notifyOrderStatusChange({
+    orderId: updatedOrder.id,
+    previousStatus: order.status,
+    nextStatus: updatedOrder.status,
+    source: 'payments.cash-confirm',
+  }).catch(() => undefined);
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
@@ -869,6 +888,12 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
     skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
   });
   emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+  await notifyOrderStatusChange({
+    orderId: updatedOrder.id,
+    previousStatus: order.status,
+    nextStatus: updatedOrder.status,
+    source: 'payments.update-status',
+  }).catch(() => undefined);
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',

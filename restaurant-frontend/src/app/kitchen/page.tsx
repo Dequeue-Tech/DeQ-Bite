@@ -40,6 +40,16 @@ const getStatusLabel = (status: KOTStatus) => {
   return 'Served';
 };
 
+const getPlainInstructions = (specialInstructions?: string) => {
+  if (!specialInstructions) return '';
+  const markerIndexes = ['[DELIVERY_META]', '[ORDER_CONTACT]', '[DELIVERY_EMAIL]']
+    .map((marker) => specialInstructions.lastIndexOf(marker))
+    .filter((idx) => idx >= 0);
+  if (markerIndexes.length === 0) return specialInstructions.trim();
+  const firstMarkerIndex = Math.min(...markerIndexes);
+  return specialInstructions.slice(0, firstMarkerIndex).trim();
+};
+
 export default function KitchenPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
@@ -81,6 +91,17 @@ export default function KitchenPage() {
         scheduleTone(860, 0.14, 0.18);
       } catch {
         // ignore audio errors
+      }
+    }
+
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('New Kitchen Order', {
+          body: `Order #${orderId.slice(0, 8).toUpperCase()} is ready for acceptance`,
+          tag: `kitchen-${orderId}`,
+        });
+      } catch {
+        // ignore browser notification errors
       }
     }
 
@@ -387,10 +408,10 @@ export default function KitchenPage() {
                                   </div>
                                 ))}
 
-                                {ticket.order?.specialInstructions && (
+                                {getPlainInstructions(ticket.order?.specialInstructions) && (
                                   <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-4">
                                     <p className="text-[10px] font-black text-yellow-800 uppercase tracking-widest mb-1">Notes</p>
-                                    <p className="text-xs font-bold text-yellow-900">{ticket.order.specialInstructions}</p>
+                                    <p className="text-xs font-bold text-yellow-900">{getPlainInstructions(ticket.order?.specialInstructions)}</p>
                                   </div>
                                 )}
                               </div>

@@ -13,6 +13,7 @@ const restaurant_1 = require("../middleware/restaurant");
 const realtime_1 = require("../utils/realtime");
 const cache_1 = require("../middleware/cache");
 const order_completion_service_1 = require("../services/order-completion.service");
+const order_status_notification_service_1 = require("../services/order-status-notification.service");
 const idempotency_1 = require("../utils/idempotency");
 const order_lock_1 = require("../utils/order-lock");
 const kot_service_1 = require("../modules/kot/kot.service");
@@ -438,6 +439,12 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
         skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
     });
     emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.verify',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,
@@ -522,6 +529,12 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
         createIfMissing: !updatedOrder.isDelivery,
         skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
     });
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.refund',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: order.userId,
@@ -669,6 +682,12 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
         skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
     });
     emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.cash-confirm',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,
@@ -769,6 +788,12 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
         skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
     });
     emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.update-status',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,

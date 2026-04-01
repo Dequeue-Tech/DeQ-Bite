@@ -291,3 +291,18 @@ export async function sendOrderCompletionSMS(
   const message = `Hi ${data.customerName}, your order is completed at ${data.restaurantName}. Invoice ${data.invoiceNumber} (Rs.${data.total.toFixed(2)}): ${shortUrl}`;
   return sendSMS({ to: phone, message });
 }
+
+export async function sendOrderStatusUpdateSMS(
+  phone: string,
+  data: {
+    customerName: string;
+    restaurantName: string;
+    orderId: string;
+    previousStatus: string;
+    nextStatus: string;
+  }
+): Promise<boolean> {
+  const orderCode = data.orderId.slice(0, 8).toUpperCase();
+  const message = `Hi ${data.customerName}, order #${orderCode} at ${data.restaurantName} moved from ${data.previousStatus} to ${data.nextStatus}.`;
+  return sendSMS({ to: phone, message });
+}

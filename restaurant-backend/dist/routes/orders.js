@@ -11,6 +11,7 @@ const inventory_service_1 = require("../modules/inventory/inventory.service");
 const crm_service_1 = require("../modules/crm/crm.service");
 const marketplace_order_meta_1 = require("../modules/pos/marketplace-order-meta");
 const order_completion_service_1 = require("../services/order-completion.service");
+const order_status_notification_service_1 = require("../services/order-status-notification.service");
 const idempotency_1 = require("../utils/idempotency");
 const order_lock_1 = require("../utils/order-lock");
 const router = (0, express_1.Router)();
@@ -531,6 +532,12 @@ router.post('/:id/items', restaurant_1.requireRestaurant, async (req, res) => {
                 skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
             });
             emitAcceptedNotificationIfNeeded(existingOrder.status, updatedOrder);
+            await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+                orderId: updatedOrder.id,
+                previousStatus: existingOrder.status,
+                nextStatus: updatedOrder.status,
+                source: 'orders.add-items',
+            }).catch(() => undefined);
         }
         (0, realtime_1.emitRestaurantEvent)(updatedOrder.restaurantId, {
             type: 'order.updated',
@@ -876,6 +883,12 @@ router.put('/:id/status', restaurant_1.requireRestaurant, (0, restaurant_1.autho
             skipForDeliveryOrder: Boolean(order.isDelivery),
         });
         emitAcceptedNotificationIfNeeded(existing.status, order);
+        await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+            orderId: order.id,
+            previousStatus: existing.status,
+            nextStatus: order.status,
+            source: 'orders.update-status',
+        }).catch(() => undefined);
         (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
             type: 'order.updated',
             userId: order.userId,
@@ -959,6 +972,12 @@ router.put('/:id/cancel', restaurant_1.requireRestaurant, async (req, res) => {
             createIfMissing: !cancelled.isDelivery,
             skipForDeliveryOrder: Boolean(cancelled.isDelivery),
         });
+        await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+            orderId: cancelled.id,
+            previousStatus: order.status,
+            nextStatus: cancelled.status,
+            source: 'orders.cancel',
+        }).catch(() => undefined);
         (0, realtime_1.emitRestaurantEvent)(cancelled.restaurantId, {
             type: 'order.updated',
             userId: cancelled.userId,

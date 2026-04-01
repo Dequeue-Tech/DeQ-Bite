@@ -34,4 +34,12 @@ export declare function sendOrderCompletionEmail(input: {
     totalInr: number;
     invoiceUrl: string | null;
 }): Promise<boolean>;
+export declare function sendOrderStatusUpdateEmail(input: {
+    to: string;
+    customerName: string;
+    restaurantName: string;
+    orderId: string;
+    previousStatus: string;
+    nextStatus: string;
+}): Promise<boolean>;
 //# sourceMappingURL=email.d.ts.map

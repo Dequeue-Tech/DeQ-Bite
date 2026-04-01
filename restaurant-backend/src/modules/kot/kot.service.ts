@@ -1,6 +1,7 @@
 import { KOTStatus, OrderStatus, Prisma, PrismaClient } from '@prisma/client';
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { prisma } from '@/config/database';
+import { notifyOrderStatusChange } from '@/services/order-status-notification.service';
 
 export class KOTError extends Error {
   statusCode: number;
@@ -389,7 +390,7 @@ export const updateKOTStatus = async (params: {
       },
     });
 
-    return { ticket: updated, order: updatedOrder };
+    return { ticket: updated, order: updatedOrder, previousOrderStatus: ticket.order.status };
   });
 
   emitRestaurantEvent(params.restaurantId, {
@@ -427,6 +428,12 @@ export const updateKOTStatus = async (params: {
       },
     },
   });
+  await notifyOrderStatusChange({
+    orderId: result.order.id,
+    previousStatus: result.previousOrderStatus,
+    nextStatus: result.order.status,
+    source: 'kot.update-status',
+  }).catch(() => undefined);
 
   return result.ticket;
 };

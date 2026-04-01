@@ -11,8 +11,25 @@ const email_1 = require("../lib/email");
 const sms_1 = require("../lib/sms");
 const logger_1 = require("../utils/logger");
 const accelerate_cache_1 = require("../utils/accelerate-cache");
+const realtime_1 = require("../utils/realtime");
 const router = (0, express_1.Router)();
 const getInvoiceSmsPhone = (order) => order.user?.phone || order.deliveryCustomerPhone || null;
+const emitInvoiceReady = (input) => {
+    (0, realtime_1.emitRestaurantEvent)(input.restaurantId, {
+        type: 'invoice.ready',
+        userId: input.userId,
+        payload: {
+            orderId: input.orderId,
+            invoiceId: input.invoiceId,
+            invoiceNumber: input.invoiceNumber,
+            invoiceUrl: input.invoiceUrl,
+            delivery: {
+                emailSent: input.emailSent,
+                smsSent: input.smsSent,
+            },
+        },
+    });
+};
 const generateInvoiceSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
     methods: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS'])).default([]),
@@ -108,6 +125,16 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
                     },
                 },
             };
+            emitInvoiceReady({
+                restaurantId: req.restaurant.id,
+                orderId,
+                userId: req.user.id,
+                invoiceId: invoice.id,
+                invoiceNumber: invoice.invoiceNumber,
+                invoiceUrl: invoice.pdfPath || null,
+                emailSent: invoice.emailSent,
+                smsSent: invoice.smsSent,
+            });
             return res.status(200).json(response);
         }
         const invoiceNumber = invoice?.invoiceNumber ||
@@ -208,6 +235,16 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             methods: requestedMethods,
             results,
         });
+        emitInvoiceReady({
+            restaurantId: req.restaurant.id,
+            orderId,
+            userId: req.user.id,
+            invoiceId: invoice.id,
+            invoiceNumber: invoice.invoiceNumber,
+            invoiceUrl: invoice.pdfPath || null,
+            emailSent: invoice.emailSent,
+            smsSent: invoice.smsSent,
+        });
         const response = {
             success: true,
             message: 'Invoice generated and delivered successfully',
@@ -222,7 +259,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
                     issuedAt: invoice.issuedAt,
                 },
                 deliveryResults: results,
-                warnings: generateWarnings(requestedMethods, order.user.email, order.user.phone, results),
+                warnings: generateWarnings(requestedMethods, order.user.email, smsPhone, results),
             },
         };
         return res.status(201).json(response);
@@ -408,13 +445,23 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             ...(results.smsSent ? ['SMS'] : []),
         ];
         const updatedSentVia = [...new Set([...invoice.sentVia, ...successfulMethods])];
-        await database_1.prisma.invoice.update({
+        const updatedInvoice = await database_1.prisma.invoice.update({
             where: { id: invoiceId },
             data: {
                 sentVia: updatedSentVia,
                 emailSent: invoice.emailSent || results.emailSent,
                 smsSent: invoice.smsSent || results.smsSent,
             },
+        });
+        emitInvoiceReady({
+            restaurantId: req.restaurant.id,
+            orderId: invoice.orderId,
+            userId: req.user.id,
+            invoiceId: updatedInvoice.id,
+            invoiceNumber: updatedInvoice.invoiceNumber,
+            invoiceUrl: updatedInvoice.pdfPath || null,
+            emailSent: updatedInvoice.emailSent,
+            smsSent: updatedInvoice.smsSent,
         });
         logger_1.logger.info('Invoice resent successfully', {
             invoiceId,
@@ -428,7 +475,7 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             message: 'Invoice resent successfully',
             data: {
                 deliveryResults: results,
-                warnings: generateWarnings(requestedMethods, invoice.order.user.email, invoice.order.user.phone, results),
+                warnings: generateWarnings(requestedMethods, invoice.order.user.email, smsPhone, results),
             },
         };
         res.json(response);

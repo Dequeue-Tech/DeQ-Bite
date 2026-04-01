@@ -66,8 +66,15 @@ export async function sendEmail(options: EmailOptions): Promise<boolean> {
     
     return true;
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown error';
+    const gmailAuthHint =
+      message.includes('535') || message.toLowerCase().includes('username and password not accepted')
+        ? 'Gmail SMTP rejected login. Use a Gmail App Password (requires 2FA) instead of your normal account password.'
+        : undefined;
+
     logger.error('Failed to send email', {
-      error: error instanceof Error ? error.message : 'Unknown error',
+      error: message,
+      ...(gmailAuthHint ? { hint: gmailAuthHint } : {}),
       to: options.to,
       subject: options.subject,
     });
@@ -239,5 +246,38 @@ export async function sendInvoiceEmail(
         contentType: 'application/pdf',
       },
     ],
+  });
+}
+
+export async function sendOrderCompletionEmail(input: {
+  to: string;
+  customerName: string;
+  restaurantName: string;
+  invoiceNumber: string;
+  orderId: string;
+  totalInr: number;
+  invoiceUrl: string | null;
+}): Promise<boolean> {
+  const subject = `Your order ${input.orderId.slice(0, 8).toUpperCase()} is completed - Invoice ${input.invoiceNumber}`;
+  const invoiceLink = input.invoiceUrl
+    ? `<p><a href="${input.invoiceUrl}" class="btn">View Invoice</a></p>`
+    : '<p>Your invoice is ready in the app under your orders history.</p>';
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #222;">
+      <h2>${input.restaurantName}</h2>
+      <p>Hello ${input.customerName}, your order has been completed successfully.</p>
+      <p><strong>Order:</strong> #${input.orderId.slice(0, 8).toUpperCase()}</p>
+      <p><strong>Invoice:</strong> ${input.invoiceNumber}</p>
+      <p><strong>Total:</strong> ₹${input.totalInr.toFixed(2)}</p>
+      ${invoiceLink}
+      <p>Thanks for ordering with us.</p>
+    </div>
+  `;
+
+  return sendEmail({
+    to: input.to,
+    subject,
+    html,
   });
 }

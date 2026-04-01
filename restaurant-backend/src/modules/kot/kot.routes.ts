@@ -104,6 +104,9 @@ router.get('/tickets/order/:orderId', authorizeRestaurantRole('OWNER', 'ADMIN', 
 router.patch('/tickets/order/:orderId/status', authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
   try {
     const orderId = req.params['orderId'] as string;
+    if (!orderId || !orderId.trim()) {
+      return res.status(400).json({ success: false, error: 'Order ID is required' });
+    }
     const payload = statusSchema.parse(req.body);
     const updatePayload: {
       restaurantId: string;
@@ -138,6 +141,9 @@ router.patch('/tickets/order/:orderId/status', authorizeRestaurantRole('OWNER', 
 router.patch('/tickets/order/:orderId/priority', authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
   try {
     const orderId = req.params['orderId'] as string;
+    if (!orderId || !orderId.trim()) {
+      return res.status(400).json({ success: false, error: 'Order ID is required' });
+    }
     const payload = prioritySchema.parse(req.body);
     const updatePayload: {
       restaurantId: string;

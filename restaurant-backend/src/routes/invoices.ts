@@ -10,11 +10,38 @@ import { sendInvoiceSMS } from '@/lib/sms';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { accelerateCache } from '@/utils/accelerate-cache';
+import { emitRestaurantEvent } from '@/utils/realtime';
 
 const router = Router();
 
 const getInvoiceSmsPhone = (order: { user?: { phone?: string | null }; deliveryCustomerPhone?: string | null }) =>
   order.user?.phone || order.deliveryCustomerPhone || null;
+
+const emitInvoiceReady = (input: {
+  restaurantId: string;
+  orderId: string;
+  userId: string;
+  invoiceId: string;
+  invoiceNumber: string;
+  invoiceUrl: string | null;
+  emailSent: boolean;
+  smsSent: boolean;
+}) => {
+  emitRestaurantEvent(input.restaurantId, {
+    type: 'invoice.ready',
+    userId: input.userId,
+    payload: {
+      orderId: input.orderId,
+      invoiceId: input.invoiceId,
+      invoiceNumber: input.invoiceNumber,
+      invoiceUrl: input.invoiceUrl,
+      delivery: {
+        emailSent: input.emailSent,
+        smsSent: input.smsSent,
+      },
+    },
+  });
+};
 
 // Validation schemas
 const generateInvoiceSchema = z.object({
@@ -121,6 +148,17 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
           },
         },
       };
+
+      emitInvoiceReady({
+        restaurantId: req.restaurant!.id,
+        orderId,
+        userId: req.user!.id,
+        invoiceId: invoice.id,
+        invoiceNumber: invoice.invoiceNumber,
+        invoiceUrl: invoice.pdfPath || null,
+        emailSent: invoice.emailSent,
+        smsSent: invoice.smsSent,
+      });
 
       return res.status(200).json(response);
     }
@@ -249,6 +287,17 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
       results,
     });
 
+    emitInvoiceReady({
+      restaurantId: req.restaurant!.id,
+      orderId,
+      userId: req.user!.id,
+      invoiceId: invoice.id,
+      invoiceNumber: invoice.invoiceNumber,
+      invoiceUrl: invoice.pdfPath || null,
+      emailSent: invoice.emailSent,
+      smsSent: invoice.smsSent,
+    });
+
     const response: ApiResponse = {
       success: true,
       message: 'Invoice generated and delivered successfully',
@@ -263,7 +312,7 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
           issuedAt: invoice.issuedAt,
         },
         deliveryResults: results,
-        warnings: generateWarnings(requestedMethods, order.user.email, order.user.phone, results),
+        warnings: generateWarnings(requestedMethods, order.user.email, smsPhone, results),
       },
     };
 
@@ -487,13 +536,24 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
     // Update invoice record
     const updatedSentVia = [...new Set([...invoice.sentVia, ...successfulMethods])];
     
-    await prisma.invoice.update({
+    const updatedInvoice = await prisma.invoice.update({
       where: { id: invoiceId },
       data: {
         sentVia: updatedSentVia,
         emailSent: invoice.emailSent || results.emailSent,
         smsSent: invoice.smsSent || results.smsSent,
       },
+    });
+
+    emitInvoiceReady({
+      restaurantId: req.restaurant!.id,
+      orderId: invoice.orderId,
+      userId: req.user!.id,
+      invoiceId: updatedInvoice.id,
+      invoiceNumber: updatedInvoice.invoiceNumber,
+      invoiceUrl: updatedInvoice.pdfPath || null,
+      emailSent: updatedInvoice.emailSent,
+      smsSent: updatedInvoice.smsSent,
     });
 
     logger.info('Invoice resent successfully', {
@@ -509,7 +569,7 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
       message: 'Invoice resent successfully',
       data: {
         deliveryResults: results,
-        warnings: generateWarnings(requestedMethods, invoice.order.user.email, invoice.order.user.phone, results),
+        warnings: generateWarnings(requestedMethods, invoice.order.user.email, smsPhone, results),
       },
     };
 

@@ -81,6 +81,13 @@ export const updateKOTStatus = async (params: {
   changedByUserId?: string | undefined;
   note?: string | undefined;
 }) => {
+  if (!params.restaurantId?.trim()) {
+    throw new KOTError('Restaurant ID is required', 400);
+  }
+  if (!params.orderId?.trim()) {
+    throw new KOTError('Order ID is required', 400);
+  }
+
   const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
     const ticket = await tx.kOTTicket.findFirst({
       where: {
@@ -141,7 +148,7 @@ export const updateKOTStatus = async (params: {
     });
 
     await tx.order.update({
-      where: { id: params.orderId },
+      where: { id: ticket.orderId },
       data: {
         status: statusToOrderStatus[params.status],
       },
@@ -169,6 +176,13 @@ export const updateKOTPriority = async (params: {
   changedByUserId?: string | undefined;
   note?: string | undefined;
 }) => {
+  if (!params.restaurantId?.trim()) {
+    throw new KOTError('Restaurant ID is required', 400);
+  }
+  if (!params.orderId?.trim()) {
+    throw new KOTError('Order ID is required', 400);
+  }
+
   if (!Number.isInteger(params.priority) || params.priority < -5 || params.priority > 5) {
     throw new KOTError('Priority must be an integer between -5 and 5', 400);
   }

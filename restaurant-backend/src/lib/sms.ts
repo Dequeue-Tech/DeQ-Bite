@@ -207,7 +207,30 @@ export async function sendSMS(options: SMSOptions): Promise<boolean> {
       to: normalizedTo,
       message: options.message,
     };
-    return await provider.send(smsPayload);
+    const retriesRaw = Number(process.env['SMS_RETRY_ATTEMPTS'] || 2);
+    const maxRetries = Number.isFinite(retriesRaw) && retriesRaw >= 0 ? Math.min(Math.floor(retriesRaw), 5) : 2;
+    for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+      const delivered = await provider.send(smsPayload);
+      if (delivered) {
+        if (attempt > 0) {
+          logger.info('SMS delivered after retry', {
+            provider: provider.name,
+            to: normalizedTo,
+            attempt: attempt + 1,
+          });
+        }
+        return true;
+      }
+      if (attempt < maxRetries) {
+        logger.warn('SMS send attempt failed, retrying', {
+          provider: provider.name,
+          to: normalizedTo,
+          nextAttempt: attempt + 2,
+        });
+        await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+      }
+    }
+    return false;
   } catch (error) {
     logger.error('Failed to send SMS', {
       provider: provider.name,
@@ -282,4 +305,18 @@ This is an automated message.`;
     to: phone,
     message,
   });
+}
+
+export async function sendOrderCompletionSMS(
+  phone: string,
+  data: {
+    customerName: string;
+    restaurantName: string;
+    invoiceNumber: string;
+    total: number;
+    invoiceUrl: string;
+  }
+): Promise<boolean> {
+  const message = `Hi ${data.customerName}, your order is completed at ${data.restaurantName}. Invoice ${data.invoiceNumber} (Rs.${data.total.toFixed(2)}): ${data.invoiceUrl}`;
+  return sendSMS({ to: phone, message });
 }

@@ -2,7 +2,6 @@ import app from '@/app';
 import { logger } from '@/utils/logger';
 import { connectDatabase } from '@/config/database';
 import http from 'http';
-import { initSocketServer } from '@/realtime/socket';
 
 const PORT = process.env.PORT || 5000;
 
@@ -21,7 +20,6 @@ async function startServer() {
     await connectDatabase();
 
     const server = http.createServer(app);
-    initSocketServer(server);
 
     server.listen(PORT, () => {
       logger.info(`Server running on port ${PORT}`);

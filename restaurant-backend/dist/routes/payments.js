@@ -12,6 +12,7 @@ const pdf_1 = require("../lib/pdf");
 const restaurant_1 = require("../middleware/restaurant");
 const realtime_1 = require("../utils/realtime");
 const cache_1 = require("../middleware/cache");
+const order_completion_service_1 = require("../services/order-completion.service");
 const router = (0, express_1.Router)();
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
@@ -365,6 +366,12 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
         },
     });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+    await (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
+        logger_1.logger.error('Order completion notification pipeline failed after payment verify', {
+            orderId: order.id,
+            message: error instanceof Error ? error.message : String(error),
+        });
+    });
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,
@@ -575,6 +582,12 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
         },
     });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+    await (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
+        logger_1.logger.error('Order completion notification pipeline failed after cash confirm', {
+            orderId: order.id,
+            message: error instanceof Error ? error.message : String(error),
+        });
+    });
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,
@@ -650,6 +663,12 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
     });
     if (payload.paymentStatus === 'COMPLETED') {
         await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+        await (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
+            logger_1.logger.error('Order completion notification pipeline failed after payment status update', {
+                orderId: order.id,
+                message: error instanceof Error ? error.message : String(error),
+            });
+        });
     }
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',

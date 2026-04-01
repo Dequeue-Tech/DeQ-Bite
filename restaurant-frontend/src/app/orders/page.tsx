@@ -79,10 +79,30 @@ export default function OrdersPage() {
   }, [isAuthenticated, user, ordersPage]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    const timer = setInterval(() => {
+      fetchOrders(ordersPage);
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [isAuthenticated, user, ordersPage]);
+
+  useEffect(() => {
     if (!isAuthenticated || !user || typeof window === 'undefined') return;
     const cleanup = subscribeToOrderEvents({
       scope: 'user',
       onEvent: (event) => {
+        if (event?.type === 'invoice.ready') {
+          const orderId = event?.payload?.orderId as string | undefined;
+          if (!orderId) return;
+          enqueueNotifications([
+            {
+              id: `invoice-${orderId}-${Date.now()}`,
+              message: `Invoice ready for order #${orderId.slice(0, 8).toUpperCase()}`,
+              time: new Date().toLocaleTimeString(),
+            },
+          ]);
+          return;
+        }
         const order = event?.payload?.order;
         if (!order?.id) return;
         handleRealtimeOrderUpdate(order);
@@ -327,25 +347,39 @@ export default function OrdersPage() {
         return;
       }
 
+      const methods: Array<'EMAIL' | 'SMS'> = ['EMAIL'];
+      if (user?.phone) {
+        methods.push('SMS');
+      }
+
       let sendResult: any;
       try {
         const invoiceResponse = await apiClient.getInvoice(orderId);
         if (invoiceResponse?.invoice) {
-          sendResult = await apiClient.resendInvoice(invoiceResponse.invoice.id, ['EMAIL']);
+          sendResult = await apiClient.resendInvoice(invoiceResponse.invoice.id, methods);
         } else {
-          sendResult = await apiClient.generateInvoice(orderId, ['EMAIL']);
+          sendResult = await apiClient.generateInvoice(orderId, methods);
         }
       } catch {
-        sendResult = await apiClient.generateInvoice(orderId, ['EMAIL']);
+        sendResult = await apiClient.generateInvoice(orderId, methods);
       }
 
-      if (!sendResult?.deliveryResults?.emailSent) {
+      const emailSent = Boolean(sendResult?.deliveryResults?.emailSent);
+      const smsSent = Boolean(sendResult?.deliveryResults?.smsSent);
+
+      if (!emailSent && !smsSent) {
         const emailWarning = Array.isArray(sendResult?.warnings)
           ? sendResult.warnings.find((warning: string) => warning.toLowerCase().includes('email'))
           : null;
         throw new Error(emailWarning || 'Email delivery failed. Please check email configuration and try again.');
       }
-      toast.success('Invoice sent to your email');
+      if (emailSent && smsSent) {
+        toast.success('Invoice sent via email and SMS');
+      } else if (emailSent) {
+        toast.success('Invoice sent to your email');
+      } else {
+        toast.success('Email failed, but invoice SMS was sent');
+      }
     } catch (error: any) {
       toast.error(error?.message || 'Failed to send invoice');
     } finally {
@@ -408,13 +442,24 @@ export default function OrdersPage() {
             <ArrowLeft className="h-6 w-6 text-gray-900" />
           </button>
           <h1 className="text-2xl font-black tracking-tight text-gray-900">My Orders</h1>
-          <button
-            onClick={() => fetchOrders(ordersPage)}
-            disabled={loading}
-            className="p-3 -mr-3 hover:bg-gray-50 rounded-full transition-colors disabled:opacity-50 text-orange-600"
-          >
-            <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
-          </button>
+          <div className="flex items-center gap-1">
+            {notificationPermission !== 'granted' && (
+              <button
+                onClick={requestNotificationPermission}
+                className="p-3 hover:bg-orange-50 rounded-full transition-colors text-orange-600"
+                title="Enable order notifications"
+              >
+                <BellRing className="h-5 w-5" />
+              </button>
+            )}
+            <button
+              onClick={() => fetchOrders(ordersPage)}
+              disabled={loading}
+              className="p-3 -mr-3 hover:bg-gray-50 rounded-full transition-colors disabled:opacity-50 text-orange-600"
+            >
+              <RefreshCw className={`h-5 w-5 ${loading ? 'animate-spin' : ''}`} />
+            </button>
+          </div>
         </div>
 
         {/* High-End Pill Navigation */}

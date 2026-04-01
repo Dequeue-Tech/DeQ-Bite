@@ -99,6 +99,7 @@ app.use((0, cors_1.default)(corsOptions));
 const limiter = (0, express_rate_limit_1.default)({
     windowMs: 15 * 60 * 1000,
     max: 200,
+    skip: (req) => req.path.endsWith('/events'),
     message: {
         error: 'Too many requests from this IP, please try again later.',
     },
@@ -111,7 +112,18 @@ app.use(express_1.default.urlencoded({ extended: true }));
 app.use(restaurant_1.attachRestaurant);
 app.use(auth_1.optionalAuth);
 app.use(tenantContext_1.attachTenantContext);
-app.use((0, morgan_1.default)('combined', {
+app.use((0, morgan_1.default)((tokens, req, res) => {
+    const rawUrl = tokens['url']?.(req, res) || '';
+    const sanitizedUrl = rawUrl.replace(/([?&]token=)[^&\s]+/gi, '$1[redacted]');
+    return [
+        tokens['method']?.(req, res),
+        sanitizedUrl,
+        tokens['status']?.(req, res),
+        tokens['res']?.(req, res, 'content-length') || '-',
+        '-',
+        `${tokens['response-time']?.(req, res)} ms`,
+    ].join(' ');
+}, {
     stream: {
         write: (message) => {
             logger_1.logger.info(message.trim());

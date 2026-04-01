@@ -25,4 +25,13 @@ export declare function sendInvoiceEmail(email: string, invoiceData: {
     tableNumber: number;
     restaurantName: string;
 }, pdfBuffer: Buffer): Promise<boolean>;
+export declare function sendOrderCompletionEmail(input: {
+    to: string;
+    customerName: string;
+    restaurantName: string;
+    invoiceNumber: string;
+    orderId: string;
+    totalInr: number;
+    invoiceUrl: string | null;
+}): Promise<boolean>;
 //# sourceMappingURL=email.d.ts.map

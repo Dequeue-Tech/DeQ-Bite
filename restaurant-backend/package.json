@@ -41,7 +41,6 @@
     "openai": "^6.32.0",
     "pdfkit": "^0.17.2",
     "razorpay": "^2.9.6",
-    "socket.io": "^4.8.1",
     "tsconfig-paths": "^4.2.0",
     "twilio": "^5.10.0",
     "uuid": "^13.0.0",

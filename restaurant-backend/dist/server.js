@@ -7,7 +7,6 @@ const app_1 = __importDefault(require("./app"));
 const logger_1 = require("./utils/logger");
 const database_1 = require("./config/database");
 const http_1 = __importDefault(require("http"));
-const socket_1 = require("./realtime/socket");
 const PORT = process.env.PORT || 5000;
 process.on('SIGTERM', () => {
     logger_1.logger.info('SIGTERM received, shutting down gracefully');
@@ -21,7 +20,6 @@ async function startServer() {
     try {
         await (0, database_1.connectDatabase)();
         const server = http_1.default.createServer(app_1.default);
-        (0, socket_1.initSocketServer)(server);
         server.listen(PORT, () => {
             logger_1.logger.info(`Server running on port ${PORT}`);
             logger_1.logger.info(`Health check available at http://localhost:${PORT}/health`);

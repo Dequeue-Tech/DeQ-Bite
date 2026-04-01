@@ -15,6 +15,7 @@ import {
   extractMarketplaceOrderMetadata,
   MarketplaceSourceSystem,
 } from '@/modules/pos/marketplace-order-meta';
+import { processOrderCompletionNotifications } from '@/services/order-completion.service';
 
 const router = Router();
 const TAX_RATE = 0.08;
@@ -884,6 +885,15 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
       userId: order.userId,
       payload: buildOrderEventPayload(order),
     });
+
+    if (order.status === 'COMPLETED') {
+      await processOrderCompletionNotifications(order.id).catch((error) => {
+        logger.error('Order completion notification pipeline failed after order status update', {
+          orderId: order.id,
+          message: error instanceof Error ? error.message : String(error),
+        });
+      });
+    }
 
     return res.json({ success: true, data: attachMarketplaceOrderMetadata(order), message: 'Order status updated' });
   } catch (error) {

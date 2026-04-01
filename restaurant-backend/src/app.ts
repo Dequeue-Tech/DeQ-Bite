@@ -108,6 +108,7 @@ app.use(cors(corsOptions));
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   max: 200,
+  skip: (req) => req.path.endsWith('/events'),
   message: {
     error: 'Too many requests from this IP, please try again later.',
   },
@@ -124,13 +125,26 @@ app.use(attachRestaurant);
 app.use(optionalAuth);
 app.use(attachTenantContext);
 
-app.use(morgan('combined', {
-  stream: {
-    write: (message: string) => {
-      logger.info(message.trim());
+app.use(
+  morgan((tokens, req, res) => {
+    const rawUrl = tokens['url']?.(req, res) || '';
+    const sanitizedUrl = rawUrl.replace(/([?&]token=)[^&\s]+/gi, '$1[redacted]');
+    return [
+      tokens['method']?.(req, res),
+      sanitizedUrl,
+      tokens['status']?.(req, res),
+      tokens['res']?.(req, res, 'content-length') || '-',
+      '-',
+      `${tokens['response-time']?.(req, res)} ms`,
+    ].join(' ');
+  }, {
+    stream: {
+      write: (message: string) => {
+        logger.info(message.trim());
+      },
     },
-  },
-}));
+  })
+);
 
 app.get('/health', (_req, res) => {
   res.status(200).json({

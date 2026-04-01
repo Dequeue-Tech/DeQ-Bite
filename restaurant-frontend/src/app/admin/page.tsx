@@ -169,17 +169,22 @@ export default function AdminPage() {
     }
   };
 
-  const hasAdminAccess = 
-  user?.role === 'OWNER' || 
-  user?.role === 'ADMIN' ||
-  user?.restaurantRole === 'OWNER' || 
-  user?.restaurantRole === 'ADMIN';
+  const hasManagementAccess =
+    user?.role === 'OWNER' ||
+    user?.role === 'ADMIN' ||
+    user?.restaurantRole === 'OWNER' ||
+    user?.restaurantRole === 'ADMIN';
+  const hasStaffOrderAccess =
+    hasManagementAccess ||
+    user?.role === 'STAFF' ||
+    user?.restaurantRole === 'STAFF';
+  const isStaffOnly = hasStaffOrderAccess && !hasManagementAccess;
 
   useEffect(() => { getProfile(); }, [getProfile]);
 
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;
-    if (!hasAdminAccess) {
+    if (!hasStaffOrderAccess) {
       setAdminAccessVerified(false);
       router.replace(homeHref);
       return;
@@ -191,14 +196,24 @@ export default function AdminPage() {
 
     (async () => {
       try {
-        // owner/admin-only endpoint; confirms this user can see admin console
-        await apiClient.getRestaurantUsers();
+        if (hasManagementAccess) {
+          // owner/admin-only endpoint; confirms this user can see full admin console
+          await apiClient.getRestaurantUsers();
+        } else {
+          setActiveTab('dashboard');
+        }
         if (!isActive) return;
         setAdminAccessVerified(true);
-        await loadBaseData();
+        if (hasManagementAccess) {
+          await loadBaseData();
+        }
         if (!isActive) return;
         setOrdersPage(1);
-        await Promise.all([loadOrdersPage(1, 'ALL'), loadDeliveryOrders()]);
+        if (hasManagementAccess) {
+          await Promise.all([loadOrdersPage(1, 'ALL'), loadDeliveryOrders()]);
+        } else {
+          await loadOrdersPage(1, 'ALL');
+        }
       } catch {
         if (!isActive) return;
         setAdminAccessVerified(false);
@@ -213,7 +228,14 @@ export default function AdminPage() {
     return () => {
       isActive = false;
     };
-  }, [user?.restaurantRole, hasAdminAccess, router, homeHref]);
+  }, [user?.restaurantRole, hasStaffOrderAccess, hasManagementAccess, router, homeHref]);
+
+  useEffect(() => {
+    if (!isStaffOnly) return;
+    if (activeTab !== 'dashboard') {
+      setActiveTab('dashboard');
+    }
+  }, [isStaffOnly, activeTab]);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -230,12 +252,24 @@ export default function AdminPage() {
   }, []);
 
   useEffect(() => {
-    if (!hasAdminAccess || typeof window === 'undefined') return;
+    if (!hasStaffOrderAccess || typeof window === 'undefined') return;
     const restaurantSlug = apiClient.getActiveRestaurantSlug();
     const cleanup = subscribeToOrderEvents({
       restaurant: restaurantSlug,
       scope: 'restaurant',
       onEvent: (event) => {
+        if (event?.type === 'invoice.ready') {
+          const orderId = event?.payload?.orderId as string | undefined;
+          if (!orderId) return;
+          enqueueAdminNotifications([
+            {
+              id: `invoice-${orderId}-${Date.now()}`,
+              message: `Invoice ready for order #${orderId.slice(0, 8).toUpperCase()}`,
+              time: new Date().toLocaleTimeString(),
+            },
+          ]);
+          return;
+        }
         const order = event?.payload?.order;
         if (!order?.id) return;
         handleRealtimeOrderUpdate(order, event?.type);
@@ -243,10 +277,10 @@ export default function AdminPage() {
     });
 
     return cleanup;
-  }, [hasAdminAccess]);
+  }, [hasStaffOrderAccess]);
 
   useEffect(() => {
-    if (!hasAdminAccess || typeof window === 'undefined') return;
+    if (!hasManagementAccess || typeof window === 'undefined') return;
     const restaurantSlug = apiClient.getActiveRestaurantSlug();
     const cleanup = subscribeToRestaurantEvents({
       restaurant: restaurantSlug,
@@ -259,17 +293,28 @@ export default function AdminPage() {
     });
 
     return cleanup;
-  }, [hasAdminAccess]);
+  }, [hasManagementAccess]);
 
   useEffect(() => {
-    if (!hasAdminAccess) return;
+    if (!hasStaffOrderAccess) return;
     loadOrdersPage(ordersPage, orderChannelFilter);
-  }, [hasAdminAccess, ordersPage, orderChannelFilter]);
+  }, [hasStaffOrderAccess, ordersPage, orderChannelFilter]);
 
   useEffect(() => {
-    if (!hasAdminAccess || activeTab !== 'delivery') return;
+    if (!hasStaffOrderAccess || isStaffOnly || activeTab !== 'delivery') return;
     loadDeliveryOrders();
-  }, [hasAdminAccess, activeTab]);
+  }, [hasStaffOrderAccess, isStaffOnly, activeTab]);
+
+  useEffect(() => {
+    if (!hasStaffOrderAccess) return;
+    const timer = setInterval(() => {
+      loadOrdersPage(ordersPage, orderChannelFilter);
+      if (!isStaffOnly && activeTab === 'delivery') {
+        loadDeliveryOrders();
+      }
+    }, 30_000);
+    return () => clearInterval(timer);
+  }, [hasStaffOrderAccess, isStaffOnly, ordersPage, orderChannelFilter, activeTab]);
 
   const loadBaseData = async () => {
     try {
@@ -329,6 +374,24 @@ export default function AdminPage() {
   const enqueueAdminNotifications = (newNotifs: Array<{ id: string; message: string; time: string }>) => {
     if (!newNotifs.length) return;
 
+    const playOrderTone = () => {
+      if (typeof window === 'undefined') return;
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const oscillator = audioContext.createOscillator();
+        const gain = audioContext.createGain();
+        oscillator.type = 'sine';
+        oscillator.frequency.value = 880;
+        gain.gain.value = 0.05;
+        oscillator.connect(gain);
+        gain.connect(audioContext.destination);
+        oscillator.start();
+        oscillator.stop(audioContext.currentTime + 0.12);
+      } catch {
+        // ignore audio errors
+      }
+    };
+
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       newNotifs.slice(0, 3).forEach((note) => {
         try {
@@ -343,6 +406,7 @@ export default function AdminPage() {
     }
 
     newNotifs.forEach((note) => toast(note.message));
+    playOrderTone();
 
     setAdminNotifications((prev) => {
       const merged = [...newNotifs, ...prev].slice(0, 20);
@@ -828,16 +892,22 @@ export default function AdminPage() {
     );
   }
 
-  if (!hasAdminAccess || !adminAccessVerified) return null;
+  if (!hasStaffOrderAccess || !adminAccessVerified) return null;
 
-  const tabs = [
-    { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
-    { id: 'orders', label: 'Live Orders', icon: Activity },
-    { id: 'delivery', label: 'Delivery', icon: Bike },
-    { id: 'menu', label: 'Menu', icon: ChefHat },
-    { id: 'users', label: 'Team', icon: Users },
-    { id: 'payments', label: 'Settings', icon: CreditCard },
-  ] as const;
+  const tabs: Array<{ id: 'dashboard' | 'orders' | 'delivery' | 'menu' | 'users' | 'payments'; label: string; icon: any }> = (
+    isStaffOnly
+      ? [
+          { id: 'dashboard', label: 'Staff Dash', icon: LayoutDashboard },
+        ]
+      : [
+          { id: 'dashboard', label: 'Overview', icon: LayoutDashboard },
+          { id: 'orders', label: 'Live Orders', icon: Activity },
+          { id: 'delivery', label: 'Delivery', icon: Bike },
+          { id: 'menu', label: 'Menu', icon: ChefHat },
+          { id: 'users', label: 'Team', icon: Users },
+          { id: 'payments', label: 'Settings', icon: CreditCard },
+        ]
+  );
 
   // Render Form Component used for both Desktop Sidebar and Mobile Modal
   const renderDishForm = () => (
@@ -881,28 +951,46 @@ export default function AdminPage() {
                   <ChefHat className="h-5 w-5 sm:h-6 sm:w-6" />
                 </div>
                 <div>
-                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">Admin Console</h1>
+                  <h1 className="text-xl sm:text-2xl font-black text-gray-900 tracking-tight leading-none">
+                    {isStaffOnly ? 'Staff Console' : 'Admin Console'}
+                  </h1>
                   <p className="text-xs sm:text-sm text-gray-500 mt-1">@{selectedRestaurantSlug}</p>
                 </div>
               </div>
               {/* Mobile Bell Icon */}
-              {notificationPermission === 'default' && (
-                <button onClick={requestNotificationPermission} className="sm:hidden p-2 text-orange-600 bg-orange-50 rounded-xl">
+              {notificationPermission !== 'granted' ? (
+                <button
+                  onClick={requestNotificationPermission}
+                  className="sm:hidden p-2 text-orange-600 bg-orange-50 rounded-xl"
+                  title="Enable notifications"
+                >
                   <BellRing className="h-5 w-5" />
                 </button>
+              ) : (
+                <div className="sm:hidden p-2 text-green-700 bg-green-50 rounded-xl" title="Notifications enabled">
+                  <BellRing className="h-5 w-5" />
+                </div>
               )}
             </div>
 
             {/* Desktop Bell Button */}
-            {notificationPermission === 'default' && (
-              <button
-                onClick={requestNotificationPermission}
-                className="hidden sm:flex items-center gap-2 text-sm font-bold text-orange-600 bg-orange-50 px-4 py-2.5 rounded-xl hover:bg-orange-100 transition-colors"
-              >
-                <BellRing className="h-4 w-4" />
-                Enable Alerts
-              </button>
-            )}
+            <button
+              onClick={notificationPermission === 'granted' ? undefined : requestNotificationPermission}
+              className={`hidden sm:flex items-center gap-2 text-sm font-bold px-4 py-2.5 rounded-xl transition-colors ${
+                notificationPermission === 'granted'
+                  ? 'text-green-700 bg-green-50 cursor-default'
+                  : notificationPermission === 'denied'
+                    ? 'text-red-700 bg-red-50 hover:bg-red-100'
+                    : 'text-orange-600 bg-orange-50 hover:bg-orange-100'
+              }`}
+            >
+              <BellRing className="h-4 w-4" />
+              {notificationPermission === 'granted'
+                ? 'Alerts Enabled'
+                : notificationPermission === 'denied'
+                  ? 'Alerts Blocked'
+                  : 'Enable Alerts'}
+            </button>
           </div>
 
           {/* Edge-to-Edge Scrollable Pill Navigation on Mobile */}
@@ -943,8 +1031,73 @@ export default function AdminPage() {
       {/* Main Content Area */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
         
+        {/* STAFF DASHBOARD TAB */}
+        {activeTab === 'dashboard' && isStaffOnly && (
+          <div className="space-y-6 animate-in fade-in duration-500">
+            <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+                <div>
+                  <h2 className="text-xl sm:text-2xl font-black text-gray-900">Staff Dashboard</h2>
+                  <p className="text-sm text-gray-500 mt-1">Take actions on incoming orders in real time.</p>
+                </div>
+                {notificationPermission !== 'granted' && (
+                  <button
+                    onClick={requestNotificationPermission}
+                    className="inline-flex items-center justify-center gap-2 text-sm font-bold text-orange-700 bg-orange-50 px-4 py-2.5 rounded-xl hover:bg-orange-100 transition-colors"
+                  >
+                    <BellRing className="h-4 w-4" />
+                    Enable Notifications
+                  </button>
+                )}
+              </div>
+
+              <h3 className="text-xs font-black text-gray-500 uppercase tracking-widest mb-3">Take Actions</h3>
+
+              {pendingOrders.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 py-10 text-center">
+                  <p className="text-sm font-semibold text-gray-500">No pending orders right now.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {pendingOrders.map((order) => (
+                    <div key={order.id} className="bg-gray-50 rounded-2xl p-4 border border-gray-100">
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <p className="font-black text-gray-900">#{order.id.slice(0, 8).toUpperCase()}</p>
+                          <p className="text-xs text-gray-500 mt-1">
+                            {order.user?.name || 'Guest'} • {formatInr(order.totalPaise)}
+                          </p>
+                          <span className={`inline-flex mt-2 text-[10px] font-black uppercase px-2 py-0.5 rounded-md border ${getStatusColor(order.status)}`}>
+                            {order.status}
+                          </span>
+                        </div>
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'CONFIRMED')}
+                            disabled={updatingOrderId === order.id}
+                            className="text-xs font-bold px-4 py-2 rounded-xl bg-gray-900 text-white hover:bg-black disabled:opacity-50"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'CANCELLED')}
+                            disabled={updatingOrderId === order.id}
+                            className="text-xs font-bold px-4 py-2 rounded-xl bg-white text-red-600 border border-red-200 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Reject
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
         {/* DASHBOARD TAB */}
-        {activeTab === 'dashboard' && (
+        {activeTab === 'dashboard' && !isStaffOnly && (
           <div className="space-y-6 sm:space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
             {/* KPI Cards */}
             <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4">
@@ -1150,7 +1303,7 @@ export default function AdminPage() {
         )}
 
         {/* ORDERS TAB - Modern Grid Layout */}
-        {activeTab === 'orders' && (
+        {activeTab === 'orders' && !isStaffOnly && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
@@ -1177,6 +1330,53 @@ export default function AdminPage() {
                   </select>
                 </div>
               </div>
+
+              {notificationPermission !== 'granted' && (
+                <div className="mb-5 bg-orange-50 border border-orange-100 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                  <p className="text-xs sm:text-sm font-semibold text-orange-900">
+                    Enable browser notifications for instant order alerts.
+                  </p>
+                  <button
+                    onClick={requestNotificationPermission}
+                    className="inline-flex items-center justify-center gap-2 text-xs sm:text-sm font-bold text-white bg-orange-600 px-4 py-2 rounded-lg hover:bg-orange-700"
+                  >
+                    <BellRing className="h-4 w-4" />
+                    Enable Notifications
+                  </button>
+                </div>
+              )}
+
+              {isStaffOnly && pendingOrders.length > 0 && (
+                <div className="mb-5 bg-gray-50 border border-gray-100 rounded-xl p-3 sm:p-4">
+                  <p className="text-xs sm:text-sm font-semibold text-gray-900 mb-3">Pending Orders - Quick Actions</p>
+                  <div className="space-y-2">
+                    {pendingOrders.slice(0, 5).map((order) => (
+                      <div key={`pending-${order.id}`} className="flex items-center justify-between gap-3 bg-white border border-gray-100 rounded-lg p-2.5">
+                        <div className="min-w-0">
+                          <p className="text-xs font-black text-gray-900">#{order.id.slice(0, 8).toUpperCase()}</p>
+                          <p className="text-[11px] text-gray-500 truncate">{order.user?.name || 'Guest'} - {formatInr(order.totalPaise)}</p>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'CONFIRMED')}
+                            disabled={updatingOrderId === order.id}
+                            className="text-[11px] font-bold px-3 py-1.5 rounded-lg bg-gray-900 text-white hover:bg-black disabled:opacity-50"
+                          >
+                            Accept
+                          </button>
+                          <button
+                            onClick={() => updateOrderStatus(order.id, 'CANCELLED')}
+                            disabled={updatingOrderId === order.id}
+                            className="text-[11px] font-bold px-3 py-1.5 rounded-lg border border-red-200 text-red-600 hover:bg-red-50 disabled:opacity-50"
+                          >
+                            Decline
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
                 <p className="text-xs sm:text-sm text-gray-500 font-medium">
@@ -1326,7 +1526,7 @@ export default function AdminPage() {
         )}
 
         {/* DELIVERY TAB - Modern Grid Layout */}
-        {activeTab === 'delivery' && (
+        {activeTab === 'delivery' && !isStaffOnly && (
           <div className="space-y-6 animate-in fade-in duration-500">
             <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
               <div className="bg-white rounded-2xl sm:rounded-[24px] p-4 sm:p-6 shadow-sm border border-gray-100">

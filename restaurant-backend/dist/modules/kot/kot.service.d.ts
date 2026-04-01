@@ -15,8 +15,8 @@ export declare const createKOTTicketForOrder: (tx: Tx, params: {
     id: string;
     status: import(".prisma/client").$Enums.KOTStatus;
     notes: string | null;
-    orderId: string;
     priority: number;
+    orderId: string;
     placedAt: Date;
     preparingAt: Date | null;
     readyAt: Date | null;

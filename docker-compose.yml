@@ -1,0 +1,53 @@
+services:
+  redis:
+    image: redis:7-alpine
+    profiles: ["local-infra"]
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  backend:
+    build:
+      context: ./restaurant-backend
+      dockerfile: Dockerfile
+      target: builder
+    restart: unless-stopped
+    env_file:
+      - ./restaurant-backend/.env
+    command: npm run dev
+    ports:
+      - "5000:5000"
+
+  frontend:
+    build:
+      context: ./restaurant-frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./restaurant-frontend/.env
+    environment:
+      NEXT_TELEMETRY_DISABLED: "1"
+    command: sh -c "npm i && npm run dev -- --hostname 0.0.0.0 --port 3000"
+    ports:
+      - "3000:3000"
+
+  delivery:
+    build:
+      context: ./restaurant-delivery
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    env_file:
+      - ./restaurant-delivery/.env
+    command: sh -c "npm i && npm run dev -- --host 0.0.0.0 --port 5173"
+    ports:
+      - "5173:5173"
+
+volumes:
+  redis_data:

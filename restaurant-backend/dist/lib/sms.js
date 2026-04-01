@@ -7,11 +7,29 @@ exports.sendSMS = sendSMS;
 exports.generateInvoiceSMSMessage = generateInvoiceSMSMessage;
 exports.sendInvoiceSMS = sendInvoiceSMS;
 exports.sendOrderConfirmationSMS = sendOrderConfirmationSMS;
+exports.sendOrderCompletionSMS = sendOrderCompletionSMS;
 const axios_1 = __importDefault(require("axios"));
 const logger_1 = require("../utils/logger");
 const isValidE164 = (value) => /^\+\d{10,15}$/.test(value);
-const normalizePhone = (value) => value.replace(/[\s()-]/g, '');
+const normalizePhone = (value) => {
+    let cleaned = value.replace(/[^\d+]/g, '');
+    if (cleaned.length === 10 && !cleaned.startsWith('+')) {
+        cleaned = '+91' + cleaned;
+    }
+    else if (cleaned.length > 10 && !cleaned.startsWith('+')) {
+        cleaned = '+' + cleaned;
+    }
+    return cleaned;
+};
 const getConfiguredSMSProvider = () => (process.env['SMS_PROVIDER'] || 'textbelt').trim().toLowerCase();
+const toFast2SMSNumber = (value) => {
+    const digits = value.replace(/\D/g, '');
+    if (digits.length === 10)
+        return digits;
+    if (digits.length === 12 && digits.startsWith('91'))
+        return digits.slice(2);
+    return null;
+};
 const sendViaTextbelt = async (options) => {
     const endpoint = process.env['TEXTBELT_API_URL'] || 'https://textbelt.com/text';
     const key = process.env['TEXTBELT_KEY'];
@@ -40,6 +58,55 @@ const sendViaTextbelt = async (options) => {
     });
     return true;
 };
+const sendViaFast2SMS = async (options) => {
+    const endpoint = process.env['FAST2SMS_API_URL'] || 'https://www.fast2sms.com/dev/bulkV2';
+    const apiKey = process.env['FAST2SMS_API_KEY'];
+    const route = process.env['FAST2SMS_ROUTE'] || 'q';
+    const language = process.env['FAST2SMS_LANGUAGE'] || 'english';
+    const number = toFast2SMSNumber(options.to);
+    if (!number) {
+        logger_1.logger.error('Fast2SMS requires a valid 10-digit Indian mobile number', { to: options.to });
+        return false;
+    }
+    const payload = new URLSearchParams({
+        message: options.message,
+        language,
+        route,
+        numbers: number,
+    });
+    try {
+        const response = await axios_1.default.post(endpoint, payload.toString(), {
+            headers: {
+                authorization: apiKey,
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'Cache-Control': 'no-cache',
+            },
+            timeout: 10000,
+        });
+        const data = response.data;
+        if (data.return === false) {
+            logger_1.logger.error('Fast2SMS rejected the message', {
+                to: options.to,
+                raw_response: data
+            });
+            return false;
+        }
+        logger_1.logger.info('SMS sent successfully', {
+            provider: 'fast2sms',
+            to: options.to,
+            requestId: data.request_id,
+        });
+        return true;
+    }
+    catch (error) {
+        logger_1.logger.error('Fast2SMS API Request Failed', {
+            to: options.to,
+            status: error.response?.status,
+            fast2sms_error: error.response?.data || error.message,
+        });
+        return false;
+    }
+};
 const smsProviders = {
     textbelt: {
         name: 'textbelt',
@@ -50,6 +117,16 @@ const smsProviders = {
             return missing;
         },
         send: sendViaTextbelt,
+    },
+    fast2sms: {
+        name: 'fast2sms',
+        getMissingConfig: () => {
+            const missing = [];
+            if (!process.env['FAST2SMS_API_KEY'])
+                missing.push('FAST2SMS_API_KEY');
+            return missing;
+        },
+        send: sendViaFast2SMS,
     },
     disabled: {
         name: 'disabled',
@@ -62,7 +139,7 @@ const smsProviders = {
 };
 const resolveSMSProvider = () => {
     const providerName = getConfiguredSMSProvider();
-    if (providerName === 'textbelt' || providerName === 'disabled') {
+    if (providerName === 'textbelt' || providerName === 'fast2sms' || providerName === 'disabled') {
         return smsProviders[providerName];
     }
     logger_1.logger.error('Unsupported SMS provider configured', {
@@ -90,7 +167,30 @@ async function sendSMS(options) {
             to: normalizedTo,
             message: options.message,
         };
-        return await provider.send(smsPayload);
+        const retriesRaw = Number(process.env['SMS_RETRY_ATTEMPTS'] || 2);
+        const maxRetries = Number.isFinite(retriesRaw) && retriesRaw >= 0 ? Math.min(Math.floor(retriesRaw), 5) : 2;
+        for (let attempt = 0; attempt <= maxRetries; attempt += 1) {
+            const delivered = await provider.send(smsPayload);
+            if (delivered) {
+                if (attempt > 0) {
+                    logger_1.logger.info('SMS delivered after retry', {
+                        provider: provider.name,
+                        to: normalizedTo,
+                        attempt: attempt + 1,
+                    });
+                }
+                return true;
+            }
+            if (attempt < maxRetries) {
+                logger_1.logger.warn('SMS send attempt failed, retrying', {
+                    provider: provider.name,
+                    to: normalizedTo,
+                    nextAttempt: attempt + 2,
+                });
+                await new Promise((resolve) => setTimeout(resolve, 250 * (attempt + 1)));
+            }
+        }
+        return false;
     }
     catch (error) {
         logger_1.logger.error('Failed to send SMS', {
@@ -129,5 +229,9 @@ This is an automated message.`;
         to: phone,
         message,
     });
+}
+async function sendOrderCompletionSMS(phone, data) {
+    const message = `Hi ${data.customerName}, your order is completed at ${data.restaurantName}. Invoice ${data.invoiceNumber} (Rs.${data.total.toFixed(2)}): ${data.invoiceUrl}`;
+    return sendSMS({ to: phone, message });
 }
 //# sourceMappingURL=sms.js.map

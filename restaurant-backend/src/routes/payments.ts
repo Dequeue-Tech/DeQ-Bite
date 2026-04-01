@@ -11,6 +11,7 @@ import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { cacheResponse } from '@/middleware/cache';
+import { processOrderCompletionNotifications } from '@/services/order-completion.service';
 
 const router = Router();
 
@@ -406,6 +407,12 @@ router.post('/verify', authenticate, requireRestaurant, asyncHandler(async (req:
   });
 
   await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+  await processOrderCompletionNotifications(order.id).catch((error) => {
+    logger.error('Order completion notification pipeline failed after payment verify', {
+      orderId: order.id,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
@@ -652,6 +659,12 @@ router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestauran
   });
 
   await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+  await processOrderCompletionNotifications(order.id).catch((error) => {
+    logger.error('Order completion notification pipeline failed after cash confirm', {
+      orderId: order.id,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  });
 
   emitRestaurantEvent(order.restaurantId, {
     type: 'order.updated',
@@ -736,6 +749,12 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
 
   if (payload.paymentStatus === 'COMPLETED') {
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
+    await processOrderCompletionNotifications(order.id).catch((error) => {
+      logger.error('Order completion notification pipeline failed after payment status update', {
+        orderId: order.id,
+        message: error instanceof Error ? error.message : String(error),
+      });
+    });
   }
 
   emitRestaurantEvent(order.restaurantId, {

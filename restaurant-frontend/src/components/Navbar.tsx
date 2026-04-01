@@ -11,6 +11,24 @@ import {
 import { useCartStore } from '@/store/cart';
 import { apiClient } from '@/lib/api-client';
 
+const BLOCKED_ROOT_SEGMENTS = new Set([
+  '',
+  'auth',
+  'onboarding',
+  'restaurants',
+  'admin',
+  'central-admin',
+  'cart',
+  'checkout',
+  'kitchen',
+  'menu',
+  'orders',
+  'pos',
+  'api',
+  '_next',
+  'favicon.ico',
+]);
+
 const Navbar = () => {
   const router = useRouter();
   const pathname = usePathname();
@@ -62,7 +80,15 @@ const Navbar = () => {
     router.push('/auth/signin');
   };
 
-  const activeRestaurantSlug = apiClient.getActiveRestaurantSlug();
+  const firstPathSegment = pathname.split('/').filter(Boolean)[0]?.toLowerCase() || '';
+  const slugFromPath =
+    !firstPathSegment ||
+    BLOCKED_ROOT_SEGMENTS.has(firstPathSegment) ||
+    firstPathSegment.includes('.')
+      ? null
+      : firstPathSegment;
+  const activeRestaurantSlug = slugFromPath || selectedRestaurantSlug;
+
   const withRestaurant = (path: string) => {
     if (!activeRestaurantSlug) return path;
     return `/${activeRestaurantSlug}${path.startsWith('/') ? path : `/${path}`}`;
@@ -70,7 +96,7 @@ const Navbar = () => {
 
   // Desktop navigation links
   const desktopNavLinks = [
-    { name: 'Home', href: selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/' },
+    { name: 'Home', href: activeRestaurantSlug ? `/${activeRestaurantSlug}` : '/' },
     { name: 'Menu', href: withRestaurant('/menu') },
     ...(isAuthenticated ? [
       { name: 'Orders', href: withRestaurant('/orders') },
@@ -82,7 +108,7 @@ const Navbar = () => {
 
   // Mobile bottom navigation links (max 4 items, profile is in top nav)
   const mobileNavLinks = [
-    { name: 'Home', href: selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/', icon: Home },
+    { name: 'Home', href: activeRestaurantSlug ? `/${activeRestaurantSlug}` : '/', icon: Home },
     { name: 'Menu', href: withRestaurant('/menu'), icon: UtensilsCrossed },
     ...(isAuthenticated ? [
       { name: 'Orders', href: withRestaurant('/orders'), icon: ClipboardList },

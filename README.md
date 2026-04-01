@@ -12,7 +12,7 @@ This project has been **successfully separated** into independent, scalable serv
 ## 🔐 Enhanced Security Features
 
 ### Payment Security
-- ✅ **Server-side signature verification** for all Razorpay payments
+- ✅ **Server-side signature verification** for all Razorpay payment
 - ✅ **JWT authentication** with configurable expiration
 - ✅ **Rate limiting** to prevent abuse and attacks
 - ✅ **CORS protection** for controlled API access

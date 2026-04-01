@@ -177,6 +177,21 @@ const buildOrderEventPayload = (order: any) => ({
   },
 });
 
+const emitAcceptedNotificationIfNeeded = (previousStatus: string, order: any) => {
+  if (previousStatus !== 'PENDING' || order.status !== 'CONFIRMED') {
+    return;
+  }
+
+  emitRestaurantEvent(order.restaurantId, {
+    type: 'order.accepted',
+    userId: order.userId,
+    payload: {
+      ...buildOrderEventPayload(order),
+      message: 'Your order has been accepted.',
+    },
+  });
+};
+
 const parseLegacyDeliveryMeta = (specialInstructions?: string | null): DeliveryMeta | null => {
   if (!specialInstructions) return null;
   const idx = specialInstructions.lastIndexOf(LEGACY_DELIVERY_META_PREFIX);
@@ -758,6 +773,7 @@ router.put('/orders/:id/assign-rider', authorizeRestaurantRole('OWNER', 'ADMIN',
         user: { select: { id: true, name: true, email: true } },
       },
     });
+    emitAcceptedNotificationIfNeeded(existingOrder.status, updated);
 
     emitRestaurantEvent(updated.restaurantId, {
       type: 'order.updated',
@@ -857,6 +873,7 @@ router.put('/orders/:id/status', authorizeRestaurantRole('OWNER', 'ADMIN', 'STAF
         user: { select: { id: true, name: true, email: true } },
       },
     });
+    emitAcceptedNotificationIfNeeded(existingOrder.status, updated);
 
     if (updated.deliveryRiderPhone && ['DELIVERED', 'CANCELLED'].includes(deliveryStatus)) {
       await prisma.deliveryRider.updateMany({

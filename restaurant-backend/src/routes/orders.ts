@@ -6,7 +6,7 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { AuthenticatedRequest } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { emitRestaurantEvent } from '@/utils/realtime';
-import { createKOTTicketForOrder } from '@/modules/kot/kot.service';
+import { createKOTTicketForOrder, syncKOTTicketFromOrderStatus } from '@/modules/kot/kot.service';
 import { deductInventoryForOrder, InventoryError } from '@/modules/inventory/inventory.service';
 import { syncCustomerOrderProfile } from '@/modules/crm/crm.service';
 import {
@@ -135,6 +135,21 @@ const buildOrderEventPayload = (order: any) => {
   }
 
   return { order: payloadOrder };
+};
+
+const emitAcceptedNotificationIfNeeded = (previousStatus: string, order: any) => {
+  if (previousStatus !== 'PENDING' || order.status !== 'CONFIRMED') {
+    return;
+  }
+
+  emitRestaurantEvent(order.restaurantId, {
+    type: 'order.accepted',
+    userId: order.userId,
+    payload: {
+      ...buildOrderEventPayload(order),
+      message: 'Your order has been accepted.',
+    },
+  });
 };
 
 const applyCoupon = async (restaurantId: string, code: string, subtotalPaise: number) => {
@@ -598,6 +613,19 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
       }),
     ]);
 
+    if (updatedOrder.status !== existingOrder.status) {
+      await syncKOTTicketFromOrderStatus({
+        restaurantId: updatedOrder.restaurantId,
+        orderId: updatedOrder.id,
+        orderStatus: updatedOrder.status,
+        changedByUserId: req.user?.id,
+        note: `Synced from order status ${updatedOrder.status}`,
+        createIfMissing: !updatedOrder.isDelivery,
+        skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
+      });
+      emitAcceptedNotificationIfNeeded(existingOrder.status, updatedOrder);
+    }
+
     emitRestaurantEvent(updatedOrder.restaurantId, {
       type: 'order.updated',
       userId: updatedOrder.userId,
@@ -969,6 +997,17 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
       },
     });
 
+    await syncKOTTicketFromOrderStatus({
+      restaurantId: order.restaurantId,
+      orderId: order.id,
+      orderStatus: order.status,
+      changedByUserId: req.user?.id,
+      note: `Synced from order status ${order.status}`,
+      createIfMissing: !order.isDelivery,
+      skipForDeliveryOrder: Boolean(order.isDelivery),
+    });
+    emitAcceptedNotificationIfNeeded(existing.status, order);
+
     emitRestaurantEvent(order.restaurantId, {
       type: 'order.updated',
       userId: order.userId,
@@ -1040,6 +1079,7 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
         id: true,
         userId: true,
         restaurantId: true,
+        isDelivery: true,
         status: true,
         paymentStatus: true,
         paymentProvider: true,
@@ -1049,6 +1089,16 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
         updatedAt: true,
         createdAt: true,
       },
+    });
+
+    await syncKOTTicketFromOrderStatus({
+      restaurantId: cancelled.restaurantId,
+      orderId: cancelled.id,
+      orderStatus: cancelled.status,
+      changedByUserId: req.user?.id,
+      note: 'Synced from order cancellation',
+      createIfMissing: !cancelled.isDelivery,
+      skipForDeliveryOrder: Boolean(cancelled.isDelivery),
     });
 
     emitRestaurantEvent(cancelled.restaurantId, {

@@ -43,6 +43,7 @@ const MAX_TRACKED_EVENT_IDS = 250;
 
 const knownEventTypes = [
   'order.created',
+  'order.accepted',
   'order.updated',
   'invoice.ready',
   'kot.created',
@@ -349,7 +350,7 @@ export const subscribeToOrderEvents = (options: {
     restaurant: options.restaurant,
     scope: options.scope || 'restaurant',
     role: options.role,
-    eventTypes: ['order.created', 'order.updated', 'invoice.ready'],
+    eventTypes: ['order.created', 'order.accepted', 'order.updated', 'invoice.ready'],
     onEvent: options.onEvent,
     onReconnect: options.onReconnect,
   });

@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient, KOTOperationalSummary, KOTStatus, KOTTicket } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
@@ -50,13 +50,55 @@ export default function KitchenPage() {
   const [summary, setSummary] = useState<KOTOperationalSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [kitchenSoundEnabled, setKitchenSoundEnabled] = useState(true);
+  const announcedOrderIdsRef = useRef<Set<string>>(new Set());
 
   const hasKitchenAccess =
     user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN' || user?.restaurantRole === 'STAFF';
 
+  const notifyKitchenNewOrder = (orderId: string) => {
+    if (announcedOrderIdsRef.current.has(orderId)) {
+      return;
+    }
+    announcedOrderIdsRef.current.add(orderId);
+
+    if (kitchenSoundEnabled && typeof window !== 'undefined') {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const scheduleTone = (frequency: number, startOffset: number, duration: number) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = 'square';
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0.06;
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          const startAt = audioContext.currentTime + startOffset;
+          oscillator.start(startAt);
+          oscillator.stop(startAt + duration);
+        };
+        scheduleTone(1220, 0, 0.11);
+        scheduleTone(860, 0.14, 0.18);
+      } catch {
+        // ignore audio errors
+      }
+    }
+
+    toast.success(`New order #${orderId.slice(0, 8).toUpperCase()} awaiting action`);
+  };
+
   useEffect(() => {
     getProfile();
   }, [getProfile]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      setKitchenSoundEnabled(localStorage.getItem('kitchen_notification_sound') !== 'off');
+    } catch {
+      // ignore
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;
@@ -73,13 +115,17 @@ export default function KitchenPage() {
     const cleanup = subscribeToRestaurantEvents({
       restaurant: restaurantSlug,
       role: 'staff',
-      eventTypes: ['kot.created', 'kot.updated', 'kot.priority.updated', 'order.created', 'order.updated'],
+      eventTypes: ['kot.created', 'kot.updated', 'kot.priority.updated', 'order.created', 'order.accepted', 'order.updated'],
       onEvent: (event) => {
         const ticket = (event?.payload as any)?.ticket as KOTTicket | undefined;
         const orderId =
           ((event?.payload as any)?.orderId as string | undefined) ||
           ((event?.payload as any)?.order_id as string | undefined) ||
           ((event?.payload as any)?.order?.id as string | undefined);
+
+        if (orderId && (event.type === 'order.created' || event.type === 'kot.created')) {
+          notifyKitchenNewOrder(orderId);
+        }
 
         if (ticket?.orderId) {
           mergeTicket(ticket);
@@ -93,7 +139,7 @@ export default function KitchenPage() {
           return;
         }
 
-        if ((event.type === 'order.created' || event.type === 'order.updated') && orderId) {
+        if ((event.type === 'order.created' || event.type === 'order.updated' || event.type === 'order.accepted') && orderId) {
           void refreshSingleTicket(orderId);
           void loadSummary();
         }
@@ -105,7 +151,7 @@ export default function KitchenPage() {
     });
 
     return cleanup;
-  }, [hasKitchenAccess]);
+  }, [hasKitchenAccess, kitchenSoundEnabled]);
 
   const mergeTicket = (incoming: KOTTicket) => {
     setTickets((prev) => {

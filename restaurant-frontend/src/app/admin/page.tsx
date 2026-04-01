@@ -37,6 +37,7 @@ type AdminOrderNotification = {
   title: string;
   subtitle: string;
   status: string;
+  alertType?: 'new-order' | 'accepted' | 'status-update' | 'payment-update' | 'invoice';
   timestamp: number;
   unread: boolean;
 };
@@ -291,6 +292,14 @@ export default function AdminPage() {
             title: String(entry.title || entry.message || 'Order Update'),
             subtitle: String(entry.subtitle || entry.message || ''),
             status: String(entry.status || 'UPDATE'),
+            alertType:
+              entry.alertType === 'new-order' ||
+              entry.alertType === 'accepted' ||
+              entry.alertType === 'status-update' ||
+              entry.alertType === 'payment-update' ||
+              entry.alertType === 'invoice'
+                ? entry.alertType
+                : undefined,
             timestamp: Number(entry.timestamp || Date.now()),
             unread: Boolean(entry.unread ?? false),
           }))
@@ -322,6 +331,7 @@ export default function AdminPage() {
               title: `Order #${orderId.slice(0, 8).toUpperCase()} - Invoice Ready`,
               subtitle: 'Invoice generated and ready to download',
               status: 'INVOICE_READY',
+              alertType: 'invoice',
               timestamp: Date.now(),
               unread: true,
             },
@@ -330,7 +340,7 @@ export default function AdminPage() {
         }
         const order = event?.payload?.order;
         if (!order?.id) return;
-        handleRealtimeOrderUpdate(order, event?.type);
+        handleRealtimeOrderUpdate(order, event?.type, event?.eventId);
       },
       onReconnect: ({ lastSyncTimestamp }) => {
         if (!lastSyncTimestamp) return;
@@ -468,19 +478,29 @@ export default function AdminPage() {
   const enqueueAdminNotifications = (newNotifs: AdminOrderNotification[]) => {
     if (!newNotifs.length) return;
 
-    const playOrderTone = () => {
+    const playOrderTone = (variant: 'new-order' | 'default') => {
       if (typeof window === 'undefined') return;
       try {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.05;
-        oscillator.connect(gain);
-        gain.connect(audioContext.destination);
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.12);
+        const scheduleTone = (frequency: number, startOffset: number, duration: number) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0.055;
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          const startAt = audioContext.currentTime + startOffset;
+          oscillator.start(startAt);
+          oscillator.stop(startAt + duration);
+        };
+
+        if (variant === 'new-order') {
+          scheduleTone(1260, 0, 0.12);
+          scheduleTone(920, 0.17, 0.16);
+          return;
+        }
+        scheduleTone(880, 0, 0.12);
       } catch {
         // ignore audio errors
       }
@@ -501,7 +521,8 @@ export default function AdminPage() {
 
     newNotifs.forEach((note) => toast(note.title));
     if (adminSoundEnabled) {
-      playOrderTone();
+      const hasNewOrderAlert = newNotifs.some((note) => note.alertType === 'new-order');
+      playOrderTone(hasNewOrderAlert ? 'new-order' : 'default');
     }
 
     setAdminNotifications((prev) => {
@@ -580,9 +601,15 @@ export default function AdminPage() {
     });
   };
 
-  const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }, eventType?: string) => {
+  const handleRealtimeOrderUpdate = (
+    incoming: Partial<Order> & { id: string },
+    eventType?: string,
+    eventId?: string
+  ) => {
     const notifications: AdminOrderNotification[] = [];
     let added = false;
+    const isCreatedEvent = eventType === 'order.created';
+    const isAcceptedEvent = eventType === 'order.accepted';
 
     setOrders((prev) => {
       const index = prev.findIndex((order) => order.id === incoming.id);
@@ -597,30 +624,48 @@ export default function AdminPage() {
           }
         : (incoming as Order);
 
-      if (!existing) {
+      if (isCreatedEvent) {
         notifications.push({
-          id: `${incoming.id}-new-${Date.now()}`,
+          id: eventId || `${incoming.id}-new-${Date.now()}`,
           orderId: incoming.id,
-          title:
-            eventType === 'order.created'
-              ? `Order #${incoming.id.slice(0, 8).toUpperCase()} - Placed`
-              : `Order #${incoming.id.slice(0, 8).toUpperCase()} - Updated`,
-          subtitle:
-            eventType === 'order.created'
-              ? 'A new order has arrived'
-              : 'An order was updated',
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Placed`,
+          subtitle: 'A new order has arrived and needs acceptance',
           status: incoming.status || 'PENDING',
+          alertType: 'new-order',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } else if (isAcceptedEvent) {
+        notifications.push({
+          id: eventId || `${incoming.id}-accepted-${Date.now()}`,
+          orderId: incoming.id,
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Accepted`,
+          subtitle: 'Order moved from Pending to Accepted',
+          status: incoming.status || nextOrder.status || 'CONFIRMED',
+          alertType: 'accepted',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } else if (!existing) {
+        notifications.push({
+          id: eventId || `${incoming.id}-new-${Date.now()}`,
+          orderId: incoming.id,
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Updated`,
+          subtitle: 'An order was updated',
+          status: incoming.status || 'PENDING',
+          alertType: 'status-update',
           timestamp: Date.now(),
           unread: true,
         });
       } else {
-        if (incoming.status && incoming.status !== existing.status) {
+        if (incoming.status && incoming.status !== existing.status && !isAcceptedEvent) {
           notifications.push({
             id: `${incoming.id}-status-${Date.now()}`,
             orderId: incoming.id,
             title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - ${incoming.status.replace(/_/g, ' ')}`,
             subtitle: `Status changed from ${existing.status} to ${incoming.status}`,
             status: incoming.status,
+            alertType: 'status-update',
             timestamp: Date.now(),
             unread: true,
           });
@@ -632,6 +677,7 @@ export default function AdminPage() {
             title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Payment ${incoming.paymentStatus}`,
             subtitle: `Payment status updated from ${existing.paymentStatus} to ${incoming.paymentStatus}`,
             status: incoming.paymentStatus,
+            alertType: 'payment-update',
             timestamp: Date.now(),
             unread: true,
           });

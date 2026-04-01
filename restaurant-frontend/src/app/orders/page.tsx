@@ -54,6 +54,7 @@ type OrderNotification = {
   title: string;
   subtitle: string;
   status: string;
+  alertType?: 'new-order' | 'accepted' | 'status-update' | 'payment-update' | 'invoice';
   timestamp: number;
   unread: boolean;
 };
@@ -139,6 +140,7 @@ export default function OrdersPage() {
               title: `Order #${orderId.slice(0, 8).toUpperCase()} - Invoice Ready`,
               subtitle: 'Invoice generated and ready to download',
               status: 'INVOICE_READY',
+              alertType: 'invoice',
               timestamp: Date.now(),
               unread: true,
             },
@@ -147,7 +149,7 @@ export default function OrdersPage() {
         }
         const order = event?.payload?.order;
         if (!order?.id) return;
-        handleRealtimeOrderUpdate(order);
+        handleRealtimeOrderUpdate(order, event?.type, event?.eventId);
       },
       onReconnect: ({ lastSyncTimestamp }) => {
         if (!lastSyncTimestamp) return;
@@ -176,6 +178,14 @@ export default function OrdersPage() {
             title: String(entry.title || entry.message || 'Order Update'),
             subtitle: String(entry.subtitle || entry.message || ''),
             status: String(entry.status || 'UPDATE'),
+            alertType:
+              entry.alertType === 'new-order' ||
+              entry.alertType === 'accepted' ||
+              entry.alertType === 'status-update' ||
+              entry.alertType === 'payment-update' ||
+              entry.alertType === 'invoice'
+                ? entry.alertType
+                : undefined,
             timestamp: Number(entry.timestamp || Date.now()),
             unread: Boolean(entry.unread ?? false),
           }))
@@ -196,6 +206,34 @@ export default function OrdersPage() {
 
   const enqueueNotifications = (newNotifs: OrderNotification[]) => {
     if (!newNotifs.length) return;
+
+    const playOrderTone = (variant: 'accepted' | 'default') => {
+      if (typeof window === 'undefined') return;
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const scheduleTone = (frequency: number, startOffset: number, duration: number) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0.05;
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          const startAt = audioContext.currentTime + startOffset;
+          oscillator.start(startAt);
+          oscillator.stop(startAt + duration);
+        };
+
+        if (variant === 'accepted') {
+          scheduleTone(740, 0, 0.11);
+          scheduleTone(1040, 0.14, 0.16);
+          return;
+        }
+        scheduleTone(860, 0, 0.11);
+      } catch {
+        // ignore audio errors
+      }
+    };
 
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       newNotifs.slice(0, 3).forEach((note) => {
@@ -219,6 +257,11 @@ export default function OrdersPage() {
       } else {
         triggerHaptic('status_update');
       }
+    }
+
+    if (soundEnabled) {
+      const hasAccepted = newNotifs.some((note) => note.alertType === 'accepted');
+      playOrderTone(hasAccepted ? 'accepted' : 'default');
     }
 
     setNotifications((prev) => {
@@ -274,9 +317,15 @@ export default function OrdersPage() {
     });
   };
 
-  const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }) => {
+  const handleRealtimeOrderUpdate = (
+    incoming: Partial<Order> & { id: string },
+    eventType?: string,
+    eventId?: string
+  ) => {
     let added = false;
     const nextNotifications: OrderNotification[] = [];
+    const isCreatedEvent = eventType === 'order.created';
+    const isAcceptedEvent = eventType === 'order.accepted';
     setOrders((prev) => {
       const index = prev.findIndex((order) => order.id === incoming.id);
       const existing = index >= 0 ? prev[index] : null;
@@ -290,14 +339,32 @@ export default function OrdersPage() {
           }
         : (incoming as Order);
 
-      if (existing) {
+      if (isAcceptedEvent) {
+        nextNotifications.push({
+          id: eventId || `${incoming.id}-accepted-${Date.now()}`,
+          orderId: incoming.id,
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Accepted`,
+          subtitle: 'Your order has been accepted.',
+          status: incoming.status || nextOrder.status || 'CONFIRMED',
+          alertType: 'accepted',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } else if (existing) {
         if (incoming.status && incoming.status !== existing.status) {
           nextNotifications.push({
             id: `${incoming.id}-status-${Date.now()}`,
             orderId: incoming.id,
-            title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - ${incoming.status.replace(/_/g, ' ')}`,
-            subtitle: `Status changed from ${existing.status} to ${incoming.status}`,
+            title:
+              incoming.status === 'CONFIRMED'
+                ? `Order #${incoming.id.slice(0, 8).toUpperCase()} - Accepted`
+                : `Order #${incoming.id.slice(0, 8).toUpperCase()} - ${incoming.status.replace(/_/g, ' ')}`,
+            subtitle:
+              incoming.status === 'CONFIRMED'
+                ? 'Your order has been accepted.'
+                : `Status changed from ${existing.status} to ${incoming.status}`,
             status: incoming.status,
+            alertType: incoming.status === 'CONFIRMED' ? 'accepted' : 'status-update',
             timestamp: Date.now(),
             unread: true,
           });
@@ -309,17 +376,25 @@ export default function OrdersPage() {
             title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Payment ${incoming.paymentStatus}`,
             subtitle: `Payment status updated from ${existing.paymentStatus} to ${incoming.paymentStatus}`,
             status: incoming.paymentStatus,
+            alertType: 'payment-update',
             timestamp: Date.now(),
             unread: true,
           });
         }
       } else {
         nextNotifications.push({
-          id: `${incoming.id}-new-${Date.now()}`,
+          id: eventId || `${incoming.id}-new-${Date.now()}`,
           orderId: incoming.id,
-          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Placed`,
-          subtitle: 'Your order was placed successfully',
+          title:
+            isCreatedEvent
+              ? `Order #${incoming.id.slice(0, 8).toUpperCase()} - Placed`
+              : `Order #${incoming.id.slice(0, 8).toUpperCase()} - Updated`,
+          subtitle:
+            isCreatedEvent
+              ? 'Your order was placed successfully'
+              : 'Order details were updated',
           status: incoming.status || 'PENDING',
+          alertType: isCreatedEvent ? 'new-order' : 'status-update',
           timestamp: Date.now(),
           unread: true,
         });
@@ -372,9 +447,16 @@ export default function OrdersPage() {
               newNotifs.push({
                 id: `${order.id}-status-${Date.now()}`,
                 orderId: order.id,
-                title: `Order #${order.id.slice(0, 8).toUpperCase()} - ${order.status.replace(/_/g, ' ')}`,
-                subtitle: `Status changed from ${prev.status} to ${order.status}`,
+                title:
+                  order.status === 'CONFIRMED'
+                    ? `Order #${order.id.slice(0, 8).toUpperCase()} - Accepted`
+                    : `Order #${order.id.slice(0, 8).toUpperCase()} - ${order.status.replace(/_/g, ' ')}`,
+                subtitle:
+                  order.status === 'CONFIRMED'
+                    ? 'Your order has been accepted.'
+                    : `Status changed from ${prev.status} to ${order.status}`,
                 status: order.status,
+                alertType: order.status === 'CONFIRMED' ? 'accepted' : 'status-update',
                 timestamp: Date.now(),
                 unread: true,
               });
@@ -386,6 +468,7 @@ export default function OrdersPage() {
                 title: `Order #${order.id.slice(0, 8).toUpperCase()} - Payment ${order.paymentStatus}`,
                 subtitle: `Payment status updated from ${prev.paymentStatus} to ${order.paymentStatus}`,
                 status: order.paymentStatus,
+                alertType: 'payment-update',
                 timestamp: Date.now(),
                 unread: true,
               });

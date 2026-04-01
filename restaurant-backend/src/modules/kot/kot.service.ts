@@ -1,4 +1,4 @@
-import { KOTStatus, Prisma, PrismaClient } from '@prisma/client';
+import { KOTStatus, OrderStatus, Prisma, PrismaClient } from '@prisma/client';
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { prisma } from '@/config/database';
 
@@ -21,6 +21,16 @@ const statusToOrderStatus: Record<KOTStatus, 'PENDING' | 'PREPARING' | 'READY' |
   SERVED: 'SERVED',
 };
 
+const orderStatusToKOTStatus: Record<OrderStatus, KOTStatus> = {
+  PENDING: 'PLACED',
+  CONFIRMED: 'PLACED',
+  PREPARING: 'PREPARING',
+  READY: 'READY',
+  SERVED: 'SERVED',
+  COMPLETED: 'SERVED',
+  CANCELLED: 'SERVED',
+};
+
 const transitions: Record<KOTStatus, KOTStatus[]> = {
   PLACED: ['PREPARING'],
   PREPARING: ['READY'],
@@ -29,6 +39,45 @@ const transitions: Record<KOTStatus, KOTStatus[]> = {
 };
 
 const ACTIVE_STATUSES: KOTStatus[] = ['PLACED', 'PREPARING', 'READY'];
+const buildLifecycleTimestamps = (
+  targetStatus: KOTStatus,
+  existing: {
+    preparingAt: Date | null;
+    readyAt: Date | null;
+    servedAt: Date | null;
+  },
+  now: Date
+) => {
+  if (targetStatus === 'PLACED') {
+    return {
+      preparingAt: null,
+      readyAt: null,
+      servedAt: null,
+    };
+  }
+
+  if (targetStatus === 'PREPARING') {
+    return {
+      preparingAt: existing.preparingAt || now,
+      readyAt: null,
+      servedAt: null,
+    };
+  }
+
+  if (targetStatus === 'READY') {
+    return {
+      preparingAt: existing.preparingAt || now,
+      readyAt: existing.readyAt || now,
+      servedAt: null,
+    };
+  }
+
+  return {
+    preparingAt: existing.preparingAt || now,
+    readyAt: existing.readyAt || now,
+    servedAt: existing.servedAt || now,
+  };
+};
 const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 
 const toMinutes = (from: Date, to: Date) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
@@ -73,6 +122,166 @@ export const createKOTTicketForOrder = async (
   });
 
   return ticket;
+};
+
+export const syncKOTTicketFromOrderStatus = async (params: {
+  restaurantId: string;
+  orderId: string;
+  orderStatus: OrderStatus;
+  changedByUserId?: string | undefined;
+  note?: string | undefined;
+  createIfMissing?: boolean | undefined;
+  skipForDeliveryOrder?: boolean | undefined;
+}) => {
+  if (!params.restaurantId?.trim()) {
+    throw new KOTError('Restaurant ID is required', 400);
+  }
+  if (!params.orderId?.trim()) {
+    throw new KOTError('Order ID is required', 400);
+  }
+  if (params.skipForDeliveryOrder) {
+    return null;
+  }
+
+  const mappedStatus = orderStatusToKOTStatus[params.orderStatus];
+  const now = new Date();
+
+  const result = await prisma.$transaction(async (tx: Prisma.TransactionClient) => {
+    const ticket = await tx.kOTTicket.findFirst({
+      where: {
+        restaurantId: params.restaurantId,
+        orderId: params.orderId,
+      },
+      include: {
+        order: {
+          include: {
+            items: { include: { menuItem: true } },
+            table: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    if (!ticket && !params.createIfMissing) {
+      return null;
+    }
+
+    if (!ticket) {
+      const timestamps = buildLifecycleTimestamps(mappedStatus, {
+        preparingAt: null,
+        readyAt: null,
+        servedAt: null,
+      }, now);
+
+      const created = await tx.kOTTicket.create({
+        data: {
+          restaurantId: params.restaurantId,
+          orderId: params.orderId,
+          status: mappedStatus,
+          priority: 0,
+          ...(params.note ? { notes: params.note } : {}),
+          createdByUserId: params.changedByUserId ?? null,
+          ...timestamps,
+        },
+        include: {
+          order: {
+            include: {
+              items: { include: { menuItem: true } },
+              table: true,
+              user: {
+                select: {
+                  id: true,
+                  name: true,
+                  email: true,
+                },
+              },
+            },
+          },
+        },
+      });
+
+      await tx.kOTTicketEvent.create({
+        data: {
+          restaurantId: params.restaurantId,
+          kotTicketId: created.id,
+          toStatus: mappedStatus,
+          changedByUserId: params.changedByUserId ?? null,
+          note: params.note || `Synced from order status ${params.orderStatus}`,
+        },
+      });
+
+      return { changed: true as const, ticket: created };
+    }
+
+    if (ticket.status === mappedStatus) {
+      return { changed: false as const, ticket };
+    }
+
+    const timestamps = buildLifecycleTimestamps(mappedStatus, {
+      preparingAt: ticket.preparingAt,
+      readyAt: ticket.readyAt,
+      servedAt: ticket.servedAt,
+    }, now);
+
+    const updated = await tx.kOTTicket.update({
+      where: { id: ticket.id },
+      data: {
+        status: mappedStatus,
+        ...timestamps,
+      },
+      include: {
+        order: {
+          include: {
+            items: { include: { menuItem: true } },
+            table: true,
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+              },
+            },
+          },
+        },
+      },
+    });
+
+    await tx.kOTTicketEvent.create({
+      data: {
+        restaurantId: params.restaurantId,
+        kotTicketId: ticket.id,
+        fromStatus: ticket.status,
+        toStatus: mappedStatus,
+        changedByUserId: params.changedByUserId ?? null,
+        note: params.note || `Synced from order status ${params.orderStatus}`,
+      },
+    });
+
+    return { changed: true as const, ticket: updated };
+  });
+
+  if (!result) return null;
+
+  if (result.changed) {
+    emitRestaurantEvent(params.restaurantId, {
+      type: 'kot.updated',
+      payload: {
+        ticket: result.ticket,
+        orderId: params.orderId,
+        status: result.ticket.status,
+        source: 'order.status.sync',
+      },
+    });
+  }
+
+  return result.ticket;
 };
 
 export const updateKOTStatus = async (params: {

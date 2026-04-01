@@ -1,4 +1,4 @@
-import { KOTStatus, Prisma, PrismaClient } from '@prisma/client';
+import { KOTStatus, OrderStatus, Prisma, PrismaClient } from '@prisma/client';
 export declare class KOTError extends Error {
     statusCode: number;
     constructor(message: string, statusCode?: number);
@@ -25,6 +25,15 @@ export declare const createKOTTicketForOrder: (tx: Tx, params: {
     updatedAt: Date;
     createdByUserId: string | null;
 }>;
+export declare const syncKOTTicketFromOrderStatus: (params: {
+    restaurantId: string;
+    orderId: string;
+    orderStatus: OrderStatus;
+    changedByUserId?: string | undefined;
+    note?: string | undefined;
+    createIfMissing?: boolean | undefined;
+    skipForDeliveryOrder?: boolean | undefined;
+}) => Promise<any>;
 export declare const updateKOTStatus: (params: {
     restaurantId: string;
     orderId: string;

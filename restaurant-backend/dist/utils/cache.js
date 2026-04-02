@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.invalidateCacheByPrefix = void 0;
-const redis_1 = require("./redis");
+const redis_1 = require("@/utils/redis");
 const invalidateCacheByPrefix = async (prefix, restaurantId) => {
     const client = (0, redis_1.getRedisClient)();
     if (!client || client.status !== 'ready')

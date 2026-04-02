@@ -2,10 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const auth_1 = require("../../middleware/auth");
-const restaurant_1 = require("../../middleware/restaurant");
-const database_1 = require("../../config/database");
-const inventory_service_1 = require("../../modules/inventory/inventory.service");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const database_1 = require("@/config/database");
+const inventory_service_1 = require("@/modules/inventory/inventory.service");
 const router = (0, express_1.Router)();
 const rawMaterialSchema = zod_1.z.object({
     name: zod_1.z.string().min(2).max(120),

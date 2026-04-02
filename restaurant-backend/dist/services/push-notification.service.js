@@ -5,8 +5,8 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notifyCriticalOrderPush = exports.deactivatePushSubscription = exports.upsertPushSubscription = exports.getPublicVapidKey = void 0;
 const web_push_1 = __importDefault(require("web-push"));
-const database_1 = require("../config/database");
-const logger_1 = require("../utils/logger");
+const database_1 = require("@/config/database");
+const logger_1 = require("@/utils/logger");
 let webPushInitialized = false;
 const roleScopeSet = new Set(['admin', 'staff', 'customer', 'rider']);
 const normalizeRoleScope = (value) => {

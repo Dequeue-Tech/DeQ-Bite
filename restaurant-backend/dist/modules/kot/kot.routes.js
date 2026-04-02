@@ -3,11 +3,11 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
 const client_1 = require("@prisma/client");
-const auth_1 = require("../../middleware/auth");
-const restaurant_1 = require("../../middleware/restaurant");
-const database_1 = require("../../config/database");
-const idempotency_1 = require("../../utils/idempotency");
-const kot_service_1 = require("../../modules/kot/kot.service");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const database_1 = require("@/config/database");
+const idempotency_1 = require("@/utils/idempotency");
+const kot_service_1 = require("@/modules/kot/kot.service");
 const router = (0, express_1.Router)();
 const statusSchema = zod_1.z.object({
     status: zod_1.z.nativeEnum(client_1.KOTStatus),

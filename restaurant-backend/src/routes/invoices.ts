@@ -6,7 +6,7 @@ import { requireRestaurant } from '@/middleware/restaurant';
 import { AppError, asyncHandler } from '@/middleware/errorHandler';
 import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { sendInvoiceEmail } from '@/lib/email';
-import { sendInvoiceSMS } from '@/lib/sms';
+import { sendOrderCompletionSMS } from '@/lib/sms';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { accelerateCache } from '@/utils/accelerate-cache';
@@ -245,13 +245,14 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
 
     // Send SMS if requested and phone is available
     if (requestedMethods.includes('SMS') && smsPhone) {
-      results.smsSent = await sendInvoiceSMS(
+      results.smsSent = await sendOrderCompletionSMS(
         smsPhone,
         {
           customerName: deliveryContact.name,
           invoiceNumber,
           total: order.totalPaise / 100,
           restaurantName: invoiceData.restaurantName,
+          invoiceUrl: invoice.pdfPath || null,
         }
       );
     }
@@ -536,9 +537,12 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
 
     // Send SMS if requested
     if (requestedMethods.includes('SMS') && smsPhone) {
-      results.smsSent = await sendInvoiceSMS(
+      results.smsSent = await sendOrderCompletionSMS(
         smsPhone,
-        invoiceData
+        {
+          ...invoiceData,
+          invoiceUrl: invoice.pdfPath || null,
+        }
       );
     }
 

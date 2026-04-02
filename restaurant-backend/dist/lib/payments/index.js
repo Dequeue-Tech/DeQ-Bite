@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getEnabledProviders = exports.getPaymentProvider = void 0;
-const errorHandler_1 = require("../../middleware/errorHandler");
-const razorpay_1 = require("../razorpay");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const razorpay_1 = require("@/lib/razorpay");
 const razorpayProvider = {
     provider: 'RAZORPAY',
     isEnabled: () => Boolean(process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET),

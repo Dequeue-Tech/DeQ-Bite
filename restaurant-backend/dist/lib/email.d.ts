@@ -32,10 +32,9 @@ export declare function sendOrderCompletionEmail(input: {
     invoiceNumber: string;
     orderId: string;
     totalInr: number;
-    invoiceUrl: string | null;
     orderDate?: string;
     tableNumber?: number;
-}): Promise<boolean>;
+}, pdfBuffer: Buffer): Promise<boolean>;
 export declare function sendOrderConfirmationEmail(input: {
     to: string;
     customerName: string;

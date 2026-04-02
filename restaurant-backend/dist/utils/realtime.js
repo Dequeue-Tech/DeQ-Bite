@@ -2,9 +2,9 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getBufferedEvents = exports.onUserEvent = exports.onRestaurantEvent = exports.emitRoleScopedRestaurantEvent = exports.emitRestaurantEvent = void 0;
 const events_1 = require("events");
-const redis_1 = require("./redis");
-const logger_1 = require("./logger");
-const push_notification_service_1 = require("../services/push-notification.service");
+const redis_1 = require("@/utils/redis");
+const logger_1 = require("@/utils/logger");
+const push_notification_service_1 = require("@/services/push-notification.service");
 const emitter = new events_1.EventEmitter();
 emitter.setMaxListeners(0);
 let redisBridgeInitialized = false;

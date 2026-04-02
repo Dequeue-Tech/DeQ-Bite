@@ -1,11 +1,11 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.notifyOrderStatusChange = void 0;
-const database_1 = require("../config/database");
-const email_1 = require("../lib/email");
-const sms_1 = require("../lib/sms");
-const order_contact_service_1 = require("../services/order-contact.service");
-const logger_1 = require("../utils/logger");
+const database_1 = require("@/config/database");
+const email_1 = require("@/lib/email");
+const sms_1 = require("@/lib/sms");
+const order_contact_service_1 = require("@/services/order-contact.service");
+const logger_1 = require("@/utils/logger");
 const withRetries = async (label, fn, retries = 2) => {
     let attempt = 0;
     let lastError;

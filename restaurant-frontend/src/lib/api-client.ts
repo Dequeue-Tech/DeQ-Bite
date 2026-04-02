@@ -249,6 +249,16 @@ export interface DeliveryRider {
   updatedAt: string;
 }
 
+export type PushRoleScope = 'admin' | 'staff' | 'customer' | 'rider';
+
+export interface PushSubscriptionPayload {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
 export type MutationConsistencyOptions = {
   expectedUpdatedAt?: string;
   idempotencyKey?: string;
@@ -795,6 +805,36 @@ class ApiClient {
     const hasQuery = base.includes('?');
     const connector = hasQuery ? '&' : '?';
     return `${base}${connector}token=${encodeURIComponent(token)}`;
+  }
+
+  async getPushVapidPublicKey(): Promise<string> {
+    const response = await this.api.get<ApiResponse<{ publicKey: string }>>(
+      this.buildTenantEndpoint('/push/vapid-public-key')
+    );
+    if (response.data.success && response.data.data?.publicKey) {
+      return response.data.data.publicKey;
+    }
+    throw new Error(response.data.error || 'Push public key unavailable');
+  }
+
+  async subscribeToPush(payload: { roleScope: PushRoleScope; subscription: PushSubscriptionPayload }): Promise<void> {
+    const response = await this.api.post<ApiResponse>(
+      this.buildTenantEndpoint('/push/subscribe'),
+      payload
+    );
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to save push subscription');
+    }
+  }
+
+  async unsubscribeFromPush(endpoint: string): Promise<void> {
+    const response = await this.api.delete<ApiResponse>(
+      this.buildTenantEndpoint('/push/unsubscribe'),
+      { data: { endpoint } }
+    );
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to remove push subscription');
+    }
   }
 
   async syncFirebaseSession(payload: { name?: string; phone?: string } = {}, token?: string): Promise<User> {

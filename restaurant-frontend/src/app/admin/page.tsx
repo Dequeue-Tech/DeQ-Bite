@@ -12,6 +12,7 @@ import {
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
 import { subscribeToOrderEvents, subscribeToRestaurantEvents } from '@/lib/realtime-client';
+import { ensurePushSubscription, syncPushSubscriptionIfGranted } from '@/lib/push-notifications';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, 
   ResponsiveContainer, CartesianGrid 
@@ -315,6 +316,12 @@ export default function AdminPage() {
       // ignore
     }
   }, []);
+
+  useEffect(() => {
+    if (!hasStaffOrderAccess || typeof window === 'undefined') return;
+    const roleScope = hasManagementAccess ? 'admin' : 'staff';
+    syncPushSubscriptionIfGranted(roleScope).catch(() => undefined);
+  }, [hasStaffOrderAccess, hasManagementAccess]);
 
   useEffect(() => {
     if (!hasStaffOrderAccess || typeof window === 'undefined') return;
@@ -1072,10 +1079,16 @@ export default function AdminPage() {
 
   const requestNotificationPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) return toast.error('Browser notifications are not supported');
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-    if (permission === 'granted') toast.success('Admin notifications enabled');
-    else if (permission === 'denied') toast.error('Notifications blocked.');
+    try {
+      await ensurePushSubscription(hasManagementAccess ? 'admin' : 'staff');
+      setNotificationPermission('granted');
+      toast.success('Admin notifications enabled');
+    } catch (error: any) {
+      const permission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+      setNotificationPermission(permission as NotificationPermission);
+      if (permission === 'denied') toast.error('Notifications blocked.');
+      else toast.error(error?.message || 'Unable to enable notifications');
+    }
   };
 
   const createMenuItem = async () => {

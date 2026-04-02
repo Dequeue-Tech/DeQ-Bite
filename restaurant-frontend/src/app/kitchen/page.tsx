@@ -7,6 +7,7 @@ import { useAuthStore } from '@/store/auth';
 import { ChefHat, RefreshCcw, Clock, Flame, Utensils, ArrowRight, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { subscribeToRestaurantEvents } from '@/lib/realtime-client';
+import { syncPushSubscriptionIfGranted } from '@/lib/push-notifications';
 
 const kitchenFlow: KOTStatus[] = ['PLACED', 'PREPARING', 'READY'];
 const nextStatusMap: Record<KOTStatus, KOTStatus | null> = {
@@ -120,6 +121,11 @@ export default function KitchenPage() {
       // ignore
     }
   }, []);
+
+  useEffect(() => {
+    if (!hasKitchenAccess || typeof window === 'undefined') return;
+    syncPushSubscriptionIfGranted('staff').catch(() => undefined);
+  }, [hasKitchenAccess]);
 
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;

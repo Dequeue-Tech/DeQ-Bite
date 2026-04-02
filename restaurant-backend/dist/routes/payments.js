@@ -17,6 +17,7 @@ const order_status_notification_service_1 = require("../services/order-status-no
 const idempotency_1 = require("../utils/idempotency");
 const order_lock_1 = require("../utils/order-lock");
 const kot_service_1 = require("../modules/kot/kot.service");
+const order_contact_service_1 = require("../services/order-contact.service");
 const router = (0, express_1.Router)();
 const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 const createPaymentSchema = zod_1.z.object({
@@ -98,13 +99,14 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
     });
     if (!existingInvoice) {
         const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-        const customerName = order.user?.name || 'Guest';
-        const customerEmail = order.user?.email || undefined;
-        const customerPhone = order.user?.phone || '';
+        const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
+        const customerName = placementContact.name || order.user?.name || 'Guest';
+        const customerEmail = placementContact.email || undefined;
+        const customerPhone = placementContact.phone || '';
         const tableNumber = order.table?.number ? String(order.table.number) : 'N/A';
         const invoiceData = {
             customerName,
-            customerEmail,
+            ...(customerEmail ? { customerEmail } : {}),
             customerPhone,
             invoiceNumber,
             orderDate: order.createdAt.toLocaleDateString('en-IN'),

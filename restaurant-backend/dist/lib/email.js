@@ -591,22 +591,23 @@ async function sendInvoiceEmail(email, invoiceData, pdfBuffer) {
     });
 }
 async function sendOrderCompletionEmail(input) {
-    const subject = `Your order ${input.orderId.slice(0, 8).toUpperCase()} is completed - Invoice ${input.invoiceNumber}`;
-    const invoiceLink = input.invoiceUrl
-        ? `<p><a href="${input.invoiceUrl}" class="btn">View Invoice</a></p>`
-        : '<p>Your invoice is ready in the app under your orders history.</p>';
+    const orderCode = input.orderId.slice(0, 8).toUpperCase();
+    const subject = `Order #${orderCode} completed - Invoice ${input.invoiceNumber}`;
+    const safeInvoiceUrl = input.invoiceUrl || '';
     const html = `
     <div style="font-family: Arial, sans-serif; color: #222;">
       <h2>${input.restaurantName}</h2>
-      <p>Hello ${input.customerName}, your order has been completed successfully.</p>
-      <p><strong>Order:</strong> #${input.orderId.slice(0, 8).toUpperCase()}</p>
+      <p>Hello ${input.customerName}, your order is now completed.</p>
+      <p><strong>Order:</strong> #${orderCode}</p>
       <p><strong>Invoice:</strong> ${input.invoiceNumber}</p>
-      <p><strong>Total:</strong> ₹${input.totalInr.toFixed(2)}</p>
-      ${invoiceLink}
-      <p>Thanks for ordering with us.</p>
+      <p><strong>Total Paid:</strong> INR ${input.totalInr.toFixed(2)}</p>
+      ${safeInvoiceUrl
+        ? `<p><a href="${safeInvoiceUrl}" target="_blank" rel="noopener noreferrer">View/Download Invoice</a></p>`
+        : '<p>Your invoice is ready on your customer dashboard.</p>'}
+      <p>Thank you for dining with ${input.restaurantName}.</p>
     </div>
   `;
-    return sendEmail({
+    return await sendEmail({
         to: input.to,
         subject,
         html,

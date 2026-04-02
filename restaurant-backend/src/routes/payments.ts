@@ -16,6 +16,7 @@ import { notifyOrderStatusChange } from '@/services/order-status-notification.se
 import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
 import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
 import { syncKOTTicketFromOrderStatus } from '@/modules/kot/kot.service';
+import { resolveOrderPlacementContact } from '@/services/order-contact.service';
 
 const router = Router();
 const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
@@ -109,14 +110,15 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId: string) => {
 
   if (!existingInvoice) {
     const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-    const customerName = order.user?.name || 'Guest';
-    const customerEmail = order.user?.email || undefined;
-    const customerPhone = order.user?.phone || '';
+    const placementContact = resolveOrderPlacementContact(order);
+    const customerName = placementContact.name || order.user?.name || 'Guest';
+    const customerEmail = placementContact.email || undefined;
+    const customerPhone = placementContact.phone || '';
     const tableNumber = order.table?.number ? String(order.table.number) : 'N/A';
 
     const invoiceData = {
       customerName,
-      customerEmail,
+      ...(customerEmail ? { customerEmail } : {}),
       customerPhone,
       invoiceNumber,
       orderDate: order.createdAt.toLocaleDateString('en-IN'),

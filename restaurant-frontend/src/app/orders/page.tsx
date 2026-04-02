@@ -15,6 +15,7 @@ import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
 import { subscribeToOrderEvents } from '@/lib/realtime-client';
 import { isHapticsEnabled, setHapticsEnabled, triggerHaptic } from '@/lib/haptics';
+import { ensurePushSubscription, syncPushSubscriptionIfGranted } from '@/lib/push-notifications';
 
 // Helper to format dates nicely
 const formatOrderDate = (dateString: string) => {
@@ -104,6 +105,11 @@ export default function OrdersPage() {
     if (isAuthenticated && user) {
       setOrdersPage(1);
     }
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || typeof window === 'undefined') return;
+    syncPushSubscriptionIfGranted('customer').catch(() => undefined);
   }, [isAuthenticated, user]);
 
   useEffect(() => {
@@ -580,17 +586,23 @@ export default function OrdersPage() {
       triggerHaptic('error');
       return;
     }
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-    if (permission === 'granted') {
+    try {
+      await ensurePushSubscription('customer');
+      setNotificationPermission('granted');
       localStorage.setItem('customer_notification_subscription', JSON.stringify({
         permission: 'granted',
         grantedAt: new Date().toISOString(),
       }));
       toast.success('Browser notifications enabled');
       triggerHaptic('primary_action');
-    } else if (permission === 'denied') {
-      toast.error('Notifications blocked. Enable them in browser settings.');
+    } catch (error: any) {
+      const currentPermission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+      setNotificationPermission(currentPermission as NotificationPermission);
+      if (currentPermission === 'denied') {
+        toast.error('Notifications blocked. Enable them in browser settings.');
+      } else {
+        toast.error(error?.message || 'Unable to enable notifications');
+      }
       triggerHaptic('error');
     }
   };

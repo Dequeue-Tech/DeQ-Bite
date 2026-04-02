@@ -12,8 +12,20 @@ const sms_1 = require("../lib/sms");
 const logger_1 = require("../utils/logger");
 const accelerate_cache_1 = require("../utils/accelerate-cache");
 const realtime_1 = require("../utils/realtime");
+const order_contact_service_1 = require("../services/order-contact.service");
 const router = (0, express_1.Router)();
-const getInvoiceSmsPhone = (order) => order.user?.phone || order.deliveryCustomerPhone || null;
+const resolveInvoiceDeliveryContact = (order) => {
+    const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
+    return {
+        name: placementContact.name || order?.user?.name || 'Guest',
+        email: placementContact.email || '',
+        phone: placementContact.phone || order?.deliveryCustomerPhone || order?.user?.phone || '',
+    };
+};
+const getInvoiceSmsPhone = (order) => {
+    const contact = resolveInvoiceDeliveryContact(order);
+    return contact.phone || null;
+};
 const emitInvoiceReady = (input) => {
     (0, realtime_1.emitRestaurantEvent)(input.restaurantId, {
         type: 'invoice.ready',
@@ -142,6 +154,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
         const taxPercent = order.subtotalPaise > 0
             ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
             : undefined;
+        const deliveryContact = resolveInvoiceDeliveryContact(order);
         const invoiceData = {
             restaurantName: order.restaurant.name,
             ...(order.restaurant.address ? { restaurantAddress: order.restaurant.address } : {}),
@@ -151,9 +164,9 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             ...(order.restaurant.email ? { restaurantEmail: order.restaurant.email } : {}),
             ...(order.restaurant.gstNumber ? { gstNumber: order.restaurant.gstNumber } : {}),
             ...(taxPercent !== undefined ? { taxPercent } : {}),
-            customerName: order.user.name,
-            customerEmail: order.user.email,
-            ...(order.user.phone ? { customerPhone: order.user.phone } : {}),
+            customerName: deliveryContact.name,
+            customerEmail: deliveryContact.email,
+            ...(deliveryContact.phone ? { customerPhone: deliveryContact.phone } : {}),
             invoiceNumber,
             orderDate: order.createdAt.toLocaleDateString('en-IN'),
             items: order.items.map((item) => ({
@@ -178,9 +191,9 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
             pdfGenerated: true,
             pdfPath: pdfStorageResult.pdfPath,
         };
-        if (requestedMethods.includes('EMAIL') && order.user.email) {
-            results.emailSent = await (0, email_1.sendInvoiceEmail)(order.user.email, {
-                customerName: order.user.name,
+        if (requestedMethods.includes('EMAIL') && deliveryContact.email) {
+            results.emailSent = await (0, email_1.sendInvoiceEmail)(deliveryContact.email, {
+                customerName: deliveryContact.name,
                 invoiceNumber,
                 orderDate: invoiceData.orderDate,
                 total: order.totalPaise / 100,
@@ -190,7 +203,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
         }
         if (requestedMethods.includes('SMS') && smsPhone) {
             results.smsSent = await (0, sms_1.sendInvoiceSMS)(smsPhone, {
-                customerName: order.user.name,
+                customerName: deliveryContact.name,
                 invoiceNumber,
                 total: order.totalPaise / 100,
                 restaurantName: invoiceData.restaurantName,
@@ -259,7 +272,7 @@ router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0
                     issuedAt: invoice.issuedAt,
                 },
                 deliveryResults: results,
-                warnings: generateWarnings(requestedMethods, order.user.email, smsPhone, results),
+                warnings: generateWarnings(requestedMethods, deliveryContact.email, smsPhone, results),
             },
         };
         return res.status(201).json(response);
@@ -408,8 +421,9 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             smsSent: false,
         };
         const resendRestaurantName = invoice.order.restaurant?.name ?? 'Restaurant';
+        const deliveryContact = resolveInvoiceDeliveryContact(invoice.order);
         const invoiceData = {
-            customerName: invoice.order.user.name,
+            customerName: deliveryContact.name,
             invoiceNumber: invoice.invoiceNumber,
             orderDate: invoice.order.createdAt.toLocaleDateString('en-IN'),
             total: invoice.order.totalPaise / 100,
@@ -417,7 +431,7 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             restaurantName: resendRestaurantName,
         };
         const smsPhone = getInvoiceSmsPhone(invoice.order);
-        if (requestedMethods.includes('EMAIL') && invoice.order.user.email) {
+        if (requestedMethods.includes('EMAIL') && deliveryContact.email) {
             const resendTaxPercent = invoice.order.subtotalPaise > 0
                 ? Math.round((invoice.order.taxPaise / invoice.order.subtotalPaise) * 100)
                 : undefined;
@@ -432,10 +446,10 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
                 items: [],
                 subtotal: invoice.order.subtotalPaise / 100,
                 tax: invoice.order.taxPaise / 100,
-                customerEmail: invoice.order.user.email,
+                customerEmail: deliveryContact.email,
                 ...(smsPhone ? { customerPhone: smsPhone } : {}),
             });
-            results.emailSent = await (0, email_1.sendInvoiceEmail)(invoice.order.user.email, invoiceData, pdfBuffer);
+            results.emailSent = await (0, email_1.sendInvoiceEmail)(deliveryContact.email, invoiceData, pdfBuffer);
         }
         if (requestedMethods.includes('SMS') && smsPhone) {
             results.smsSent = await (0, sms_1.sendInvoiceSMS)(smsPhone, invoiceData);
@@ -475,7 +489,7 @@ router.post('/:invoiceId/resend', auth_1.authenticate, restaurant_1.requireResta
             message: 'Invoice resent successfully',
             data: {
                 deliveryResults: results,
-                warnings: generateWarnings(requestedMethods, invoice.order.user.email, smsPhone, results),
+                warnings: generateWarnings(requestedMethods, deliveryContact.email, smsPhone, results),
             },
         };
         res.json(response);
@@ -567,6 +581,7 @@ router.post('/:invoiceOrOrderId/refresh-pdf', auth_1.authenticate, restaurant_1.
     const rfTaxPercent = order.subtotalPaise > 0
         ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
         : undefined;
+    const deliveryContact = resolveInvoiceDeliveryContact(order);
     const invoiceData = {
         restaurantName: order.restaurant?.name ?? 'Restaurant',
         ...(order.restaurant?.address ? { restaurantAddress: order.restaurant.address } : {}),
@@ -576,9 +591,9 @@ router.post('/:invoiceOrOrderId/refresh-pdf', auth_1.authenticate, restaurant_1.
         ...(order.restaurant?.email ? { restaurantEmail: order.restaurant.email } : {}),
         ...(order.restaurant?.gstNumber ? { gstNumber: order.restaurant.gstNumber } : {}),
         ...(rfTaxPercent !== undefined ? { taxPercent: rfTaxPercent } : {}),
-        customerName: order.user?.name || '',
-        customerEmail: order.user?.email || '',
-        ...(order.user?.phone ? { customerPhone: order.user.phone } : {}),
+        customerName: deliveryContact.name,
+        customerEmail: deliveryContact.email,
+        ...(deliveryContact.phone ? { customerPhone: deliveryContact.phone } : {}),
         invoiceNumber: invoice.invoiceNumber,
         orderDate: order.createdAt.toLocaleDateString('en-IN'),
         items: (order.items || []).map((it) => ({

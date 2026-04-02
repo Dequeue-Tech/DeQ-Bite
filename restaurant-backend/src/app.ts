@@ -24,6 +24,7 @@ import restaurantRoutes from '@/routes/restaurants';
 import offerRoutes from '@/routes/offers';
 import platformRoutes from '@/routes/platform';
 import realtimeRoutes from '@/routes/realtime';
+import pushRoutes from '@/routes/push';
 import deliveryRoutes from '@/routes/delivery';
 import kotRoutes from '@/modules/kot/kot.routes';
 import inventoryRoutes from '@/modules/inventory/inventory.routes';
@@ -192,6 +193,7 @@ tenantRouter.use('/inventory', inventoryRoutes);
 tenantRouter.use('/crm', crmRoutes);
 tenantRouter.use('/analytics', analyticsRoutes);
 tenantRouter.use('/pos', posRoutes);
+tenantRouter.use('/push', pushRoutes);
 tenantRouter.use('/', realtimeRoutes);
 
 // More-specific path MUST come before the generic /api/restaurants listing

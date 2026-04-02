@@ -26,6 +26,32 @@ const withRetries = async <T>(label: string, fn: () => Promise<T>, retries = 2):
   throw new Error(`${label} failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 };
 
+const logDeliveryResult = (input: {
+  channel: 'email' | 'sms';
+  status: 'success' | 'failure' | 'skipped';
+  orderId: string;
+  target: string;
+  reason?: string;
+  errorMessage?: string;
+  startedAt: string;
+}) => {
+  const payload = {
+    channel: input.channel,
+    status: input.status,
+    orderId: input.orderId,
+    target: input.target,
+    reason: input.reason,
+    errorMessage: input.errorMessage,
+    startedAt: input.startedAt,
+    finishedAt: new Date().toISOString(),
+  };
+  if (input.status === 'failure') {
+    logger.error('ORDER_COMPLETION_DELIVERY', payload);
+    return;
+  }
+  logger.info('ORDER_COMPLETION_DELIVERY', payload);
+};
+
 const buildInvoiceData = (
   order: any,
   invoiceNumber: string,
@@ -155,29 +181,96 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   const placedOrderName = placementContact.name || 'Guest';
 
   if (!emailSent && placedOrderEmail) {
-    emailSent = await withRetries('invoice-email-send', async () =>
-      sendOrderCompletionEmail({
-        to: placedOrderEmail,
-        customerName: placedOrderName,
-        restaurantName: order.restaurant?.name || 'Restaurant',
-        invoiceNumber: invoice.invoiceNumber,
+    const startedAt = new Date().toISOString();
+    try {
+      emailSent = await withRetries('invoice-email-send', async () =>
+        sendOrderCompletionEmail({
+          to: placedOrderEmail,
+          customerName: placedOrderName,
+          restaurantName: order.restaurant?.name || 'Restaurant',
+          invoiceNumber: invoice.invoiceNumber,
+          orderId: order.id,
+          totalInr: order.totalPaise / 100,
+          invoiceUrl,
+        })
+      );
+      logDeliveryResult({
+        channel: 'email',
+        status: emailSent ? 'success' : 'failure',
         orderId: order.id,
-        totalInr: order.totalPaise / 100,
-        invoiceUrl,
-      })
-    );
+        target: placedOrderEmail,
+        ...(emailSent ? {} : { reason: 'provider_returned_false' }),
+        startedAt,
+      });
+    } catch (error) {
+      logDeliveryResult({
+        channel: 'email',
+        status: 'failure',
+        orderId: order.id,
+        target: placedOrderEmail,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        startedAt,
+      });
+    }
+  } else if (!placedOrderEmail) {
+    logDeliveryResult({
+      channel: 'email',
+      status: 'skipped',
+      orderId: order.id,
+      target: '',
+      reason: 'missing_order_placement_email',
+      startedAt: new Date().toISOString(),
+    });
   }
 
   if (!smsSent && placedOrderPhone && invoiceUrl) {
-    smsSent = await withRetries('invoice-sms-send', async () =>
-      sendOrderCompletionSMS(placedOrderPhone, {
-        customerName: placedOrderName,
-        restaurantName: order.restaurant?.name || 'Restaurant',
-        invoiceNumber: invoice.invoiceNumber,
-        total: order.totalPaise / 100,
-        invoiceUrl,
-      })
-    );
+    const startedAt = new Date().toISOString();
+    try {
+      smsSent = await withRetries('invoice-sms-send', async () =>
+        sendOrderCompletionSMS(placedOrderPhone, {
+          customerName: placedOrderName,
+          restaurantName: order.restaurant?.name || 'Restaurant',
+          invoiceNumber: invoice.invoiceNumber,
+          total: order.totalPaise / 100,
+          invoiceUrl,
+        })
+      );
+      logDeliveryResult({
+        channel: 'sms',
+        status: smsSent ? 'success' : 'failure',
+        orderId: order.id,
+        target: placedOrderPhone,
+        ...(smsSent ? {} : { reason: 'provider_returned_false' }),
+        startedAt,
+      });
+    } catch (error) {
+      logDeliveryResult({
+        channel: 'sms',
+        status: 'failure',
+        orderId: order.id,
+        target: placedOrderPhone,
+        errorMessage: error instanceof Error ? error.message : String(error),
+        startedAt,
+      });
+    }
+  } else if (!placedOrderPhone) {
+    logDeliveryResult({
+      channel: 'sms',
+      status: 'skipped',
+      orderId: order.id,
+      target: '',
+      reason: 'missing_order_placement_phone',
+      startedAt: new Date().toISOString(),
+    });
+  } else if (!invoiceUrl) {
+    logDeliveryResult({
+      channel: 'sms',
+      status: 'skipped',
+      orderId: order.id,
+      target: placedOrderPhone,
+      reason: 'missing_invoice_url',
+      startedAt: new Date().toISOString(),
+    });
   }
 
   const sentVia = Array.from(new Set([

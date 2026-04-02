@@ -4,6 +4,7 @@ exports.getBufferedEvents = exports.onUserEvent = exports.onRestaurantEvent = ex
 const events_1 = require("events");
 const redis_1 = require("./redis");
 const logger_1 = require("./logger");
+const push_notification_service_1 = require("../services/push-notification.service");
 const emitter = new events_1.EventEmitter();
 emitter.setMaxListeners(0);
 let redisBridgeInitialized = false;
@@ -70,6 +71,52 @@ const initRedisRealtimeBridge = () => {
 };
 const getRestaurantChannel = (restaurantId) => `restaurant:${restaurantId}`;
 const getUserChannel = (userId) => `user:${userId}`;
+const isOrderCompletedRealtimeEvent = (event) => {
+    if (event.type !== 'order.updated')
+        return false;
+    const status = String(event.payload?.order?.status || '').toUpperCase();
+    return status === 'COMPLETED';
+};
+const emitCriticalPushIfRequired = (event) => {
+    let eventType = null;
+    if (event.type === 'order.created')
+        eventType = 'order.created';
+    if (event.type === 'order.accepted')
+        eventType = 'order.accepted';
+    if (isOrderCompletedRealtimeEvent(event))
+        eventType = 'order.completed';
+    if (!eventType)
+        return;
+    const orderId = String(event.payload?.order?.id ||
+        event.payload?.orderId ||
+        event.payload?.order_id ||
+        '').trim();
+    if (!orderId)
+        return;
+    const status = String(event.payload?.order?.status || '').toUpperCase() || (eventType === 'order.completed' ? 'COMPLETED' : 'UNKNOWN');
+    const shortOrderCode = orderId.slice(0, 8).toUpperCase();
+    const title = eventType === 'order.created'
+        ? `Order #${shortOrderCode} placed`
+        : eventType === 'order.accepted'
+            ? `Order #${shortOrderCode} accepted`
+            : `Order #${shortOrderCode} completed`;
+    const body = eventType === 'order.created'
+        ? 'A new order was placed.'
+        : eventType === 'order.accepted'
+            ? 'Order has been accepted by the restaurant.'
+            : 'Order is completed and invoice is available.';
+    const url = '/orders';
+    void (0, push_notification_service_1.notifyCriticalOrderPush)({
+        restaurantId: event.restaurantId,
+        ...(event.userId ? { userId: event.userId } : {}),
+        eventType,
+        orderId,
+        status,
+        title,
+        body,
+        url,
+    });
+};
 const emitRestaurantEvent = (restaurantId, event) => {
     initRedisRealtimeBridge();
     const nextEvent = {
@@ -79,6 +126,7 @@ const emitRestaurantEvent = (restaurantId, event) => {
         ...event,
     };
     publishLocalEvent(nextEvent);
+    emitCriticalPushIfRequired(nextEvent);
     logger_1.logger.info('Realtime event emitted', {
         eventId: nextEvent.eventId,
         type: nextEvent.type,

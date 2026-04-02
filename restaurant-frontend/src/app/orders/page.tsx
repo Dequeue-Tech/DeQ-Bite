@@ -128,6 +128,64 @@ export default function OrdersPage() {
   }, [isAuthenticated, user]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user || typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const onServiceWorkerMessage = (event: MessageEvent) => {
+      const message = event.data as {
+        type?: string;
+        payload?: {
+          title?: string;
+          body?: string;
+          data?: {
+            orderId?: string;
+            status?: string;
+            eventType?: string;
+            sentAt?: string;
+          };
+        };
+      };
+
+      if (message?.type !== 'push:order') return;
+      const orderId = message.payload?.data?.orderId || '';
+      if (!orderId) return;
+
+      const status = (message.payload?.data?.status || 'UPDATED').toUpperCase();
+      const eventType = (message.payload?.data?.eventType || '').toLowerCase();
+      const title =
+        message.payload?.title ||
+        `Order #${orderId.slice(0, 8).toUpperCase()} - ${status.replace(/_/g, ' ')}`;
+      const subtitle = message.payload?.body || `Order status is now ${status.replace(/_/g, ' ')}`;
+      const alertType: OrderNotification['alertType'] =
+        eventType === 'order.accepted'
+          ? 'accepted'
+          : eventType === 'order.created'
+            ? 'new-order'
+            : 'status-update';
+
+      enqueueNotifications([
+        {
+          id: `push-${orderId}-${status}-${Date.now()}`,
+          orderId,
+          title,
+          subtitle,
+          status,
+          alertType,
+          timestamp: Date.now(),
+          unread: true,
+        },
+      ]);
+
+      const fallbackWindow = new Date(Date.now() - 90 * 1000).toISOString();
+      fetchOrdersDelta(fallbackWindow).catch(() => undefined);
+    };
+
+    navigator.serviceWorker.addEventListener('message', onServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
+    };
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
     if (!isAuthenticated || !user || typeof window === 'undefined') return;
     const cleanup = subscribeToOrderEvents({
       scope: 'user',

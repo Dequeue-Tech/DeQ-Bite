@@ -56,7 +56,12 @@ export const ensurePushSubscription = async (roleScope: PushRoleScope) => {
   const registration = await ensureServiceWorker();
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
-    const vapidPublicKey = await apiClient.getPushVapidPublicKey();
+    let vapidPublicKey = '';
+    try {
+      vapidPublicKey = await apiClient.getPushVapidPublicKey();
+    } catch {
+      throw new Error('Push is not configured on server yet. Please try again later.');
+    }
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
@@ -75,7 +80,13 @@ export const syncPushSubscriptionIfGranted = async (roleScope: PushRoleScope) =>
   const registration = await ensureServiceWorker();
   let subscription = await registration.pushManager.getSubscription();
   if (!subscription) {
-    const vapidPublicKey = await apiClient.getPushVapidPublicKey();
+    let vapidPublicKey = '';
+    try {
+      vapidPublicKey = await apiClient.getPushVapidPublicKey();
+    } catch {
+      // Push not configured on server for this environment; skip silently.
+      return;
+    }
     subscription = await registration.pushManager.subscribe({
       userVisibleOnly: true,
       applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),

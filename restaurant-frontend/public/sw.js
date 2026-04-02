@@ -18,14 +18,26 @@ self.addEventListener('push', (event) => {
   }
 
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: payload.icon,
-      badge: payload.badge,
-      tag: payload.tag,
-      data: payload.data,
-      renotify: true,
-    })
+    Promise.all([
+      self.registration.showNotification(payload.title, {
+        body: payload.body,
+        icon: payload.icon,
+        badge: payload.badge,
+        tag: payload.tag,
+        data: payload.data,
+        renotify: true,
+      }),
+      self.clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clients) =>
+        Promise.all(
+          clients.map((client) =>
+            client.postMessage({
+              type: 'push:order',
+              payload,
+            })
+          )
+        )
+      ),
+    ])
   );
 });
 

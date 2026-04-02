@@ -629,5 +629,58 @@ export async function sendInvoiceEmail(
   });
 }
 
+export async function sendOrderCompletionEmail(input: {
+  to: string;
+  customerName: string;
+  restaurantName: string;
+  invoiceNumber: string;
+  orderId: string;
+  totalInr: number;
+  invoiceUrl: string | null;
+  orderDate?: string;
+  tableNumber?: number;
+}): Promise<boolean> {
+  const orderCode = input.orderId.slice(0, 8).toUpperCase();
+  const subject = `Invoice ${input.invoiceNumber} - Order #${orderCode}`;
+  const html = generateInvoiceEmailTemplate({
+    customerName: input.customerName,
+    invoiceNumber: input.invoiceNumber,
+    orderDate: input.orderDate || new Date().toLocaleDateString('en-IN'),
+    total: input.totalInr,
+    tableNumber: input.tableNumber ?? 0,
+    restaurantName: input.restaurantName,
+  });
+
+  return await sendEmail({
+    to: input.to,
+    subject,
+    html,
+  });
+}
+
+export async function sendOrderConfirmationEmail(input: {
+  to: string;
+  customerName: string;
+  restaurantName: string;
+  orderId: string;
+}): Promise<boolean> {
+  const orderCode = input.orderId.slice(0, 8).toUpperCase();
+  const subject = `Order #${orderCode} confirmed`;
+  const html = `
+    <div style="font-family: Arial, sans-serif; color: #222;">
+      <h2>${input.restaurantName}</h2>
+      <p>Hello ${input.customerName}, your order has been confirmed.</p>
+      <p><strong>Order:</strong> #${orderCode}</p>
+      <p>Your order is accepted and our team has started processing it.</p>
+      <p>You can track live progress on your customer dashboard.</p>
+    </div>
+  `;
+
+  return await sendEmail({
+    to: input.to,
+    subject,
+    html,
+  });
+}
 
 

@@ -192,6 +192,8 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
           orderId: order.id,
           totalInr: order.totalPaise / 100,
           invoiceUrl,
+          orderDate: order.createdAt.toLocaleDateString('en-IN'),
+          tableNumber: order.table?.number || 0,
         })
       );
       logDeliveryResult({

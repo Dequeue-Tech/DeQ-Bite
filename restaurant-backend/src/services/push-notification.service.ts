@@ -160,12 +160,25 @@ export const deactivatePushSubscription = async (input: {
   return updated.count;
 };
 
+const sendWithTimeout = async <T>(promise: Promise<T>, timeoutMs: number): Promise<T> => {
+  let timeoutHandle: NodeJS.Timeout | null = null;
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    timeoutHandle = setTimeout(() => reject(new Error(`push_send_timeout_${timeoutMs}ms`)), timeoutMs);
+  });
+
+  try {
+    return await Promise.race([promise, timeoutPromise]);
+  } finally {
+    if (timeoutHandle) clearTimeout(timeoutHandle);
+  }
+};
+
 const sendWebPushWithRetry = async (subscription: webpush.PushSubscription, payload: string, retries = 1) => {
   let attempt = 0;
   let lastError: unknown;
   while (attempt <= retries) {
     try {
-      await webpush.sendNotification(subscription, payload, { TTL: 60 });
+      await sendWithTimeout(webpush.sendNotification(subscription, payload, { TTL: 60 }), 4000);
       return;
     } catch (error) {
       lastError = error;

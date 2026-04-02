@@ -7,7 +7,7 @@ exports.sendEmail = sendEmail;
 exports.generateInvoiceEmailTemplate = generateInvoiceEmailTemplate;
 exports.sendInvoiceEmail = sendInvoiceEmail;
 exports.sendOrderCompletionEmail = sendOrderCompletionEmail;
-exports.sendOrderStatusUpdateEmail = sendOrderStatusUpdateEmail;
+exports.sendOrderConfirmationEmail = sendOrderConfirmationEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 const logger_1 = require("../utils/logger");
 const getMissingEmailConfig = () => {
@@ -592,41 +592,34 @@ async function sendInvoiceEmail(email, invoiceData, pdfBuffer) {
 }
 async function sendOrderCompletionEmail(input) {
     const orderCode = input.orderId.slice(0, 8).toUpperCase();
-    const subject = `Order #${orderCode} completed - Invoice ${input.invoiceNumber}`;
-    const safeInvoiceUrl = input.invoiceUrl || '';
-    const html = `
-    <div style="font-family: Arial, sans-serif; color: #222;">
-      <h2>${input.restaurantName}</h2>
-      <p>Hello ${input.customerName}, your order is now completed.</p>
-      <p><strong>Order:</strong> #${orderCode}</p>
-      <p><strong>Invoice:</strong> ${input.invoiceNumber}</p>
-      <p><strong>Total Paid:</strong> INR ${input.totalInr.toFixed(2)}</p>
-      ${safeInvoiceUrl
-        ? `<p><a href="${safeInvoiceUrl}" target="_blank" rel="noopener noreferrer">View/Download Invoice</a></p>`
-        : '<p>Your invoice is ready on your customer dashboard.</p>'}
-      <p>Thank you for dining with ${input.restaurantName}.</p>
-    </div>
-  `;
+    const subject = `Invoice ${input.invoiceNumber} - Order #${orderCode}`;
+    const html = generateInvoiceEmailTemplate({
+        customerName: input.customerName,
+        invoiceNumber: input.invoiceNumber,
+        orderDate: input.orderDate || new Date().toLocaleDateString('en-IN'),
+        total: input.totalInr,
+        tableNumber: input.tableNumber ?? 0,
+        restaurantName: input.restaurantName,
+    });
     return await sendEmail({
         to: input.to,
         subject,
         html,
     });
 }
-async function sendOrderStatusUpdateEmail(input) {
+async function sendOrderConfirmationEmail(input) {
     const orderCode = input.orderId.slice(0, 8).toUpperCase();
-    const subject = `Order #${orderCode} update: ${input.nextStatus}`;
+    const subject = `Order #${orderCode} confirmed`;
     const html = `
     <div style="font-family: Arial, sans-serif; color: #222;">
       <h2>${input.restaurantName}</h2>
-      <p>Hello ${input.customerName}, your order status has been updated.</p>
+      <p>Hello ${input.customerName}, your order has been confirmed.</p>
       <p><strong>Order:</strong> #${orderCode}</p>
-      <p><strong>Previous status:</strong> ${input.previousStatus}</p>
-      <p><strong>Current status:</strong> ${input.nextStatus}</p>
+      <p>Your order is accepted and our team has started processing it.</p>
       <p>You can track live progress on your customer dashboard.</p>
     </div>
   `;
-    return sendEmail({
+    return await sendEmail({
         to: input.to,
         subject,
         html,

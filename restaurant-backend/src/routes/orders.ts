@@ -1028,7 +1028,7 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
     });
 
     if (order.status === 'COMPLETED') {
-      await processOrderCompletionNotifications(order.id).catch((error) => {
+      void processOrderCompletionNotifications(order.id).catch((error) => {
         logger.error('Order completion notification pipeline failed after order status update', {
           orderId: order.id,
           message: error instanceof Error ? error.message : String(error),

@@ -1,5 +1,6 @@
 import { prisma } from '@/config/database';
 import { sendOrderConfirmationEmail } from '@/lib/email';
+import { sendOrderConfirmationSMS } from '@/lib/sms';
 import { resolveOrderPlacementContact } from '@/services/order-contact.service';
 import { logger } from '@/utils/logger';
 
@@ -41,6 +42,7 @@ export const notifyOrderStatusChange = async (input: {
     include: {
       restaurant: { select: { name: true } },
       user: { select: { name: true } },
+      table: { select: { number: true } },
     },
   });
 
@@ -49,27 +51,59 @@ export const notifyOrderStatusChange = async (input: {
   }
 
   const placementContact = resolveOrderPlacementContact(order);
+
+  let emailSent = false;
+  let smsSent = false;
+
   if (!placementContact.email) {
     logger.info('Order confirmation email skipped', {
       orderId: order.id,
       source: input.source,
       reason: 'missing_order_placement_email',
     });
-    return { emailSent: false, smsSent: false };
   }
 
-  let emailSent = false;
   try {
-    emailSent = await withRetries('order-confirmation-email-send', async () =>
-      sendOrderConfirmationEmail({
-        to: placementContact.email,
-        customerName: placementContact.name || 'Guest',
-        orderId: order.id,
-        restaurantName: order.restaurant?.name || 'Restaurant',
-      })
-    );
+    if (placementContact.email) {
+      emailSent = await withRetries('order-confirmation-email-send', async () =>
+        sendOrderConfirmationEmail({
+          to: placementContact.email,
+          customerName: placementContact.name || 'Guest',
+          orderId: order.id,
+          restaurantName: order.restaurant?.name || 'Restaurant',
+        })
+      );
+    }
   } catch (error) {
     logger.error('Order confirmation email failed', {
+      orderId: order.id,
+      source: input.source,
+      message: error instanceof Error ? error.message : String(error),
+    });
+  }
+
+  if (!placementContact.phone) {
+    logger.info('Order confirmation sms skipped', {
+      orderId: order.id,
+      source: input.source,
+      reason: 'missing_order_placement_phone',
+    });
+  }
+
+  try {
+    if (placementContact.phone) {
+      smsSent = await withRetries('order-confirmation-sms-send', async () =>
+        sendOrderConfirmationSMS(placementContact.phone, {
+          customerName: placementContact.name || 'Guest',
+          orderId: order.id.slice(0, 8).toUpperCase(),
+          total: order.totalPaise / 100,
+          tableNumber: order.table?.number || 0,
+          restaurantName: order.restaurant?.name || 'Restaurant',
+        })
+      );
+    }
+  } catch (error) {
+    logger.error('Order confirmation sms failed', {
       orderId: order.id,
       source: input.source,
       message: error instanceof Error ? error.message : String(error),
@@ -82,8 +116,8 @@ export const notifyOrderStatusChange = async (input: {
     previousStatus: input.previousStatus,
     nextStatus: input.nextStatus,
     emailSent,
-    smsSent: false,
+    smsSent,
   });
 
-  return { emailSent, smsSent: false };
+  return { emailSent, smsSent };
 };

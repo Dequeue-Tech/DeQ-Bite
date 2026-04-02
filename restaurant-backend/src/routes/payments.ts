@@ -474,7 +474,7 @@ router.post('/verify', authenticate, requireRestaurant, asyncHandler(async (req:
   });
 
   await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-  await processOrderCompletionNotifications(order.id).catch((error) => {
+  void processOrderCompletionNotifications(order.id).catch((error) => {
     logger.error('Order completion notification pipeline failed after payment verify', {
       orderId: order.id,
       message: error instanceof Error ? error.message : String(error),
@@ -756,7 +756,7 @@ router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestauran
   });
 
   await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-  await processOrderCompletionNotifications(order.id).catch((error) => {
+  void processOrderCompletionNotifications(order.id).catch((error) => {
     logger.error('Order completion notification pipeline failed after cash confirm', {
       orderId: order.id,
       message: error instanceof Error ? error.message : String(error),
@@ -872,7 +872,7 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
 
   if (payload.paymentStatus === 'COMPLETED') {
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-    await processOrderCompletionNotifications(order.id).catch((error) => {
+    void processOrderCompletionNotifications(order.id).catch((error) => {
       logger.error('Order completion notification pipeline failed after payment status update', {
         orderId: order.id,
         message: error instanceof Error ? error.message : String(error),

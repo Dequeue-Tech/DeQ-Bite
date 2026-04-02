@@ -33,13 +33,13 @@ export declare function sendOrderCompletionEmail(input: {
     orderId: string;
     totalInr: number;
     invoiceUrl: string | null;
+    orderDate?: string;
+    tableNumber?: number;
 }): Promise<boolean>;
-export declare function sendOrderStatusUpdateEmail(input: {
+export declare function sendOrderConfirmationEmail(input: {
     to: string;
     customerName: string;
     restaurantName: string;
     orderId: string;
-    previousStatus: string;
-    nextStatus: string;
 }): Promise<boolean>;
 //# sourceMappingURL=email.d.ts.map

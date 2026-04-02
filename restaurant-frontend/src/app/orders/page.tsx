@@ -119,6 +119,15 @@ export default function OrdersPage() {
   }, [isAuthenticated, user, ordersPage]);
 
   useEffect(() => {
+    if (!isAuthenticated || !user) return;
+    const interval = setInterval(() => {
+      const fallbackWindow = new Date(Date.now() - 90 * 1000).toISOString();
+      fetchOrdersDelta(fallbackWindow).catch(() => undefined);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
     if (!isAuthenticated || !user || typeof window === 'undefined') return;
     const cleanup = subscribeToOrderEvents({
       scope: 'user',

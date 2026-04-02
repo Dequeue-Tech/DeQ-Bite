@@ -23,145 +23,84 @@ const withRetries = async (label, fn, retries = 2) => {
     }
     throw new Error(`${label} failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 };
-const logDeliveryResult = (input) => {
-    const payload = {
-        channel: input.channel,
-        status: input.status,
-        orderId: input.orderId,
-        source: input.source,
-        target: input.target,
-        reason: input.reason,
-        errorMessage: input.errorMessage,
-        startedAt: input.startedAt,
-        finishedAt: new Date().toISOString(),
-    };
-    if (input.status === 'failure') {
-        logger_1.logger.error('ORDER_STATUS_DELIVERY', payload);
-        return;
-    }
-    logger_1.logger.info('ORDER_STATUS_DELIVERY', payload);
-};
 const notifyOrderStatusChange = async (input) => {
     if (!input.orderId || input.previousStatus === input.nextStatus) {
         return { emailSent: false, smsSent: false };
     }
-    if (input.nextStatus !== 'CONFIRMED') {
+    const isInitialConfirmation = input.previousStatus === 'PENDING' && input.nextStatus === 'CONFIRMED';
+    if (!isInitialConfirmation) {
         return { emailSent: false, smsSent: false };
     }
     const order = await database_1.prisma.order.findUnique({
         where: { id: input.orderId },
         include: {
-            restaurant: {
-                select: {
-                    name: true,
-                },
-            },
-            user: {
-                select: {
-                    name: true,
-                },
-            },
+            restaurant: { select: { name: true } },
+            user: { select: { name: true } },
+            table: { select: { number: true } },
         },
     });
     if (!order) {
         return { emailSent: false, smsSent: false };
     }
     const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
-    const payload = {
-        customerName: placementContact.name || 'Guest',
-        orderId: order.id,
-        previousStatus: input.previousStatus,
-        nextStatus: input.nextStatus,
-        restaurantName: order.restaurant?.name || 'Restaurant',
-    };
     let emailSent = false;
     let smsSent = false;
-    if (placementContact.email) {
-        const startedAt = new Date().toISOString();
-        try {
-            emailSent = await withRetries('order-status-email-send', async () => (0, email_1.sendOrderStatusUpdateEmail)({
-                to: placementContact.email,
-                ...payload,
-            }));
-            logDeliveryResult({
-                channel: 'email',
-                status: emailSent ? 'success' : 'failure',
-                orderId: order.id,
-                source: input.source,
-                target: placementContact.email,
-                ...(emailSent ? {} : { reason: 'provider_returned_false' }),
-                startedAt,
-            });
-        }
-        catch (error) {
-            logDeliveryResult({
-                channel: 'email',
-                status: 'failure',
-                orderId: order.id,
-                source: input.source,
-                target: placementContact.email,
-                errorMessage: error instanceof Error ? error.message : String(error),
-                startedAt,
-            });
-        }
-    }
-    else {
-        logDeliveryResult({
-            channel: 'email',
-            status: 'skipped',
+    if (!placementContact.email) {
+        logger_1.logger.info('Order confirmation email skipped', {
             orderId: order.id,
             source: input.source,
-            target: '',
             reason: 'missing_order_placement_email',
-            startedAt: new Date().toISOString(),
         });
     }
-    if (placementContact.phone) {
-        const startedAt = new Date().toISOString();
-        try {
-            smsSent = await withRetries('order-status-sms-send', async () => (0, sms_1.sendOrderStatusUpdateSMS)(placementContact.phone, payload));
-            logDeliveryResult({
-                channel: 'sms',
-                status: smsSent ? 'success' : 'failure',
+    try {
+        if (placementContact.email) {
+            emailSent = await withRetries('order-confirmation-email-send', async () => (0, email_1.sendOrderConfirmationEmail)({
+                to: placementContact.email,
+                customerName: placementContact.name || 'Guest',
                 orderId: order.id,
-                source: input.source,
-                target: placementContact.phone,
-                ...(smsSent ? {} : { reason: 'provider_returned_false' }),
-                startedAt,
-            });
-        }
-        catch (error) {
-            logDeliveryResult({
-                channel: 'sms',
-                status: 'failure',
-                orderId: order.id,
-                source: input.source,
-                target: placementContact.phone,
-                errorMessage: error instanceof Error ? error.message : String(error),
-                startedAt,
-            });
+                restaurantName: order.restaurant?.name || 'Restaurant',
+            }));
         }
     }
-    else {
-        logDeliveryResult({
-            channel: 'sms',
-            status: 'skipped',
+    catch (error) {
+        logger_1.logger.error('Order confirmation email failed', {
             orderId: order.id,
             source: input.source,
-            target: '',
-            reason: 'missing_order_placement_phone',
-            startedAt: new Date().toISOString(),
+            message: error instanceof Error ? error.message : String(error),
         });
     }
-    logger_1.logger.info('Order status customer notifications processed', {
+    if (!placementContact.phone) {
+        logger_1.logger.info('Order confirmation sms skipped', {
+            orderId: order.id,
+            source: input.source,
+            reason: 'missing_order_placement_phone',
+        });
+    }
+    try {
+        if (placementContact.phone) {
+            smsSent = await withRetries('order-confirmation-sms-send', async () => (0, sms_1.sendOrderConfirmationSMS)(placementContact.phone, {
+                customerName: placementContact.name || 'Guest',
+                orderId: order.id.slice(0, 8).toUpperCase(),
+                total: order.totalPaise / 100,
+                tableNumber: order.table?.number || 0,
+                restaurantName: order.restaurant?.name || 'Restaurant',
+            }));
+        }
+    }
+    catch (error) {
+        logger_1.logger.error('Order confirmation sms failed', {
+            orderId: order.id,
+            source: input.source,
+            message: error instanceof Error ? error.message : String(error),
+        });
+    }
+    logger_1.logger.info('Order status notification processed', {
         orderId: order.id,
         source: input.source,
         previousStatus: input.previousStatus,
         nextStatus: input.nextStatus,
         emailSent,
         smsSent,
-        hasPlacedEmail: Boolean(placementContact.email),
-        hasPlacedPhone: Boolean(placementContact.phone),
     });
     return { emailSent, smsSent };
 };

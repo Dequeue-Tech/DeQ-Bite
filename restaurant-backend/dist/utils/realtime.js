@@ -71,20 +71,16 @@ const initRedisRealtimeBridge = () => {
 };
 const getRestaurantChannel = (restaurantId) => `restaurant:${restaurantId}`;
 const getUserChannel = (userId) => `user:${userId}`;
-const isOrderCompletedRealtimeEvent = (event) => {
-    if (event.type !== 'order.updated')
-        return false;
-    const status = String(event.payload?.order?.status || '').toUpperCase();
-    return status === 'COMPLETED';
-};
 const emitCriticalPushIfRequired = (event) => {
     let eventType = null;
     if (event.type === 'order.created')
         eventType = 'order.created';
     if (event.type === 'order.accepted')
         eventType = 'order.accepted';
-    if (isOrderCompletedRealtimeEvent(event))
-        eventType = 'order.completed';
+    if (event.type === 'order.updated') {
+        const status = String(event.payload?.order?.status || '').toUpperCase();
+        eventType = status === 'COMPLETED' ? 'order.completed' : 'order.updated';
+    }
     if (!eventType)
         return;
     const orderId = String(event.payload?.order?.id ||
@@ -95,16 +91,24 @@ const emitCriticalPushIfRequired = (event) => {
         return;
     const status = String(event.payload?.order?.status || '').toUpperCase() || (eventType === 'order.completed' ? 'COMPLETED' : 'UNKNOWN');
     const shortOrderCode = orderId.slice(0, 8).toUpperCase();
-    const title = eventType === 'order.created'
-        ? `Order #${shortOrderCode} placed`
-        : eventType === 'order.accepted'
-            ? `Order #${shortOrderCode} accepted`
-            : `Order #${shortOrderCode} completed`;
-    const body = eventType === 'order.created'
-        ? 'A new order was placed.'
-        : eventType === 'order.accepted'
-            ? 'Order has been accepted by the restaurant.'
-            : 'Order is completed and invoice is available.';
+    const title = (() => {
+        if (eventType === 'order.created')
+            return `Order #${shortOrderCode} placed`;
+        if (eventType === 'order.accepted')
+            return `Order #${shortOrderCode} accepted`;
+        if (eventType === 'order.completed')
+            return `Order #${shortOrderCode} completed`;
+        return `Order #${shortOrderCode} updated: ${status || 'UNKNOWN'}`;
+    })();
+    const body = (() => {
+        if (eventType === 'order.created')
+            return 'A new order was placed.';
+        if (eventType === 'order.accepted')
+            return 'Order has been accepted by the restaurant.';
+        if (eventType === 'order.completed')
+            return 'Order is completed and invoice is available.';
+        return `Order status is now ${status || 'UNKNOWN'}.`;
+    })();
     const url = '/orders';
     void (0, push_notification_service_1.notifyCriticalOrderPush)({
         restaurantId: event.restaurantId,

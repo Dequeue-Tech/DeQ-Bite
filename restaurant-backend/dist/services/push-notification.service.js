@@ -37,7 +37,7 @@ const asPushPayload = (input) => JSON.stringify({
     body: input.body,
     icon: '/favicon.ico',
     badge: '/favicon.ico',
-    tag: `${input.eventType}:${input.orderId}`,
+    tag: `${input.eventType}:${input.orderId}:${input.status}`,
     data: {
         url: input.url,
         eventType: input.eventType,
@@ -117,12 +117,25 @@ const deactivatePushSubscription = async (input) => {
     return updated.count;
 };
 exports.deactivatePushSubscription = deactivatePushSubscription;
+const sendWithTimeout = async (promise, timeoutMs) => {
+    let timeoutHandle = null;
+    const timeoutPromise = new Promise((_, reject) => {
+        timeoutHandle = setTimeout(() => reject(new Error(`push_send_timeout_${timeoutMs}ms`)), timeoutMs);
+    });
+    try {
+        return await Promise.race([promise, timeoutPromise]);
+    }
+    finally {
+        if (timeoutHandle)
+            clearTimeout(timeoutHandle);
+    }
+};
 const sendWebPushWithRetry = async (subscription, payload, retries = 1) => {
     let attempt = 0;
     let lastError;
     while (attempt <= retries) {
         try {
-            await web_push_1.default.sendNotification(subscription, payload, { TTL: 60 });
+            await sendWithTimeout(web_push_1.default.sendNotification(subscription, payload, { TTL: 60 }), 4000);
             return;
         }
         catch (error) {

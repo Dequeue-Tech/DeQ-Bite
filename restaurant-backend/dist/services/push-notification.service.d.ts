@@ -8,7 +8,7 @@ type WebPushSubscriptionPayload = {
 type CriticalOrderPushInput = {
     restaurantId: string;
     userId?: string;
-    eventType: 'order.created' | 'order.accepted' | 'order.completed';
+    eventType: 'order.created' | 'order.accepted' | 'order.completed' | 'order.updated';
     orderId: string;
     status: string;
     title: string;

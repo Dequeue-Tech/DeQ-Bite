@@ -73,7 +73,13 @@ export const syncPushSubscriptionIfGranted = async (roleScope: PushRoleScope) =>
   if (Notification.permission !== 'granted') return;
 
   const registration = await ensureServiceWorker();
-  const subscription = await registration.pushManager.getSubscription();
-  if (!subscription) return;
+  let subscription = await registration.pushManager.getSubscription();
+  if (!subscription) {
+    const vapidPublicKey = await apiClient.getPushVapidPublicKey();
+    subscription = await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(vapidPublicKey),
+    });
+  }
   await apiClient.subscribeToPush({ roleScope, subscription: toPayload(subscription) });
 };

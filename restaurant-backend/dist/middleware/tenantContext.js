@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.attachTenantContext = void 0;
-const tenant_context_1 = require("@/context/tenant-context");
+const tenant_context_1 = require("../context/tenant-context");
 const isPlatformRoute = (path) => path.startsWith('/api/platform');
 const attachTenantContext = (req, _res, next) => {
     const isCentralAdmin = req.user?.role === 'CENTRAL_ADMIN';

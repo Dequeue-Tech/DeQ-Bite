@@ -1,9 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getKOTOperationalSummary = exports.updateKOTPriority = exports.updateKOTStatus = exports.syncKOTTicketFromOrderStatus = exports.createKOTTicketForOrder = exports.KOTError = void 0;
-const realtime_1 = require("@/utils/realtime");
-const database_1 = require("@/config/database");
-const order_status_notification_service_1 = require("@/services/order-status-notification.service");
+const realtime_1 = require("../../utils/realtime");
+const database_1 = require("../../config/database");
+const order_status_notification_service_1 = require("../../services/order-status-notification.service");
 class KOTError extends Error {
     statusCode;
     constructor(message, statusCode = 400) {

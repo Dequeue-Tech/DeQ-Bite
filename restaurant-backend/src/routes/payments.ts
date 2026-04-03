@@ -11,7 +11,7 @@ import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaurant';
 import { emitRestaurantEvent } from '@/utils/realtime';
 import { cacheResponse } from '@/middleware/cache';
-import { processOrderCompletionNotifications } from '@/services/order-completion.service';
+import { enqueueOrderCompletionJob } from '@/queues/orderCompletion.queue';
 import { notifyOrderStatusChange } from '@/services/order-status-notification.service';
 import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
 import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
@@ -474,12 +474,7 @@ router.post('/verify', authenticate, requireRestaurant, asyncHandler(async (req:
   });
 
   await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-  void processOrderCompletionNotifications(order.id).catch((error) => {
-    logger.error('Order completion notification pipeline failed after payment verify', {
-      orderId: order.id,
-      message: error instanceof Error ? error.message : String(error),
-    });
-  });
+  await enqueueOrderCompletionJob(order.id);
 
   await syncKOTTicketFromOrderStatus({
     restaurantId: updatedOrder.restaurantId,
@@ -756,12 +751,7 @@ router.post('/cash/confirm', authenticate, requireRestaurant, authorizeRestauran
   });
 
   await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-  void processOrderCompletionNotifications(order.id).catch((error) => {
-    logger.error('Order completion notification pipeline failed after cash confirm', {
-      orderId: order.id,
-      message: error instanceof Error ? error.message : String(error),
-    });
-  });
+  await enqueueOrderCompletionJob(order.id);
 
   await syncKOTTicketFromOrderStatus({
     restaurantId: updatedOrder.restaurantId,
@@ -872,12 +862,7 @@ router.put('/status', authenticate, requireRestaurant, authorizeRestaurantRole('
 
   if (payload.paymentStatus === 'COMPLETED') {
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-    void processOrderCompletionNotifications(order.id).catch((error) => {
-      logger.error('Order completion notification pipeline failed after payment status update', {
-        orderId: order.id,
-        message: error instanceof Error ? error.message : String(error),
-      });
-    });
+    await enqueueOrderCompletionJob(order.id);
   }
 
   await syncKOTTicketFromOrderStatus({

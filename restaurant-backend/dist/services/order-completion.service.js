@@ -1,13 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processOrderCompletionNotifications = void 0;
-const database_1 = require("@/config/database");
-const pdf_1 = require("@/lib/pdf");
-const email_1 = require("@/lib/email");
-const sms_1 = require("@/lib/sms");
-const realtime_1 = require("@/utils/realtime");
-const logger_1 = require("@/utils/logger");
-const order_contact_service_1 = require("@/services/order-contact.service");
+const database_1 = require("../config/database");
+const pdf_1 = require("../lib/pdf");
+const email_1 = require("../lib/email");
+const sms_1 = require("../lib/sms");
+const realtime_1 = require("../utils/realtime");
+const logger_1 = require("../utils/logger");
+const order_contact_service_1 = require("../services/order-contact.service");
 const DELIVERY_METHODS = ['EMAIL', 'SMS'];
 const withRetries = async (label, fn, retries = 2) => {
     let attempt = 0;
@@ -82,7 +82,7 @@ const ensureInvoiceRecord = async (order) => {
     const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
     const invoiceData = buildInvoiceData(order, invoiceNumber, placementContact);
     if (existing?.pdfName && existing?.pdfPath) {
-        return { invoice: existing, invoiceData };
+        return { invoice: existing, invoiceData, pdfBuffer: undefined };
     }
     const pdfBuffer = await withRetries('invoice-pdf-generate', async () => (0, pdf_1.generateInvoicePDF)(invoiceData));
     const pdfStorage = await withRetries('invoice-storage-upload', async () => (0, pdf_1.savePDFToStorage)(pdfBuffer, `invoice-${invoiceNumber}.pdf`));
@@ -95,7 +95,7 @@ const ensureInvoiceRecord = async (order) => {
                 pdfName: pdfStorage.pdfName,
             },
         });
-        return { invoice: updated, invoiceData };
+        return { invoice: updated, invoiceData, pdfBuffer };
     }
     const created = await database_1.prisma.invoice.create({
         data: {
@@ -109,7 +109,7 @@ const ensureInvoiceRecord = async (order) => {
             pdfName: pdfStorage.pdfName,
         },
     });
-    return { invoice: created, invoiceData };
+    return { invoice: created, invoiceData, pdfBuffer };
 };
 const processOrderCompletionNotifications = async (orderId) => {
     const order = await database_1.prisma.order.findUnique({
@@ -137,7 +137,7 @@ const processOrderCompletionNotifications = async (orderId) => {
         return;
     if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED')
         return;
-    const { invoice } = await ensureInvoiceRecord(order);
+    const { invoice, invoiceData, pdfBuffer: generatedPdfBuffer } = await ensureInvoiceRecord(order);
     let invoiceUrl = invoice.pdfPath || null;
     if (invoice.pdfName) {
         try {
@@ -145,6 +145,13 @@ const processOrderCompletionNotifications = async (orderId) => {
         }
         catch {
         }
+    }
+    let pdfBufferForEmail = generatedPdfBuffer ?? null;
+    if (!pdfBufferForEmail && invoice.pdfData) {
+        pdfBufferForEmail = Buffer.from(invoice.pdfData);
+    }
+    if (!pdfBufferForEmail) {
+        pdfBufferForEmail = await withRetries('invoice-pdf-regenerate-email', async () => (0, pdf_1.generateInvoicePDF)(invoiceData));
     }
     let emailSent = invoice.emailSent;
     let smsSent = invoice.smsSent;
@@ -162,10 +169,9 @@ const processOrderCompletionNotifications = async (orderId) => {
                 invoiceNumber: invoice.invoiceNumber,
                 orderId: order.id,
                 totalInr: order.totalPaise / 100,
-                invoiceUrl,
                 orderDate: order.createdAt.toLocaleDateString('en-IN'),
                 tableNumber: order.table?.number || 0,
-            }));
+            }, pdfBufferForEmail));
             logDeliveryResult({
                 channel: 'email',
                 status: emailSent ? 'success' : 'failure',

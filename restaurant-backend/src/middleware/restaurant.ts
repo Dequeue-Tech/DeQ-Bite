@@ -75,6 +75,16 @@ const extractSlugFromPath = (req: Request): string | null => {
     return restaurantsPathMatch[1].toLowerCase();
   }
 
+  // Match /api/:restaurantSlug/... tenant routes (when params aren't populated yet)
+  const tenantPathMatch = /\/api\/([^\/\?#]+)(\/|$)/i.exec(url);
+  if (tenantPathMatch && tenantPathMatch[1]) {
+    const candidate = tenantPathMatch[1].toLowerCase();
+    // Exclude non-tenant top-level api routes
+    if (!['auth', 'platform', 'restaurants'].includes(candidate)) {
+      return candidate;
+    }
+  }
+
   // Match /r/:slug/... pattern
   const match = /\/r\/([^/?#]+)(\/|$)/i.exec(url);
   if (match && match[1]) return match[1].toLowerCase();

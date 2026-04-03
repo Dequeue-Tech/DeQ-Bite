@@ -1,10 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.ensureAuthenticatedUserFromToken = void 0;
-const database_1 = require("@/config/database");
+const database_1 = require("../config/database");
 const client_1 = require("@prisma/client");
-const firebase_admin_1 = require("@/lib/firebase-admin");
-const errorHandler_1 = require("@/middleware/errorHandler");
+const firebase_admin_1 = require("./firebase-admin");
+const errorHandler_1 = require("../middleware/errorHandler");
 const FALLBACK_FIREBASE_PASSWORD = 'firebase-managed-account';
 const PLACEHOLDER_EMAIL_DOMAIN = 'deq-firebase.local';
 let firebaseUidColumnAvailable = true;

@@ -15,7 +15,7 @@ import {
   extractMarketplaceOrderMetadata,
   MarketplaceSourceSystem,
 } from '@/modules/pos/marketplace-order-meta';
-import { processOrderCompletionNotifications } from '@/services/order-completion.service';
+import { enqueueOrderCompletionJob } from '@/queues/orderCompletion.queue';
 import { notifyOrderStatusChange } from '@/services/order-status-notification.service';
 import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
 import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
@@ -1028,12 +1028,7 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
     });
 
     if (order.status === 'COMPLETED') {
-      void processOrderCompletionNotifications(order.id).catch((error) => {
-        logger.error('Order completion notification pipeline failed after order status update', {
-          orderId: order.id,
-          message: error instanceof Error ? error.message : String(error),
-        });
-      });
+      await enqueueOrderCompletionJob(order.id);
     }
 
     return res.json({ success: true, data: attachMarketplaceOrderMetadata(order), message: 'Order status updated' });

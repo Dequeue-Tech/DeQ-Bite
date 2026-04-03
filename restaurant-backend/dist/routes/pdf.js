@@ -1,12 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("@/config/database");
-const firebase_user_1 = require("@/lib/firebase-user");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const pdf_1 = require("@/lib/pdf");
-const logger_1 = require("@/utils/logger");
-const order_contact_service_1 = require("@/services/order-contact.service");
+const database_1 = require("../config/database");
+const firebase_user_1 = require("../lib/firebase-user");
+const errorHandler_1 = require("../middleware/errorHandler");
+const pdf_1 = require("../lib/pdf");
+const logger_1 = require("../utils/logger");
+const order_contact_service_1 = require("../services/order-contact.service");
 const router = (0, express_1.Router)();
 router.get('/invoice/:invoiceId', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { invoiceId } = req.params;

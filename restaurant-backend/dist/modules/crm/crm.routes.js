@@ -2,10 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const database_1 = require("@/config/database");
-const crm_service_1 = require("@/modules/crm/crm.service");
+const auth_1 = require("../../middleware/auth");
+const restaurant_1 = require("../../middleware/restaurant");
+const database_1 = require("../../config/database");
+const crm_service_1 = require("../../modules/crm/crm.service");
 const router = (0, express_1.Router)();
 const redeemSchema = zod_1.z.object({
     points: zod_1.z.number().int().positive(),

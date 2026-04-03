@@ -2,22 +2,22 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const payments_1 = require("@/lib/payments");
-const logger_1 = require("@/utils/logger");
-const audit_1 = require("@/utils/audit");
-const pdf_1 = require("@/lib/pdf");
-const restaurant_1 = require("@/middleware/restaurant");
-const realtime_1 = require("@/utils/realtime");
-const cache_1 = require("@/middleware/cache");
-const order_completion_service_1 = require("@/services/order-completion.service");
-const order_status_notification_service_1 = require("@/services/order-status-notification.service");
-const idempotency_1 = require("@/utils/idempotency");
-const order_lock_1 = require("@/utils/order-lock");
-const kot_service_1 = require("@/modules/kot/kot.service");
-const order_contact_service_1 = require("@/services/order-contact.service");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const errorHandler_1 = require("../middleware/errorHandler");
+const payments_1 = require("../lib/payments");
+const logger_1 = require("../utils/logger");
+const audit_1 = require("../utils/audit");
+const pdf_1 = require("../lib/pdf");
+const restaurant_1 = require("../middleware/restaurant");
+const realtime_1 = require("../utils/realtime");
+const cache_1 = require("../middleware/cache");
+const orderCompletion_queue_1 = require("../queues/orderCompletion.queue");
+const order_status_notification_service_1 = require("../services/order-status-notification.service");
+const idempotency_1 = require("../utils/idempotency");
+const order_lock_1 = require("../utils/order-lock");
+const kot_service_1 = require("../modules/kot/kot.service");
+const order_contact_service_1 = require("../services/order-contact.service");
 const router = (0, express_1.Router)();
 const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 const createPaymentSchema = zod_1.z.object({
@@ -425,12 +425,7 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
         },
     });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-    void (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
-        logger_1.logger.error('Order completion notification pipeline failed after payment verify', {
-            orderId: order.id,
-            message: error instanceof Error ? error.message : String(error),
-        });
-    });
+    await (0, orderCompletion_queue_1.enqueueOrderCompletionJob)(order.id);
     await (0, kot_service_1.syncKOTTicketFromOrderStatus)({
         restaurantId: updatedOrder.restaurantId,
         orderId: updatedOrder.id,
@@ -668,12 +663,7 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
         },
     });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-    void (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
-        logger_1.logger.error('Order completion notification pipeline failed after cash confirm', {
-            orderId: order.id,
-            message: error instanceof Error ? error.message : String(error),
-        });
-    });
+    await (0, orderCompletion_queue_1.enqueueOrderCompletionJob)(order.id);
     await (0, kot_service_1.syncKOTTicketFromOrderStatus)({
         restaurantId: updatedOrder.restaurantId,
         orderId: updatedOrder.id,
@@ -773,12 +763,7 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
     });
     if (payload.paymentStatus === 'COMPLETED') {
         await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-        void (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
-            logger_1.logger.error('Order completion notification pipeline failed after payment status update', {
-                orderId: order.id,
-                message: error instanceof Error ? error.message : String(error),
-            });
-        });
+        await (0, orderCompletion_queue_1.enqueueOrderCompletionJob)(order.id);
     }
     await (0, kot_service_1.syncKOTTicketFromOrderStatus)({
         restaurantId: updatedOrder.restaurantId,

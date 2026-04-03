@@ -99,7 +99,7 @@ const ensureInvoiceRecord = async (order: any) => {
   const invoiceData = buildInvoiceData(order, invoiceNumber, placementContact);
 
   if (existing?.pdfName && existing?.pdfPath) {
-    return { invoice: existing, invoiceData };
+    return { invoice: existing, invoiceData, pdfBuffer: undefined as Buffer | undefined };
   }
 
   const pdfBuffer = await withRetries('invoice-pdf-generate', async () => generateInvoicePDF(invoiceData));
@@ -116,7 +116,7 @@ const ensureInvoiceRecord = async (order: any) => {
         pdfName: pdfStorage.pdfName,
       },
     });
-    return { invoice: updated, invoiceData };
+    return { invoice: updated, invoiceData, pdfBuffer };
   }
 
   const created = await prisma.invoice.create({
@@ -132,7 +132,7 @@ const ensureInvoiceRecord = async (order: any) => {
     },
   });
 
-  return { invoice: created, invoiceData };
+  return { invoice: created, invoiceData, pdfBuffer };
 };
 
 export const processOrderCompletionNotifications = async (orderId: string) => {
@@ -161,7 +161,7 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   if (!order) return;
   if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED') return;
 
-  const { invoice } = await ensureInvoiceRecord(order);
+  const { invoice, invoiceData, pdfBuffer: generatedPdfBuffer } = await ensureInvoiceRecord(order);
   let invoiceUrl = invoice.pdfPath || null;
 
   if (invoice.pdfName) {
@@ -170,6 +170,16 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
     } catch {
       // fall back to stored path when signed URL generation fails
     }
+  }
+
+  let pdfBufferForEmail: Buffer | null = generatedPdfBuffer ?? null;
+  if (!pdfBufferForEmail && invoice.pdfData) {
+    pdfBufferForEmail = Buffer.from(invoice.pdfData);
+  }
+  if (!pdfBufferForEmail) {
+    pdfBufferForEmail = await withRetries('invoice-pdf-regenerate-email', async () =>
+      generateInvoicePDF(invoiceData)
+    );
   }
 
   let emailSent = invoice.emailSent;
@@ -184,17 +194,19 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
     const startedAt = new Date().toISOString();
     try {
       emailSent = await withRetries('invoice-email-send', async () =>
-        sendOrderCompletionEmail({
-          to: placedOrderEmail,
-          customerName: placedOrderName,
-          restaurantName: order.restaurant?.name || 'Restaurant',
-          invoiceNumber: invoice.invoiceNumber,
-          orderId: order.id,
-          totalInr: order.totalPaise / 100,
-          invoiceUrl,
-          orderDate: order.createdAt.toLocaleDateString('en-IN'),
-          tableNumber: order.table?.number || 0,
-        })
+        sendOrderCompletionEmail(
+          {
+            to: placedOrderEmail,
+            customerName: placedOrderName,
+            restaurantName: order.restaurant?.name || 'Restaurant',
+            invoiceNumber: invoice.invoiceNumber,
+            orderId: order.id,
+            totalInr: order.totalPaise / 100,
+            orderDate: order.createdAt.toLocaleDateString('en-IN'),
+            tableNumber: order.table?.number || 0,
+          },
+          pdfBufferForEmail
+        )
       );
       logDeliveryResult({
         channel: 'email',

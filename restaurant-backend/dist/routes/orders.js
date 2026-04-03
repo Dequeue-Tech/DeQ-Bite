@@ -1,19 +1,19 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const logger_1 = require("@/utils/logger");
-const realtime_1 = require("@/utils/realtime");
-const kot_service_1 = require("@/modules/kot/kot.service");
-const inventory_service_1 = require("@/modules/inventory/inventory.service");
-const crm_service_1 = require("@/modules/crm/crm.service");
-const marketplace_order_meta_1 = require("@/modules/pos/marketplace-order-meta");
-const order_completion_service_1 = require("@/services/order-completion.service");
-const order_status_notification_service_1 = require("@/services/order-status-notification.service");
-const idempotency_1 = require("@/utils/idempotency");
-const order_lock_1 = require("@/utils/order-lock");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const logger_1 = require("../utils/logger");
+const realtime_1 = require("../utils/realtime");
+const kot_service_1 = require("../modules/kot/kot.service");
+const inventory_service_1 = require("../modules/inventory/inventory.service");
+const crm_service_1 = require("../modules/crm/crm.service");
+const marketplace_order_meta_1 = require("../modules/pos/marketplace-order-meta");
+const orderCompletion_queue_1 = require("../queues/orderCompletion.queue");
+const order_status_notification_service_1 = require("../services/order-status-notification.service");
+const idempotency_1 = require("../utils/idempotency");
+const order_lock_1 = require("../utils/order-lock");
 const router = (0, express_1.Router)();
 const TAX_RATE = 0.08;
 router.use(auth_1.authenticate);
@@ -895,12 +895,7 @@ router.put('/:id/status', restaurant_1.requireRestaurant, (0, restaurant_1.autho
             payload: buildOrderEventPayload(order),
         });
         if (order.status === 'COMPLETED') {
-            void (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
-                logger_1.logger.error('Order completion notification pipeline failed after order status update', {
-                    orderId: order.id,
-                    message: error instanceof Error ? error.message : String(error),
-                });
-            });
+            await (0, orderCompletion_queue_1.enqueueOrderCompletionJob)(order.id);
         }
         return res.json({ success: true, data: (0, marketplace_order_meta_1.attachMarketplaceOrderMetadata)(order), message: 'Order status updated' });
     }

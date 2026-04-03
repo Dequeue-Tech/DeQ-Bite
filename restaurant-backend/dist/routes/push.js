@@ -2,10 +2,10 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const push_notification_service_1 = require("@/services/push-notification.service");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const errorHandler_1 = require("../middleware/errorHandler");
+const push_notification_service_1 = require("../services/push-notification.service");
 const router = (0, express_1.Router)();
 const subscriptionSchema = zod_1.z.object({
     endpoint: zod_1.z.string().url(),

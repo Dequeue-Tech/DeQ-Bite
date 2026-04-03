@@ -1,10 +1,6 @@
 import type { Metadata, Viewport } from 'next'
-import { Suspense } from 'react'
 import './globals.css'
-import { Toaster } from 'react-hot-toast'
-import Navbar from '@/components/Navbar'
-import RestaurantContextSync from '@/components/RestaurantContextSync'
-import RestaurantStaffGuard from '@/components/RestaurantStaffGuard'
+import AppShell from '@/components/AppShell'
 
 export const metadata: Metadata = {
   title: 'Restaurant Online Ordering',
@@ -31,29 +27,7 @@ export default function RootLayout({
         <script src="https://checkout.razorpay.com/v1/checkout.js" async></script>
       </head>
       <body className="antialiased">
-        <div id="root" className="min-h-screen flex flex-col pb-24 md:pb-0 safe-area-pb">
-          <Suspense fallback={null}>
-            <RestaurantContextSync />
-          </Suspense>
-          <Suspense fallback={null}>
-            <RestaurantStaffGuard />
-          </Suspense>
-          <Navbar />
-          {/* main content area now flexes; padding applied on root to push pages up above fixed nav */}
-          <main className="flex-1">
-            {children}
-          </main>
-          <Toaster 
-            position="top-center"
-            toastOptions={{
-              duration: 3000,
-              style: {
-                maxWidth: '90vw',
-                fontSize: '14px',
-              },
-            }}
-          />
-        </div>
+        <AppShell>{children}</AppShell>
       </body>
     </html>
   )

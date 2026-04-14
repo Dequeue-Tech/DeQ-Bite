@@ -2,18 +2,19 @@
 
 import { useState, FormEvent, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth';
+import { apiClient } from '@/lib/api-client';
 import Link from 'next/link';
 import { ArrowRight, Loader2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function EditorialMichelinSignInPage() {
   const router = useRouter();
-  const [isLoading, setIsLoading] = useState(false);
-  const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isMounted, setIsMounted] = useState(false);
   const [greeting, setGreeting] = useState('Welcome');
-
   const [formData, setFormData] = useState({ email: '', password: '' });
+  const [oauthLoadingProvider, setOauthLoadingProvider] = useState<'GOOGLE' | 'GITHUB' | null>(null);
+  const { login, loginWithOAuth, isLoading, error, clearError } = useAuthStore();
 
   // Handle Hydration, Animations, and Time-based Greeting
   useEffect(() => {
@@ -26,33 +27,35 @@ export default function EditorialMichelinSignInPage() {
 
   const handleEmailSignIn = async (e: FormEvent) => {
     e.preventDefault();
-    setIsLoading(true);
+    clearError();
     try {
-      await new Promise(resolve => setTimeout(resolve, 1500));
+      await login(formData);
+      const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
       toast.success('Welcome back!');
-      router.push('/'); 
+      router.push(selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/');
     } catch (error: any) {
       toast.error(error?.message || 'Authentication failed.');
-    } finally {
-      setIsLoading(false);
     }
   };
 
   const handleGoogleSignIn = async () => {
-    setIsGoogleLoading(true);
+    setOauthLoadingProvider('GOOGLE');
+    clearError();
     try {
-      await new Promise(resolve => setTimeout(resolve, 1000));
-      toast.success('Google Sign In clicked!');
-    } catch (error) {
-      toast.error('Failed to sign in with Google.');
+      await loginWithOAuth('GOOGLE');
+      const selectedRestaurantSlug = apiClient.getSelectedRestaurantSlug();
+      toast.success('Welcome back!');
+      router.push(selectedRestaurantSlug ? `/${selectedRestaurantSlug}` : '/');
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to sign in with Google.');
     } finally {
-      setIsGoogleLoading(false);
+      setOauthLoadingProvider(null);
     }
   };
 
   if (!isMounted) return null;
 
-  const isFormDisabled = isLoading || isGoogleLoading;
+  const isFormDisabled = isLoading || oauthLoadingProvider !== null;
 
   return (
     <div className="min-h-screen bg-[#FAF9F6] flex items-center justify-center relative overflow-hidden selection:bg-orange-500/30 font-sans">
@@ -132,7 +135,7 @@ export default function EditorialMichelinSignInPage() {
             disabled={isFormDisabled}
             className="w-full flex items-center justify-center gap-3 bg-white border border-gray-200 text-gray-700 rounded-full py-4 sm:py-4.5 font-bold text-sm hover:bg-gray-50 active:scale-[0.98] shadow-[0_4px_14px_rgba(0,0,0,0.03)] transition-all disabled:opacity-50 disabled:active:scale-100"
           >
-            {isGoogleLoading ? (
+            {oauthLoadingProvider === 'GOOGLE' ? (
               <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
             ) : (
               <>
@@ -157,6 +160,11 @@ export default function EditorialMichelinSignInPage() {
 
         {/* Email/Password Form */}
         <form onSubmit={handleEmailSignIn} className="space-y-6 w-full relative z-10">
+          {error && (
+            <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {error}
+            </div>
+          )}
           
           {/* Flushed Input: Email */}
           <div className="relative group stagger-4">
@@ -197,9 +205,12 @@ export default function EditorialMichelinSignInPage() {
               Password
             </label>
             
-            <button type="button" disabled={isFormDisabled} className="absolute right-0 top-4 text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors bg-transparent disabled:opacity-50">
+            <Link
+              href="/auth/forgot-password"
+              className="absolute right-0 top-4 text-xs font-bold text-gray-400 hover:text-gray-900 transition-colors"
+            >
               Forgot?
-            </button>
+            </Link>
           </div>
 
           {/* Email Submit Button */}

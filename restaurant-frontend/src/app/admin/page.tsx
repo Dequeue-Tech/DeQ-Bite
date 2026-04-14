@@ -2,12 +2,12 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient, Category, DeliveryOrder, DeliveryStatus, MenuItem, Order, RestaurantUserEntry } from '@/lib/api-client';
+import { apiClient, AnalyticsChatMessage, Category, DeliveryOrder, DeliveryStatus, MenuItem, Order, RestaurantUserEntry } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import { 
   ChefHat, Plus, Trash2, CheckCircle, TrendingUp, 
   Users, CreditCard, LayoutDashboard, BellRing, 
-  Clock, Check, X, Search, Activity, ChevronDown, Bike, MapPin, Phone, Sparkles, AlertCircle, AlertTriangle, Zap, RefreshCw
+  Clock, Check, X, Search, Activity, ChevronDown, Bike, MapPin, Phone, Sparkles, AlertCircle, AlertTriangle, Zap, RefreshCw, MessageSquare, Send
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
@@ -142,27 +142,27 @@ export default function AdminPage() {
   const [adminAccessVerified, setAdminAccessVerified] = useState(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [aiInsights, setAiInsights] = useState<{type: string, title: string, desc: string}[] | null>(null);
+  const [isCopilotChatOpen, setIsCopilotChatOpen] = useState(false);
+  const [copilotQuestion, setCopilotQuestion] = useState('');
+  const [isCopilotChatLoading, setIsCopilotChatLoading] = useState(false);
+  const [copilotMessages, setCopilotMessages] = useState<AnalyticsChatMessage[]>([]);
+  const [copilotSuggestedPrompts, setCopilotSuggestedPrompts] = useState<string[]>([
+    'What should I push harder today?',
+    'Where are we likely to lose orders?',
+    'Give me one quick win for revenue.',
+  ]);
 
   const generateRealTimeInsights = async () => {
     setIsGeneratingAi(true);
     setAiInsights(null); // Clear old insights
     
     try {
-      // 1. Gather the live data from your existing React state
-      const payload = {
-        topDishes: topDishes.length > 0 ? topDishes.map(d => d.name) : ['No data yet'],
-        pendingDeliveries: pendingDeliveryOrders.length,
-        totalOrders: ordersTotal
-      };
+      const { topDishes, pendingDeliveries, totalOrders } = buildCopilotAnalyticsPayload();
+      const payload = { topDishes, pendingDeliveries, totalOrders };
 
-      // 2. Call your backend (this automatically unwraps the data or throws an error)
       const insights = await apiClient.generateInsights(payload);
-
-      // 3. Set the state directly with the returned array
       setAiInsights(insights);
-
     } catch (error: any) {
-      // 4. The api-client handles throwing the exact error message from the backend
       toast.error(error?.message || "Could not generate insights right now.");
     } finally {
       setIsGeneratingAi(false);
@@ -645,6 +645,15 @@ export default function AdminPage() {
 
   const statusMax = useMemo(() => Math.max(1, ...Object.values(ordersByStatus)), [ordersByStatus]);
 
+  const buildCopilotAnalyticsPayload = () => ({
+    topDishes: topDishes.length > 0 ? topDishes.map((dish) => dish.name) : ['No data yet'],
+    pendingDeliveries: pendingDeliveryOrders.length,
+    totalOrders: ordersTotal,
+    activeOrders: activeOrders.length,
+    totalRevenuePaise,
+    avgOrderValuePaise,
+  });
+
   // --- Handlers ---
   
   // Dashboard Quick Action Handler
@@ -659,6 +668,37 @@ export default function AdminPage() {
       }
     } catch (error: any) { toast.error(error?.message || 'Failed to update order status'); } 
     finally { setUpdatingOrderId(null); }
+  };
+
+  const handleCopilotQuestionSubmit = async (questionOverride?: string) => {
+    const question = (questionOverride ?? copilotQuestion).trim();
+    if (!question || isCopilotChatLoading) return;
+
+    const userMessage: AnalyticsChatMessage = { role: 'user', content: question };
+    const nextMessages = [...copilotMessages, userMessage];
+
+    setIsCopilotChatOpen(true);
+    setCopilotMessages(nextMessages);
+    setCopilotQuestion('');
+    setIsCopilotChatLoading(true);
+
+    try {
+      const response = await apiClient.chatAnalytics({
+        question,
+        ...buildCopilotAnalyticsPayload(),
+        messages: nextMessages.slice(-12),
+      });
+
+      setCopilotMessages((prev) => [...prev, { role: 'assistant', content: response.reply }]);
+      if (response.suggestedPrompts.length > 0) {
+        setCopilotSuggestedPrompts(response.suggestedPrompts);
+      }
+    } catch (error: any) {
+      setCopilotMessages((prev) => prev.slice(0, -1));
+      toast.error(error?.message || 'Could not get deeper analytics insights right now.');
+    } finally {
+      setIsCopilotChatLoading(false);
+    }
   };
 
   // Unified Live Orders Update Handler
@@ -1159,6 +1199,14 @@ export default function AdminPage() {
                       <><Zap className="h-4 w-4 text-orange-400" /> Generate Insights</>
                     )}
                   </button>
+                  <button
+                    onClick={() => setIsCopilotChatOpen((prev) => !prev)}
+                    className="mt-3 w-max flex items-center gap-2 text-sm font-bold text-gray-700 bg-white/90 px-5 py-3 rounded-xl border border-gray-200 hover:border-orange-200 hover:text-gray-900 hover:bg-white transition-all shadow-sm"
+                  >
+                    <MessageSquare className="h-4 w-4 text-orange-500" />
+                    Chat For More Insights
+                    <ChevronDown className={`h-4 w-4 transition-transform duration-300 ${isCopilotChatOpen ? 'rotate-180' : ''}`} />
+                  </button>
                 </div>
 
                 {/* Right: Dynamic Insights Feed */}
@@ -1202,6 +1250,104 @@ export default function AdminPage() {
                   )}
                 </div>
 
+              </div>
+
+              <div
+                className={`relative z-10 overflow-hidden transition-all duration-500 ease-out ${isCopilotChatOpen ? 'max-h-[720px] opacity-100 mt-6 pt-6 border-t border-gray-200/70' : 'max-h-0 opacity-0 mt-0 pt-0 border-t border-transparent'}`}
+              >
+                <div className="grid grid-cols-1 lg:grid-cols-[1.35fr_0.65fr] gap-4">
+                  <div className="rounded-[28px] border border-gray-200/70 bg-white/85 backdrop-blur-sm shadow-sm">
+                    <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+                      <div>
+                        <h3 className="text-sm font-black text-gray-900 tracking-tight">Bite Copilot Chat</h3>
+                        <p className="text-xs font-medium text-gray-500 mt-1">Ask follow-up questions about today&apos;s live restaurant metrics.</p>
+                      </div>
+                      <div className="text-[10px] font-black uppercase tracking-[0.18em] text-orange-500">
+                        Live
+                      </div>
+                    </div>
+
+                    <div className="max-h-[360px] overflow-y-auto px-5 py-4 space-y-3">
+                      {copilotMessages.length === 0 && (
+                        <div className="rounded-2xl border border-dashed border-orange-200 bg-orange-50/60 px-4 py-4 text-sm text-gray-600">
+                          Ask Bite Copilot about menu momentum, delivery slowdowns, pricing opportunities, or what to push next based on your current numbers.
+                        </div>
+                      )}
+
+                      {copilotMessages.map((message, index) => (
+                        <div
+                          key={`${message.role}-${index}`}
+                          className={`flex ${message.role === 'user' ? 'justify-end' : 'justify-start'}`}
+                        >
+                          <div
+                            className={`max-w-[88%] rounded-2xl px-4 py-3 text-sm font-medium leading-relaxed shadow-sm ${
+                              message.role === 'user'
+                                ? 'bg-gray-900 text-white'
+                                : 'bg-white border border-gray-200 text-gray-800'
+                            }`}
+                          >
+                            {message.content}
+                          </div>
+                        </div>
+                      ))}
+
+                      {isCopilotChatLoading && (
+                        <div className="flex justify-start">
+                          <div className="rounded-2xl px-4 py-3 text-sm font-medium leading-relaxed shadow-sm bg-white border border-gray-200 text-gray-500 flex items-center gap-2">
+                            <RefreshCw className="h-4 w-4 animate-spin text-orange-500" />
+                            Bite Copilot is thinking...
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <form
+                      onSubmit={(e) => {
+                        e.preventDefault();
+                        void handleCopilotQuestionSubmit();
+                      }}
+                      className="border-t border-gray-100 px-5 py-4"
+                    >
+                      <div className="flex flex-col sm:flex-row gap-3">
+                        <textarea
+                          value={copilotQuestion}
+                          onChange={(e) => setCopilotQuestion(e.target.value)}
+                          placeholder="Ask about demand, delivery pressure, pricing, repeat orders, or your next best move..."
+                          rows={2}
+                          className="flex-1 resize-none rounded-2xl border border-gray-200 bg-white px-4 py-3 text-sm font-medium text-gray-800 outline-none transition-colors focus:border-orange-300"
+                        />
+                        <button
+                          type="submit"
+                          disabled={isCopilotChatLoading || !copilotQuestion.trim()}
+                          className="sm:self-end inline-flex items-center justify-center gap-2 rounded-2xl bg-gray-900 px-5 py-3 text-sm font-bold text-white shadow-lg transition-all hover:bg-black disabled:cursor-not-allowed disabled:opacity-60"
+                        >
+                          <Send className="h-4 w-4" />
+                          Ask AI
+                        </button>
+                      </div>
+                    </form>
+                  </div>
+
+                  <div className="rounded-[28px] border border-gray-200/70 bg-white/75 backdrop-blur-sm p-5 shadow-sm">
+                    <p className="text-[11px] font-black uppercase tracking-[0.18em] text-gray-500">Suggested Prompts</p>
+                    <div className="mt-4 space-y-3">
+                      {copilotSuggestedPrompts.map((prompt) => (
+                        <button
+                          key={prompt}
+                          type="button"
+                          onClick={() => void handleCopilotQuestionSubmit(prompt)}
+                          disabled={isCopilotChatLoading}
+                          className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left text-sm font-bold text-gray-700 transition-all hover:border-orange-200 hover:bg-orange-50 hover:text-gray-900 disabled:opacity-60"
+                        >
+                          {prompt}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="mt-5 rounded-2xl bg-gray-50 px-4 py-4 text-xs font-medium leading-relaxed text-gray-500">
+                      Bite Copilot uses the same live dashboard context shown above, including top dishes, active orders, delivery load, revenue, and average order value.
+                    </div>
+                  </div>
+                </div>
               </div>
             </div>
             {/* ------------------------------------------ */}

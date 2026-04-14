@@ -374,6 +374,16 @@ export interface AiInsight {
   desc: string;
 }
 
+export interface AnalyticsChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+export interface AnalyticsChatResponse {
+  reply: string;
+  suggestedPrompts: string[];
+}
+
 export interface AnalyticsSnapshot {
   id: string;
   restaurantId: string;
@@ -1470,6 +1480,26 @@ class ApiClient {
       return response.data.data;
     }
     throw new Error(response.data.error || 'Failed to generate AI insights');
+  }
+
+  async chatAnalytics(payload: {
+    question: string;
+    topDishes: string[];
+    pendingDeliveries: number;
+    totalOrders: number;
+    activeOrders: number;
+    totalRevenuePaise: number;
+    avgOrderValuePaise: number;
+    messages: AnalyticsChatMessage[];
+  }): Promise<AnalyticsChatResponse> {
+    const response = await this.api.post<ApiResponse<AnalyticsChatResponse>>(
+      this.buildTenantEndpoint('/analytics/insights/chat'),
+      payload
+    );
+    if (response.data.success && response.data.data) {
+      return response.data.data;
+    }
+    throw new Error(response.data.error || 'Failed to chat with Bite Copilot');
   }
 
   // POS integration methods

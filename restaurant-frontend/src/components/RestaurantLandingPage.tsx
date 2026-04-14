@@ -434,6 +434,16 @@ export default function RestaurantLandingPage() {
               View Menu & Order
               <ArrowRight className="h-5 w-5" />
             </button>
+
+            <a
+              href="https://share.google/J10F3DuvO2PcyK7Vn"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-4 py-4 text-lg font-bold text-orange-700 transition-all hover:bg-orange-100 hover:border-orange-300"
+            >
+              Rate Us on Google
+              <Star className="h-5 w-5 fill-current" />
+            </a>
           </div>
         </div>
       </div>
@@ -461,4 +471,3 @@ export default function RestaurantLandingPage() {
     </div>
   );
 }
-

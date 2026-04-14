@@ -54,6 +54,37 @@ const insightsResponseSchema = z.object({
 type InsightsRequestPayload = z.infer<typeof insightsBodySchema>;
 type InsightsResponse = z.infer<typeof insightsResponseSchema>;
 
+const analyticsChatBodySchema = z.object({
+  question: z.string().min(1).max(1000),
+  topDishes: z.array(z.string().min(1)).min(1),
+  pendingDeliveries: z.number().int().nonnegative(),
+  totalOrders: z.number().int().nonnegative(),
+  activeOrders: z.number().int().nonnegative(),
+  totalRevenuePaise: z.number().int().nonnegative(),
+  avgOrderValuePaise: z.number().int().nonnegative(),
+  messages: z
+    .array(
+      z.object({
+        role: z.enum(['user', 'assistant']),
+        content: z.string().min(1).max(2000),
+      })
+    )
+    .max(12)
+    .optional()
+    .default([]),
+});
+
+const analyticsChatResponseSchema = z.object({
+  success: z.literal(true),
+  data: z.object({
+    reply: z.string().min(1),
+    suggestedPrompts: z.array(z.string().min(1)).max(3).default([]),
+  }),
+});
+
+type AnalyticsChatPayload = z.infer<typeof analyticsChatBodySchema>;
+type AnalyticsChatResponse = z.infer<typeof analyticsChatResponseSchema>;
+
 const buildFallbackInsights = (payload: InsightsRequestPayload): InsightsResponse => {
   const topDish = payload.topDishes[0] || 'Top dish';
   const growthTitle = payload.totalOrders >= 20 ? 'Order flow is healthy' : 'Order volume can be improved';
@@ -74,6 +105,31 @@ const buildFallbackInsights = (payload: InsightsRequestPayload): InsightsRespons
       { type: 'growth', title: growthTitle, desc: growthDesc },
       { type: 'alert', title: alertTitle, desc: alertDesc },
     ],
+  };
+};
+
+const buildFallbackChatReply = (payload: AnalyticsChatPayload): AnalyticsChatResponse => {
+  const topDish = payload.topDishes[0] || 'your best-selling item';
+  const pendingPressure =
+    payload.pendingDeliveries > 5
+      ? 'Delivery operations are under pressure right now, so focus on dispatch speed and prep handoff first.'
+      : 'Delivery load looks manageable, so you can focus on growing basket size and repeat orders.';
+  const orderSignal =
+    payload.totalOrders >= 20
+      ? `Order throughput is solid with ${payload.totalOrders} orders, so test upsells around ${topDish} to lift average order value.`
+      : `With ${payload.totalOrders} orders so far, spotlight ${topDish} in promos and homepage placements to increase conversion.`;
+  const avgOrderInr = (payload.avgOrderValuePaise / 100).toFixed(2);
+
+  return {
+    success: true,
+    data: {
+      reply: `${orderSignal} ${pendingPressure} Your current average order value is INR ${avgOrderInr}, so pairing ${topDish} with a high-margin add-on is the clearest next experiment.`,
+      suggestedPrompts: [
+        'What should I push in the next two hours?',
+        'How can I reduce delivery delays today?',
+        'Give me one pricing experiment to test this week.',
+      ],
+    },
   };
 };
 
@@ -172,6 +228,63 @@ The 'desc' field MUST be a brief, actionable recommendation (1-2 sentences max).
   return shaped.data;
 };
 
+const generateAnalyticsChatReply = async (payload: AnalyticsChatPayload): Promise<AnalyticsChatResponse> => {
+  const systemPrompt = `You are Bite Copilot, an AI restaurant analytics advisor.
+Answer the user's question using the provided live restaurant metrics and recent chat context.
+Keep the answer practical, specific, and concise: 2 short paragraphs max.
+Include concrete operational advice, not generic analytics theory.
+Return valid JSON matching this schema exactly:
+{
+  "success": true,
+  "data": {
+    "reply": "string",
+    "suggestedPrompts": ["string", "string", "string"]
+  }
+}
+Do not wrap JSON in markdown.`;
+
+  const userPrompt = `Live analytics context:
+${JSON.stringify(
+    {
+      topDishes: payload.topDishes,
+      pendingDeliveries: payload.pendingDeliveries,
+      totalOrders: payload.totalOrders,
+      activeOrders: payload.activeOrders,
+      totalRevenuePaise: payload.totalRevenuePaise,
+      avgOrderValuePaise: payload.avgOrderValuePaise,
+      recentMessages: payload.messages,
+      question: payload.question,
+    },
+    null,
+    2
+  )}`;
+
+  let rawText: string;
+  if (process.env['GOOGLE_API_KEY'] || process.env['GOOGLE_CLOUD_API_KEY']) {
+    rawText = await callGemini(systemPrompt, userPrompt);
+  } else if (process.env['OPENAI_API_KEY']) {
+    rawText = await callOpenAI(systemPrompt, userPrompt);
+  } else {
+    return buildFallbackChatReply(payload);
+  }
+
+  const cleanedText = rawText.replace(/```json/gi, '').replace(/```/g, '').trim();
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(cleanedText);
+  } catch (err) {
+    throw new Error(`Failed to parse LLM response as JSON: ${(err as Error).message}\nRaw Output: ${cleanedText}`);
+  }
+
+  const shaped = analyticsChatResponseSchema.safeParse(parsed);
+  if (!shaped.success) {
+    throw new Error(`LLM response does not match required schema: ${JSON.stringify(shaped.error.issues)}`);
+  }
+
+  return shaped.data;
+};
+
 // AI Insights Endpoint
 router.post('/insights', async (req: AuthenticatedRequest, res) => {
   console.log("Hit");
@@ -185,6 +298,22 @@ router.post('/insights', async (req: AuthenticatedRequest, res) => {
     }
 
     console.error("AI Insights Error:", error);
+    const message = error instanceof Error ? error.message : 'Unexpected error';
+    return res.status(500).json({ success: false, error: message });
+  }
+});
+
+router.post('/insights/chat', async (req: AuthenticatedRequest, res) => {
+  try {
+    const payload = analyticsChatBodySchema.parse(req.body);
+    const result = await generateAnalyticsChatReply(payload);
+    return res.json(result);
+  } catch (error: unknown) {
+    if (error instanceof z.ZodError) {
+      return res.status(400).json({ success: false, error: 'Invalid payload', details: error.issues });
+    }
+
+    console.error('AI Analytics Chat Error:', error);
     const message = error instanceof Error ? error.message : 'Unexpected error';
     return res.status(500).json({ success: false, error: message });
   }

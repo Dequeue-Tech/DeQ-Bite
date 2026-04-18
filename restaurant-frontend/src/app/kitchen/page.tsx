@@ -1,12 +1,13 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { apiClient, KOTOperationalSummary, KOTStatus, KOTTicket } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import { ChefHat, RefreshCcw, Clock, Flame, Utensils, ArrowRight, X } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { subscribeToRestaurantEvents } from '@/lib/realtime-client';
+import { syncPushSubscriptionIfGranted } from '@/lib/push-notifications';
 
 const kitchenFlow: KOTStatus[] = ['PLACED', 'PREPARING', 'READY'];
 const nextStatusMap: Record<KOTStatus, KOTStatus | null> = {
@@ -40,6 +41,16 @@ const getStatusLabel = (status: KOTStatus) => {
   return 'Served';
 };
 
+const getPlainInstructions = (specialInstructions?: string) => {
+  if (!specialInstructions) return '';
+  const markerIndexes = ['[DELIVERY_META]', '[ORDER_CONTACT]', '[DELIVERY_EMAIL]']
+    .map((marker) => specialInstructions.lastIndexOf(marker))
+    .filter((idx) => idx >= 0);
+  if (markerIndexes.length === 0) return specialInstructions.trim();
+  const firstMarkerIndex = Math.min(...markerIndexes);
+  return specialInstructions.slice(0, firstMarkerIndex).trim();
+};
+
 export default function KitchenPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
@@ -50,13 +61,71 @@ export default function KitchenPage() {
   const [summary, setSummary] = useState<KOTOperationalSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [updatingOrderId, setUpdatingOrderId] = useState<string | null>(null);
+  const [kitchenSoundEnabled, setKitchenSoundEnabled] = useState(true);
+  const announcedOrderIdsRef = useRef<Set<string>>(new Set());
 
   const hasKitchenAccess =
     user?.restaurantRole === 'OWNER' || user?.restaurantRole === 'ADMIN' || user?.restaurantRole === 'STAFF';
 
+  const notifyKitchenNewOrder = (orderId: string) => {
+    if (announcedOrderIdsRef.current.has(orderId)) {
+      return;
+    }
+    announcedOrderIdsRef.current.add(orderId);
+
+    if (kitchenSoundEnabled && typeof window !== 'undefined') {
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const scheduleTone = (frequency: number, startOffset: number, duration: number) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = 'square';
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0.06;
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          const startAt = audioContext.currentTime + startOffset;
+          oscillator.start(startAt);
+          oscillator.stop(startAt + duration);
+        };
+        scheduleTone(1220, 0, 0.11);
+        scheduleTone(860, 0.14, 0.18);
+      } catch {
+        // ignore audio errors
+      }
+    }
+
+    if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
+      try {
+        new Notification('New Kitchen Order', {
+          body: `Order #${orderId.slice(0, 8).toUpperCase()} is ready for acceptance`,
+          tag: `kitchen-${orderId}`,
+        });
+      } catch {
+        // ignore browser notification errors
+      }
+    }
+
+    toast.success(`New order #${orderId.slice(0, 8).toUpperCase()} awaiting action`);
+  };
+
   useEffect(() => {
     getProfile();
   }, [getProfile]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    try {
+      setKitchenSoundEnabled(localStorage.getItem('kitchen_notification_sound') !== 'off');
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!hasKitchenAccess || typeof window === 'undefined') return;
+    syncPushSubscriptionIfGranted('staff').catch(() => undefined);
+  }, [hasKitchenAccess]);
 
   useEffect(() => {
     if (typeof user?.restaurantRole === 'undefined') return;
@@ -72,10 +141,18 @@ export default function KitchenPage() {
     const restaurantSlug = apiClient.getActiveRestaurantSlug();
     const cleanup = subscribeToRestaurantEvents({
       restaurant: restaurantSlug,
-      eventTypes: ['kot.created', 'kot.updated', 'kot.priority.updated', 'order.created', 'order.updated'],
+      role: 'staff',
+      eventTypes: ['kot.created', 'kot.updated', 'kot.priority.updated', 'order.created', 'order.accepted', 'order.updated'],
       onEvent: (event) => {
         const ticket = (event?.payload as any)?.ticket as KOTTicket | undefined;
-        const orderId = (event?.payload as any)?.orderId as string | undefined;
+        const orderId =
+          ((event?.payload as any)?.orderId as string | undefined) ||
+          ((event?.payload as any)?.order_id as string | undefined) ||
+          ((event?.payload as any)?.order?.id as string | undefined);
+
+        if (orderId && (event.type === 'order.created' || event.type === 'kot.created')) {
+          notifyKitchenNewOrder(orderId);
+        }
 
         if (ticket?.orderId) {
           mergeTicket(ticket);
@@ -89,14 +166,19 @@ export default function KitchenPage() {
           return;
         }
 
-        if (event.type === 'order.created' || event.type === 'order.updated') {
-          void refreshBoard(false);
+        if ((event.type === 'order.created' || event.type === 'order.updated' || event.type === 'order.accepted') && orderId) {
+          void refreshSingleTicket(orderId);
+          void loadSummary();
         }
+      },
+      onReconnect: ({ lastSyncTimestamp }) => {
+        if (!lastSyncTimestamp) return;
+        void syncDeltaFromTimestamp(lastSyncTimestamp);
       },
     });
 
     return cleanup;
-  }, [hasKitchenAccess]);
+  }, [hasKitchenAccess, kitchenSoundEnabled]);
 
   const mergeTicket = (incoming: KOTTicket) => {
     setTickets((prev) => {
@@ -128,6 +210,19 @@ export default function KitchenPage() {
       mergeTicket(ticket);
     } catch {
       setTickets((prev) => prev.filter((ticket) => ticket.orderId !== orderId));
+    }
+  };
+
+  const syncDeltaFromTimestamp = async (updatedAfter: string) => {
+    try {
+      const response = await apiClient.getRestaurantOrders('ALL', updatedAfter);
+      if (!response.success || !response.data?.length) return;
+      response.data.forEach((order) => {
+        void refreshSingleTicket(order.id);
+      });
+      void loadSummary();
+    } catch {
+      // Ignore reconnect delta failures; stream events continue.
     }
   };
 
@@ -169,7 +264,12 @@ export default function KitchenPage() {
 
     try {
       setUpdatingOrderId(ticket.orderId);
-      const updated = await apiClient.updateKotStatus(ticket.orderId, nextStatus);
+      const updated = await apiClient.updateKotStatus(
+        ticket.orderId,
+        nextStatus,
+        undefined,
+        ticket.order?.updatedAt ? { expectedUpdatedAt: ticket.order.updatedAt } : undefined
+      );
       mergeTicket(updated);
       if (nextStatus === 'SERVED') {
         toast.success(`Ticket #${ticket.id.slice(0, 8).toUpperCase()} served`);
@@ -314,10 +414,10 @@ export default function KitchenPage() {
                                   </div>
                                 ))}
 
-                                {ticket.order?.specialInstructions && (
+                                {getPlainInstructions(ticket.order?.specialInstructions) && (
                                   <div className="bg-yellow-50 border border-yellow-200 rounded-xl p-3 mt-4">
                                     <p className="text-[10px] font-black text-yellow-800 uppercase tracking-widest mb-1">Notes</p>
-                                    <p className="text-xs font-bold text-yellow-900">{ticket.order.specialInstructions}</p>
+                                    <p className="text-xs font-bold text-yellow-900">{getPlainInstructions(ticket.order?.specialInstructions)}</p>
                                   </div>
                                 )}
                               </div>

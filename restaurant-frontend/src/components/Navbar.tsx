@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { useCartStore } from '@/store/cart';
 import { apiClient } from '@/lib/api-client';
+import { triggerHaptic } from '@/lib/haptics';
 
 const BLOCKED_ROOT_SEGMENTS = new Set([
   '',
@@ -149,6 +150,7 @@ const Navbar = () => {
                 <Link
                   key={link.name}
                   href={link.href}
+                  onClick={() => triggerHaptic('tab_switch')}
                   className={`text-sm lg:text-base ${
                     pathname === link.href
                       ? 'text-orange-600 font-medium'
@@ -161,7 +163,7 @@ const Navbar = () => {
 
               {/* Cart icon for authenticated users */}
               {isAuthenticated && (
-                <Link href={withRestaurant('/cart')} className="relative p-2 -m-2">
+                <Link href={withRestaurant('/cart')} onClick={() => triggerHaptic('tab_switch')} className="relative p-2 -m-2">
                   <ShoppingCart className="h-5 w-5 lg:h-6 lg:w-6 text-gray-600 hover:text-orange-600 transition-colors" />
                   {cartItemsCount > 0 && (
                     <span className="absolute top-0 right-0 bg-red-500 text-white text-xs font-bold rounded-full h-4 w-4 sm:h-5 sm:w-5 flex items-center justify-center text-[10px] sm:text-xs">
@@ -204,11 +206,12 @@ const Navbar = () => {
             <div className='md:hidden flex items-center h-full relative'>
               {isAuthenticated ? (
                 <>
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setShowUserDropdown(!showUserDropdown);
-                    }}
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  triggerHaptic('tab_switch');
+                  setShowUserDropdown(!showUserDropdown);
+                }}
                     className="flex items-center justify-center p-1.5 text-gray-600 hover:text-orange-600 active:bg-gray-100 rounded-full transition-colors"
                   >
                     <User className="h-6 w-6" />
@@ -239,7 +242,10 @@ const Navbar = () => {
                         {canAccessStaffDash && (
                           <Link
                             href={withRestaurant('/admin')}
-                            onClick={() => setShowUserDropdown(false)}
+                            onClick={() => {
+                              triggerHaptic('tab_switch');
+                              setShowUserDropdown(false);
+                            }}
                             className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors"
                           >
                             <LayoutDashboard className="h-4 w-4" />
@@ -251,7 +257,10 @@ const Navbar = () => {
                         {canAccessKitchen && (
                           <Link
                             href={withRestaurant('/kitchen')}
-                            onClick={() => setShowUserDropdown(false)}
+                            onClick={() => {
+                              triggerHaptic('tab_switch');
+                              setShowUserDropdown(false);
+                            }}
                             className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors border-t border-orange-100/50"
                           >
                             <ChefHat className="h-4 w-4" />
@@ -262,7 +271,10 @@ const Navbar = () => {
                         {canAccessPos && (
                           <Link
                             href={withRestaurant('/pos')}
-                            onClick={() => setShowUserDropdown(false)}
+                            onClick={() => {
+                              triggerHaptic('tab_switch');
+                              setShowUserDropdown(false);
+                            }}
                             className="flex items-center gap-3 px-4 py-2.5 text-sm font-bold text-orange-600 bg-orange-50 hover:bg-orange-100 transition-colors border-t border-orange-100/50"
                           >
                             <LayoutDashboard className="h-4 w-4" />
@@ -272,7 +284,10 @@ const Navbar = () => {
 
                         <Link
                           href={withRestaurant('/orders')}
-                          onClick={() => setShowUserDropdown(false)}
+                          onClick={() => {
+                            triggerHaptic('tab_switch');
+                            setShowUserDropdown(false);
+                          }}
                           className="flex items-center gap-3 px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 transition-colors"
                         >
                           <ClipboardList className="h-4 w-4" />
@@ -295,6 +310,7 @@ const Navbar = () => {
               ) : (
                 <Link 
                   href="/auth/signin" 
+                  onClick={() => triggerHaptic('tab_switch')}
                   className="flex items-center justify-center p-2 text-orange-600 hover:text-orange-700 active:bg-gray-50 rounded-full transition-colors"
                 >
                   <User className="h-6 w-6" />
@@ -315,6 +331,7 @@ const Navbar = () => {
               <Link
                 key={link.name}
                 href={link.href}
+                onClick={() => triggerHaptic('tab_switch')}
                 className={`flex flex-col items-center justify-center flex-1 h-full min-w-0 ${
                   active
                     ? 'text-orange-600'

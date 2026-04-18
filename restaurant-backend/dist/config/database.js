@@ -3,8 +3,8 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.prisma = exports.disconnectDatabase = exports.connectDatabase = void 0;
 const client_1 = require("@prisma/client");
 const extension_accelerate_1 = require("@prisma/extension-accelerate");
-const logger_1 = require("../utils/logger");
-const tenant_context_1 = require("../context/tenant-context");
+const logger_1 = require("@/utils/logger");
+const tenant_context_1 = require("@/context/tenant-context");
 const createPrismaClient = () => {
     const shouldLogQueries = process.env['LOG_SLOW_QUERIES'] !== 'false';
     const slowQueryMs = Number(process.env['SLOW_QUERY_MS'] || 200);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { 
   Clock, MapPin, CreditCard, FileText, 
@@ -14,6 +14,8 @@ import { useAuthStore } from '@/store/auth';
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
 import { subscribeToOrderEvents } from '@/lib/realtime-client';
+import { isHapticsEnabled, setHapticsEnabled, triggerHaptic } from '@/lib/haptics';
+import { ensurePushSubscription, syncPushSubscriptionIfGranted } from '@/lib/push-notifications';
 
 // Helper to format dates nicely
 const formatOrderDate = (dateString: string) => {
@@ -31,13 +33,15 @@ const formatOrderDate = (dateString: string) => {
 const getStatusBadge = (status: string) => {
   switch (status) {
     case 'PENDING':
+      return { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock, label: 'Pending' };
     case 'CONFIRMED':
-      return { color: 'bg-yellow-100 text-yellow-800 border-yellow-200', icon: Clock, label: 'In Queue' };
+      return { color: 'bg-blue-100 text-blue-800 border-blue-200', icon: Clock, label: 'Confirmed' };
     case 'PREPARING':
       return { color: 'bg-purple-100 text-purple-800 border-purple-200', icon: ChefHat, label: 'Preparing' };
     case 'READY':
       return { color: 'bg-orange-100 text-orange-800 border-orange-200', icon: ShoppingBag, label: 'Ready' };
     case 'SERVED':
+      return { color: 'bg-teal-100 text-teal-800 border-teal-200', icon: MapPin, label: 'Served' };
     case 'COMPLETED':
       return { color: 'bg-green-100 text-green-800 border-green-200', icon: CheckCircle, label: 'Completed' };
     case 'CANCELLED':
@@ -45,6 +49,34 @@ const getStatusBadge = (status: string) => {
     default:
       return { color: 'bg-gray-100 text-gray-800 border-gray-200', icon: Receipt, label: status };
   }
+};
+
+type OrderNotification = {
+  id: string;
+  orderId: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  alertType?: 'new-order' | 'accepted' | 'status-update' | 'payment-update' | 'invoice';
+  timestamp: number;
+  unread: boolean;
+};
+
+const statusTimeline = ['PENDING', 'CONFIRMED', 'PREPARING', 'READY', 'SERVED', 'COMPLETED'] as const;
+const orderTimelineSteps = [
+  { key: 'PENDING', label: 'Order Placed' },
+  { key: 'CONFIRMED', label: 'Confirmed' },
+  { key: 'PREPARING', label: 'Preparing' },
+  { key: 'READY', label: 'Ready' },
+] as const;
+
+const toRelativeTime = (timestamp: number) => {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 8) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
 };
 
 export default function OrdersPage() {
@@ -62,14 +94,22 @@ export default function OrdersPage() {
   const [applyingCouponOrderId, setApplyingCouponOrderId] = useState<string | null>(null);
   const [downloadingInvoice, setDownloadingInvoice] = useState<string | null>(null);
   const [sendingInvoice, setSendingInvoice] = useState<string | null>(null);
-  const [notifications, setNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
+  const [notifications, setNotifications] = useState<OrderNotification[]>([]);
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
   const [activeTab, setActiveTab] = useState<'ACTIVE' | 'PAST'>('ACTIVE');
+  const [hapticsEnabled, setHapticsEnabledState] = useState(true);
+  const [soundEnabled, setSoundEnabled] = useState(true);
+  const [expandedNotificationOrderId, setExpandedNotificationOrderId] = useState<string | null>(null);
 
   useEffect(() => {
     if (isAuthenticated && user) {
       setOrdersPage(1);
     }
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || typeof window === 'undefined') return;
+    syncPushSubscriptionIfGranted('customer').catch(() => undefined);
   }, [isAuthenticated, user]);
 
   useEffect(() => {
@@ -80,32 +120,105 @@ export default function OrdersPage() {
 
   useEffect(() => {
     if (!isAuthenticated || !user) return;
-    const timer = setInterval(() => {
-      fetchOrders(ordersPage);
-    }, 30_000);
-    return () => clearInterval(timer);
-  }, [isAuthenticated, user, ordersPage]);
+    const interval = setInterval(() => {
+      const fallbackWindow = new Date(Date.now() - 90 * 1000).toISOString();
+      fetchOrdersDelta(fallbackWindow).catch(() => undefined);
+    }, 15000);
+    return () => clearInterval(interval);
+  }, [isAuthenticated, user]);
+
+  useEffect(() => {
+    if (!isAuthenticated || !user || typeof window === 'undefined' || !('serviceWorker' in navigator)) return;
+
+    const onServiceWorkerMessage = (event: MessageEvent) => {
+      const message = event.data as {
+        type?: string;
+        payload?: {
+          title?: string;
+          body?: string;
+          data?: {
+            orderId?: string;
+            status?: string;
+            eventType?: string;
+            sentAt?: string;
+          };
+        };
+      };
+
+      if (message?.type !== 'push:order') return;
+      const orderId = message.payload?.data?.orderId || '';
+      if (!orderId) return;
+
+      const status = (message.payload?.data?.status || 'UPDATED').toUpperCase();
+      const eventType = (message.payload?.data?.eventType || '').toLowerCase();
+      const title =
+        message.payload?.title ||
+        `Order #${orderId.slice(0, 8).toUpperCase()} - ${status.replace(/_/g, ' ')}`;
+      const subtitle = message.payload?.body || `Order status is now ${status.replace(/_/g, ' ')}`;
+      const alertType: OrderNotification['alertType'] =
+        eventType === 'order.accepted'
+          ? 'accepted'
+          : eventType === 'order.created'
+            ? 'new-order'
+            : 'status-update';
+
+      enqueueNotifications([
+        {
+          id: `push-${orderId}-${status}-${Date.now()}`,
+          orderId,
+          title,
+          subtitle,
+          status,
+          alertType,
+          timestamp: Date.now(),
+          unread: true,
+        },
+      ]);
+
+      const fallbackWindow = new Date(Date.now() - 90 * 1000).toISOString();
+      fetchOrdersDelta(fallbackWindow).catch(() => undefined);
+    };
+
+    navigator.serviceWorker.addEventListener('message', onServiceWorkerMessage);
+    return () => {
+      navigator.serviceWorker.removeEventListener('message', onServiceWorkerMessage);
+    };
+  }, [isAuthenticated, user]);
 
   useEffect(() => {
     if (!isAuthenticated || !user || typeof window === 'undefined') return;
     const cleanup = subscribeToOrderEvents({
       scope: 'user',
+      role: 'customer',
       onEvent: (event) => {
         if (event?.type === 'invoice.ready') {
           const orderId = event?.payload?.orderId as string | undefined;
           if (!orderId) return;
+          const delivery = event?.payload?.delivery as { emailSent?: boolean; smsSent?: boolean } | undefined;
+          if (delivery?.emailSent && delivery?.smsSent) {
+            toast.success('Invoice sent! Check your SMS & email.');
+          }
           enqueueNotifications([
             {
               id: `invoice-${orderId}-${Date.now()}`,
-              message: `Invoice ready for order #${orderId.slice(0, 8).toUpperCase()}`,
-              time: new Date().toLocaleTimeString(),
+              orderId,
+              title: `Order #${orderId.slice(0, 8).toUpperCase()} - Invoice Ready`,
+              subtitle: 'Invoice generated and ready to download',
+              status: 'INVOICE_READY',
+              alertType: 'invoice',
+              timestamp: Date.now(),
+              unread: true,
             },
           ]);
           return;
         }
         const order = event?.payload?.order;
         if (!order?.id) return;
-        handleRealtimeOrderUpdate(order);
+        handleRealtimeOrderUpdate(order, event?.type, event?.eventId);
+      },
+      onReconnect: ({ lastSyncTimestamp }) => {
+        if (!lastSyncTimestamp) return;
+        fetchOrdersDelta(lastSyncTimestamp).catch(() => undefined);
       },
     });
 
@@ -122,21 +235,76 @@ export default function OrdersPage() {
     try {
       const stored = localStorage.getItem('order_notifications');
       if (stored) {
-        setNotifications(JSON.parse(stored));
+        const parsed = JSON.parse(stored) as Array<any>;
+        const normalized = parsed
+          .map((entry) => ({
+            id: String(entry.id || `${entry.orderId || 'order'}-${Date.now()}`),
+            orderId: String(entry.orderId || entry.id || ''),
+            title: String(entry.title || entry.message || 'Order Update'),
+            subtitle: String(entry.subtitle || entry.message || ''),
+            status: String(entry.status || 'UPDATE'),
+            alertType:
+              entry.alertType === 'new-order' ||
+              entry.alertType === 'accepted' ||
+              entry.alertType === 'status-update' ||
+              entry.alertType === 'payment-update' ||
+              entry.alertType === 'invoice'
+                ? entry.alertType
+                : undefined,
+            timestamp: Number(entry.timestamp || Date.now()),
+            unread: Boolean(entry.unread ?? false),
+          }))
+          .filter((entry) => entry.orderId);
+        setNotifications(normalized);
       }
+    } catch {
+      // ignore
+    }
+    setHapticsEnabledState(isHapticsEnabled());
+    try {
+      const soundPref = localStorage.getItem('order_notification_sound');
+      setSoundEnabled(soundPref !== 'off');
     } catch {
       // ignore
     }
   }, []);
 
-  const enqueueNotifications = (newNotifs: Array<{ id: string; message: string; time: string }>) => {
+  const enqueueNotifications = (newNotifs: OrderNotification[]) => {
     if (!newNotifs.length) return;
+
+    const playOrderTone = (variant: 'accepted' | 'default') => {
+      if (typeof window === 'undefined') return;
+      try {
+        const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
+        const scheduleTone = (frequency: number, startOffset: number, duration: number) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0.05;
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          const startAt = audioContext.currentTime + startOffset;
+          oscillator.start(startAt);
+          oscillator.stop(startAt + duration);
+        };
+
+        if (variant === 'accepted') {
+          scheduleTone(740, 0, 0.11);
+          scheduleTone(1040, 0.14, 0.16);
+          return;
+        }
+        scheduleTone(860, 0, 0.11);
+      } catch {
+        // ignore audio errors
+      }
+    };
 
     if (typeof window !== 'undefined' && 'Notification' in window && Notification.permission === 'granted') {
       newNotifs.slice(0, 3).forEach((note) => {
         try {
           new Notification('Order Update', {
-            body: note.message,
+            body: `${note.title}${note.subtitle ? ` - ${note.subtitle}` : ''}`,
             tag: note.id,
           });
         } catch {
@@ -145,8 +313,31 @@ export default function OrdersPage() {
       });
     }
 
+    if (hapticsEnabled) {
+      const latest = newNotifs[0];
+      if (latest?.status === 'DELIVERED') {
+        triggerHaptic('order_delivered');
+      } else if (latest?.status === 'CONFIRMED') {
+        triggerHaptic('order_confirmed');
+      } else {
+        triggerHaptic('status_update');
+      }
+    }
+
+    if (soundEnabled) {
+      const hasAccepted = newNotifs.some((note) => note.alertType === 'accepted');
+      playOrderTone(hasAccepted ? 'accepted' : 'default');
+    }
+
     setNotifications((prev) => {
-      const merged = [...newNotifs, ...prev].slice(0, 20);
+      const byOrder = new Map<string, OrderNotification>();
+      [...newNotifs, ...prev].forEach((entry) => {
+        const existing = byOrder.get(entry.orderId);
+        if (!existing || entry.timestamp >= existing.timestamp) {
+          byOrder.set(entry.orderId, entry);
+        }
+      });
+      const merged = Array.from(byOrder.values()).sort((a, b) => b.timestamp - a.timestamp).slice(0, 80);
       if (typeof window !== 'undefined') {
         localStorage.setItem('order_notifications', JSON.stringify(merged));
       }
@@ -191,8 +382,15 @@ export default function OrdersPage() {
     });
   };
 
-  const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }) => {
+  const handleRealtimeOrderUpdate = (
+    incoming: Partial<Order> & { id: string },
+    eventType?: string,
+    eventId?: string
+  ) => {
     let added = false;
+    const nextNotifications: OrderNotification[] = [];
+    const isCreatedEvent = eventType === 'order.created';
+    const isAcceptedEvent = eventType === 'order.accepted';
     setOrders((prev) => {
       const index = prev.findIndex((order) => order.id === incoming.id);
       const existing = index >= 0 ? prev[index] : null;
@@ -206,31 +404,65 @@ export default function OrdersPage() {
           }
         : (incoming as Order);
 
-      if (existing) {
-        const newNotifs: Array<{ id: string; message: string; time: string }> = [];
+      if (isAcceptedEvent) {
+        nextNotifications.push({
+          id: eventId || `${incoming.id}-accepted-${Date.now()}`,
+          orderId: incoming.id,
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Accepted`,
+          subtitle: 'Your order has been accepted.',
+          status: incoming.status || nextOrder.status || 'CONFIRMED',
+          alertType: 'accepted',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } else if (existing) {
         if (incoming.status && incoming.status !== existing.status) {
-          newNotifs.push({
+          nextNotifications.push({
             id: `${incoming.id}-status-${Date.now()}`,
-            message: `Order #${incoming.id.slice(0, 8).toUpperCase()} moved to ${incoming.status}`,
-            time: new Date().toLocaleTimeString(),
+            orderId: incoming.id,
+            title:
+              incoming.status === 'CONFIRMED'
+                ? `Order #${incoming.id.slice(0, 8).toUpperCase()} - Accepted`
+                : `Order #${incoming.id.slice(0, 8).toUpperCase()} - ${incoming.status.replace(/_/g, ' ')}`,
+            subtitle:
+              incoming.status === 'CONFIRMED'
+                ? 'Your order has been accepted.'
+                : `Status changed from ${existing.status} to ${incoming.status}`,
+            status: incoming.status,
+            alertType: incoming.status === 'CONFIRMED' ? 'accepted' : 'status-update',
+            timestamp: Date.now(),
+            unread: true,
           });
         }
         if (incoming.paymentStatus && incoming.paymentStatus !== existing.paymentStatus) {
-          newNotifs.push({
+          nextNotifications.push({
             id: `${incoming.id}-payment-${Date.now()}`,
-            message: `Payment for order #${incoming.id.slice(0, 8).toUpperCase()} is ${incoming.paymentStatus}`,
-            time: new Date().toLocaleTimeString(),
+            orderId: incoming.id,
+            title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Payment ${incoming.paymentStatus}`,
+            subtitle: `Payment status updated from ${existing.paymentStatus} to ${incoming.paymentStatus}`,
+            status: incoming.paymentStatus,
+            alertType: 'payment-update',
+            timestamp: Date.now(),
+            unread: true,
           });
         }
-        if (newNotifs.length) enqueueNotifications(newNotifs);
       } else {
-        enqueueNotifications([
-          {
-            id: `${incoming.id}-new-${Date.now()}`,
-            message: `New order #${incoming.id.slice(0, 8).toUpperCase()} placed`,
-            time: new Date().toLocaleTimeString(),
-          },
-        ]);
+        nextNotifications.push({
+          id: eventId || `${incoming.id}-new-${Date.now()}`,
+          orderId: incoming.id,
+          title:
+            isCreatedEvent
+              ? `Order #${incoming.id.slice(0, 8).toUpperCase()} - Placed`
+              : `Order #${incoming.id.slice(0, 8).toUpperCase()} - Updated`,
+          subtitle:
+            isCreatedEvent
+              ? 'Your order was placed successfully'
+              : 'Order details were updated',
+          status: incoming.status || 'PENDING',
+          alertType: isCreatedEvent ? 'new-order' : 'status-update',
+          timestamp: Date.now(),
+          unread: true,
+        });
       }
 
       updateSnapshot(nextOrder.id, nextOrder.status, nextOrder.paymentStatus);
@@ -245,6 +477,10 @@ export default function OrdersPage() {
       next[index] = nextOrder;
       return next;
     });
+
+    if (nextNotifications.length) {
+      enqueueNotifications(nextNotifications);
+    }
 
     if (added) {
       setOrdersTotal((prev) => {
@@ -268,22 +504,38 @@ export default function OrdersPage() {
         if (typeof window !== 'undefined') {
           const snapshotRaw = localStorage.getItem('order_status_snapshot');
           const snapshot: Record<string, { status: string; paymentStatus: string }> = snapshotRaw ? JSON.parse(snapshotRaw) : {};
-          const newNotifs: Array<{ id: string; message: string; time: string }> = [];
+          const newNotifs: OrderNotification[] = [];
 
           nextOrders.forEach((order) => {
             const prev = snapshot[order.id];
             if (prev && prev.status !== order.status) {
               newNotifs.push({
                 id: `${order.id}-status-${Date.now()}`,
-                message: `Order #${order.id.slice(0, 8).toUpperCase()} moved to ${order.status}`,
-                time: new Date().toLocaleTimeString(),
+                orderId: order.id,
+                title:
+                  order.status === 'CONFIRMED'
+                    ? `Order #${order.id.slice(0, 8).toUpperCase()} - Accepted`
+                    : `Order #${order.id.slice(0, 8).toUpperCase()} - ${order.status.replace(/_/g, ' ')}`,
+                subtitle:
+                  order.status === 'CONFIRMED'
+                    ? 'Your order has been accepted.'
+                    : `Status changed from ${prev.status} to ${order.status}`,
+                status: order.status,
+                alertType: order.status === 'CONFIRMED' ? 'accepted' : 'status-update',
+                timestamp: Date.now(),
+                unread: true,
               });
             }
             if (prev && prev.paymentStatus !== order.paymentStatus) {
               newNotifs.push({
                 id: `${order.id}-payment-${Date.now()}`,
-                message: `Payment for order #${order.id.slice(0, 8).toUpperCase()} is ${order.paymentStatus}`,
-                time: new Date().toLocaleTimeString(),
+                orderId: order.id,
+                title: `Order #${order.id.slice(0, 8).toUpperCase()} - Payment ${order.paymentStatus}`,
+                subtitle: `Payment status updated from ${prev.paymentStatus} to ${order.paymentStatus}`,
+                status: order.paymentStatus,
+                alertType: 'payment-update',
+                timestamp: Date.now(),
+                unread: true,
               });
             }
           });
@@ -302,6 +554,14 @@ export default function OrdersPage() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const fetchOrdersDelta = async (updatedAfter: string) => {
+    const response = await apiClient.getOrdersPage(1, 100, updatedAfter);
+    if (!response.success || !response.data?.length) return;
+    response.data.forEach((order) => {
+      handleRealtimeOrderUpdate(order);
+    });
   };
 
   const handleDownloadInvoice = async (orderId: string) => {
@@ -390,14 +650,27 @@ export default function OrdersPage() {
   const requestNotificationPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) {
       toast.error('Browser notifications are not supported');
+      triggerHaptic('error');
       return;
     }
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-    if (permission === 'granted') {
+    try {
+      await ensurePushSubscription('customer');
+      setNotificationPermission('granted');
+      localStorage.setItem('customer_notification_subscription', JSON.stringify({
+        permission: 'granted',
+        grantedAt: new Date().toISOString(),
+      }));
       toast.success('Browser notifications enabled');
-    } else if (permission === 'denied') {
-      toast.error('Notifications blocked. Enable them in browser settings.');
+      triggerHaptic('primary_action');
+    } catch (error: any) {
+      const currentPermission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+      setNotificationPermission(currentPermission as NotificationPermission);
+      if (currentPermission === 'denied') {
+        toast.error('Notifications blocked. Enable them in browser settings.');
+      } else {
+        toast.error(error?.message || 'Unable to enable notifications');
+      }
+      triggerHaptic('error');
     }
   };
 
@@ -410,7 +683,12 @@ export default function OrdersPage() {
 
     try {
       setApplyingCouponOrderId(orderId);
-      const response = await apiClient.applyCouponToOrder(orderId, couponCode);
+      const expectedUpdatedAt = orders.find((order) => order.id === orderId)?.updatedAt;
+      const response = await apiClient.applyCouponToOrder(
+        orderId,
+        couponCode,
+        expectedUpdatedAt ? { expectedUpdatedAt } : undefined
+      );
       if (response.success) {
         toast.success('Coupon applied');
         if (response.data) {
@@ -430,6 +708,42 @@ export default function OrdersPage() {
   const activeOrders = orders.filter(o => !['COMPLETED', 'CANCELLED'].includes(o.status));
   const pastOrders = orders.filter(o => ['COMPLETED', 'CANCELLED'].includes(o.status));
   const displayOrders = activeTab === 'ACTIVE' ? activeOrders : pastOrders;
+  const notificationGroups = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        orderId: string;
+        latest: OrderNotification;
+        history: OrderNotification[];
+        unread: boolean;
+      }
+    >();
+
+    notifications.forEach((note) => {
+      const existing = grouped.get(note.orderId);
+      if (!existing) {
+        grouped.set(note.orderId, {
+          orderId: note.orderId,
+          latest: note,
+          history: [note],
+          unread: note.unread,
+        });
+        return;
+      }
+      existing.history.push(note);
+      if (note.timestamp > existing.latest.timestamp) {
+        existing.latest = note;
+      }
+      existing.unread = existing.unread || note.unread;
+    });
+
+    return Array.from(grouped.values())
+      .sort((a, b) => b.latest.timestamp - a.latest.timestamp)
+      .map((group) => ({
+        ...group,
+        history: group.history.sort((a, b) => b.timestamp - a.timestamp),
+      }));
+  }, [notifications]);
 
   return (
     <div className="min-h-screen bg-[#FDFDFD] pb-32">
@@ -488,31 +802,103 @@ export default function OrdersPage() {
           </div>
         </div>
 
-        {/* Notifications Card */}
-        {activeTab === 'ACTIVE' && notifications.length > 0 && (
-          <div className="max-w-3xl mx-auto bg-orange-50/50 rounded-2xl border border-orange-100 p-4 mb-6 shadow-sm">
-            <div className="flex items-center justify-between mb-3">
-              <h2 className="text-sm font-black text-orange-900 flex items-center gap-2">
-                <BellRing className="h-4 w-4 text-orange-600" />
-                Live Updates
-              </h2>
+        {/* Notifications Panel */}
+        {activeTab === 'ACTIVE' && notificationGroups.length > 0 && (
+          <div className="max-w-3xl mx-auto bg-white rounded-2xl border border-gray-200 p-0 mb-6 shadow-sm overflow-hidden">
+            <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <button
+                  onClick={() => {
+                    const next = !soundEnabled;
+                    setSoundEnabled(next);
+                    localStorage.setItem('order_notification_sound', next ? 'on' : 'off');
+                  }}
+                  className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                    soundEnabled ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'
+                  }`}
+                >
+                  Sound
+                </button>
+                <button
+                  onClick={() => {
+                    const next = !hapticsEnabled;
+                    setHapticsEnabledState(next);
+                    setHapticsEnabled(next);
+                  }}
+                  className={`text-xs font-bold px-2.5 py-1 rounded-lg border ${
+                    hapticsEnabled ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'
+                  }`}
+                >
+                  Haptics
+                </button>
+              </div>
               <button
                 onClick={() => {
                   setNotifications([]);
-                  if (typeof window !== 'undefined') localStorage.removeItem('order_notifications');
+                  setExpandedNotificationOrderId(null);
+                  localStorage.setItem('order_notifications', JSON.stringify([]));
                 }}
-                className="text-xs font-bold text-orange-700 hover:text-orange-900 bg-orange-100 px-3 py-1 rounded-lg transition-colors"
+                className="text-xs font-semibold text-gray-600 hover:text-gray-900"
               >
                 Clear
               </button>
             </div>
-            <div className="space-y-2">
-              {notifications.slice(0, 3).map((note) => (
-                <div key={note.id} className="text-xs text-orange-800 flex items-center justify-between bg-white/60 p-2.5 rounded-xl border border-orange-100/50">
-                  <span className="font-medium truncate pr-4">{note.message}</span>
-                  <span className="text-[10px] font-bold opacity-60 whitespace-nowrap">{note.time}</span>
-                </div>
-              ))}
+            <div className="max-h-[360px] overflow-y-auto thin-scrollbar px-3 py-3 space-y-2">
+              {notificationGroups.slice(0, 5).map((group) => {
+                const status = group.latest.status.toUpperCase();
+                const accentClass =
+                  status.includes('CANCEL') || status.includes('FAILED')
+                    ? 'border-l-red-500'
+                    : status.includes('DELIVER')
+                      ? 'border-l-green-500'
+                      : status.includes('OUT_FOR_DELIVERY')
+                        ? 'border-l-orange-500'
+                        : status.includes('PREPAR')
+                          ? 'border-l-blue-500'
+                          : 'border-l-yellow-500';
+                return (
+                  <div
+                    key={group.orderId}
+                    className={`border border-gray-200 border-l-4 ${accentClass} rounded-xl p-3 transition-colors ${
+                      group.unread ? 'bg-orange-50/40' : 'bg-white'
+                    }`}
+                  >
+                    <button
+                      className="w-full flex items-start justify-between gap-2 text-left"
+                      onClick={() => {
+                        setExpandedNotificationOrderId((prev) => (prev === group.orderId ? null : group.orderId));
+                        setNotifications((prev) => {
+                          const next = prev.map((note) =>
+                            note.orderId === group.orderId ? { ...note, unread: false } : note
+                          );
+                          localStorage.setItem('order_notifications', JSON.stringify(next));
+                          return next;
+                        });
+                      }}
+                    >
+                      <div className="min-w-0">
+                        <p className="text-sm font-black text-gray-900 truncate">{group.latest.title}</p>
+                        {/* <p className="text-xs text-gray-500 truncate">{group.latest.subtitle}</p> */}
+                      </div>
+                      <span className="text-[10px] font-semibold text-gray-400 whitespace-nowrap">
+                        {toRelativeTime(group.latest.timestamp)}
+                      </span>
+                    </button>
+                    {expandedNotificationOrderId === group.orderId && (
+                      <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+                        {group.history.map((entry) => (
+                          <div key={entry.id} className="flex items-center justify-between gap-2 text-xs text-gray-600">
+                            <span className="truncate">{entry.subtitle}</span>
+                            <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                              {toRelativeTime(entry.timestamp)}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}
@@ -542,9 +928,18 @@ export default function OrdersPage() {
 
         {/* Main Content Area */}
         {loading ? (
-          <div className="flex flex-col items-center justify-center py-20 gap-4">
-            <div className="w-10 h-10 border-4 border-orange-600 border-t-transparent rounded-full animate-spin" />
-            <p className="text-gray-500 font-bold text-sm">Syncing orders...</p>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {Array.from({ length: ordersLimit }).map((_, idx) => (
+              <div key={`order-skeleton-${idx}`} className="bg-white rounded-[32px] p-6 border border-gray-100">
+                <div className="animate-pulse space-y-4">
+                  <div className="h-5 w-1/2 rounded bg-gray-200" />
+                  <div className="h-12 rounded-2xl bg-gray-100" />
+                  <div className="h-14 rounded-2xl bg-gray-100" />
+                  <div className="h-24 rounded-2xl bg-gray-100" />
+                  <div className="h-10 rounded-xl bg-gray-200" />
+                </div>
+              </div>
+            ))}
           </div>
         ) : displayOrders.length === 0 ? (
           <div className="bg-white rounded-[32px] border border-gray-100 p-10 text-center shadow-[0_4px_20px_rgb(0,0,0,0.02)] mt-4 max-w-3xl mx-auto">
@@ -567,8 +962,7 @@ export default function OrdersPage() {
               const badge = getStatusBadge(order.status);
               const BadgeIcon = badge.icon;
               const isOngoing = !['COMPLETED', 'CANCELLED'].includes(order.status);
-              const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';
-              
+              const canPayNow = order.paymentStatus !== 'COMPLETED' && order.paymentProvider !== 'CASH';              
               const itemsList = Array.isArray(order.items) ? order.items : [];
               const itemSummary = itemsList.length > 0 
                 ? itemsList.map(i => `${i.quantity}x ${i.menuItem?.name || 'Item'}`).join(', ')
@@ -619,6 +1013,31 @@ export default function OrdersPage() {
                       )}
                     </div>
                   </div>
+
+                  {/* <div className="mb-5 rounded-2xl border border-gray-100 bg-white/70 p-3">
+                    <p className="text-[10px] font-black uppercase tracking-widest text-gray-400 mb-2">Order Timeline</p>
+                    <div className="grid grid-cols-3 gap-2">
+                      {orderTimelineSteps.map((step, stepIndex) => {
+                        const isActive = stepIndex <= timelineIndex;
+                        const isCurrent = stepIndex === timelineIndex;
+                        return (
+                          <div key={`${order.id}-${step.key}`} className="min-w-0">
+                            <div
+                              className={`h-1.5 rounded-full transition-colors ${
+                                isActive ? 'bg-orange-500' : 'bg-gray-200'
+                              } ${isCurrent ? 'animate-pulse' : ''}`}
+                            />
+                            <p className={`mt-1 text-[10px] font-semibold leading-tight ${isActive ? 'text-gray-700' : 'text-gray-400'}`}>
+                              {step.label}
+                            </p>
+                            {isCurrent && order.estimatedTime ? (
+                              <p className="text-[9px] font-medium text-orange-600">~{order.estimatedTime} min</p>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div> */}
 
                   {/* Details Toggle Button */}
                   <button 

@@ -1,12 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processOrderCompletionNotifications = void 0;
-const database_1 = require("../config/database");
-const pdf_1 = require("../lib/pdf");
-const email_1 = require("../lib/email");
-const sms_1 = require("../lib/sms");
-const realtime_1 = require("../utils/realtime");
-const logger_1 = require("../utils/logger");
+const database_1 = require("@/config/database");
+const pdf_1 = require("@/lib/pdf");
+const email_1 = require("@/lib/email");
+const sms_1 = require("@/lib/sms");
+const realtime_1 = require("@/utils/realtime");
+const logger_1 = require("@/utils/logger");
+const order_contact_service_1 = require("@/services/order-contact.service");
 const DELIVERY_METHODS = ['EMAIL', 'SMS'];
 const withRetries = async (label, fn, retries = 2) => {
     let attempt = 0;
@@ -25,7 +26,24 @@ const withRetries = async (label, fn, retries = 2) => {
     }
     throw new Error(`${label} failed: ${lastError instanceof Error ? lastError.message : String(lastError)}`);
 };
-const buildInvoiceData = (order, invoiceNumber) => {
+const logDeliveryResult = (input) => {
+    const payload = {
+        channel: input.channel,
+        status: input.status,
+        orderId: input.orderId,
+        target: input.target,
+        reason: input.reason,
+        errorMessage: input.errorMessage,
+        startedAt: input.startedAt,
+        finishedAt: new Date().toISOString(),
+    };
+    if (input.status === 'failure') {
+        logger_1.logger.error('ORDER_COMPLETION_DELIVERY', payload);
+        return;
+    }
+    logger_1.logger.info('ORDER_COMPLETION_DELIVERY', payload);
+};
+const buildInvoiceData = (order, invoiceNumber, placementContact) => {
     const taxPercent = order.subtotalPaise > 0
         ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
         : undefined;
@@ -38,9 +56,9 @@ const buildInvoiceData = (order, invoiceNumber) => {
         ...(order.restaurant?.email ? { restaurantEmail: order.restaurant.email } : {}),
         ...(order.restaurant?.gstNumber ? { gstNumber: order.restaurant.gstNumber } : {}),
         ...(taxPercent !== undefined ? { taxPercent } : {}),
-        customerName: order.user?.name || 'Guest',
-        customerEmail: order.user?.email || '',
-        ...(order.user?.phone ? { customerPhone: order.user.phone } : {}),
+        customerName: placementContact.name || 'Guest',
+        customerEmail: placementContact.email || '',
+        ...(placementContact.phone ? { customerPhone: placementContact.phone } : {}),
         invoiceNumber,
         orderDate: order.createdAt.toLocaleDateString('en-IN'),
         items: (order.items || []).map((item) => ({
@@ -61,7 +79,8 @@ const ensureInvoiceRecord = async (order) => {
         where: { orderId: order.id },
     });
     const invoiceNumber = existing?.invoiceNumber || `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-    const invoiceData = buildInvoiceData(order, invoiceNumber);
+    const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
+    const invoiceData = buildInvoiceData(order, invoiceNumber, placementContact);
     if (existing?.pdfName && existing?.pdfPath) {
         return { invoice: existing, invoiceData };
     }
@@ -129,25 +148,103 @@ const processOrderCompletionNotifications = async (orderId) => {
     }
     let emailSent = invoice.emailSent;
     let smsSent = invoice.smsSent;
-    if (!emailSent && order.user?.email) {
-        emailSent = await withRetries('invoice-email-send', async () => (0, email_1.sendOrderCompletionEmail)({
-            to: order.user.email,
-            customerName: order.user?.name || 'Guest',
-            restaurantName: order.restaurant?.name || 'Restaurant',
-            invoiceNumber: invoice.invoiceNumber,
-            orderId: order.id,
-            totalInr: order.totalPaise / 100,
-            invoiceUrl,
-        }));
+    const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
+    const placedOrderEmail = placementContact.email;
+    const placedOrderPhone = placementContact.phone;
+    const placedOrderName = placementContact.name || 'Guest';
+    if (!emailSent && placedOrderEmail) {
+        const startedAt = new Date().toISOString();
+        try {
+            emailSent = await withRetries('invoice-email-send', async () => (0, email_1.sendOrderCompletionEmail)({
+                to: placedOrderEmail,
+                customerName: placedOrderName,
+                restaurantName: order.restaurant?.name || 'Restaurant',
+                invoiceNumber: invoice.invoiceNumber,
+                orderId: order.id,
+                totalInr: order.totalPaise / 100,
+                invoiceUrl,
+                orderDate: order.createdAt.toLocaleDateString('en-IN'),
+                tableNumber: order.table?.number || 0,
+            }));
+            logDeliveryResult({
+                channel: 'email',
+                status: emailSent ? 'success' : 'failure',
+                orderId: order.id,
+                target: placedOrderEmail,
+                ...(emailSent ? {} : { reason: 'provider_returned_false' }),
+                startedAt,
+            });
+        }
+        catch (error) {
+            logDeliveryResult({
+                channel: 'email',
+                status: 'failure',
+                orderId: order.id,
+                target: placedOrderEmail,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                startedAt,
+            });
+        }
     }
-    if (!smsSent && order.user?.phone && invoiceUrl) {
-        smsSent = await withRetries('invoice-sms-send', async () => (0, sms_1.sendOrderCompletionSMS)(order.user.phone, {
-            customerName: order.user?.name || 'Guest',
-            restaurantName: order.restaurant?.name || 'Restaurant',
-            invoiceNumber: invoice.invoiceNumber,
-            total: order.totalPaise / 100,
-            invoiceUrl,
-        }));
+    else if (!placedOrderEmail) {
+        logDeliveryResult({
+            channel: 'email',
+            status: 'skipped',
+            orderId: order.id,
+            target: '',
+            reason: 'missing_order_placement_email',
+            startedAt: new Date().toISOString(),
+        });
+    }
+    if (!smsSent && placedOrderPhone && invoiceUrl) {
+        const startedAt = new Date().toISOString();
+        try {
+            smsSent = await withRetries('invoice-sms-send', async () => (0, sms_1.sendOrderCompletionSMS)(placedOrderPhone, {
+                customerName: placedOrderName,
+                restaurantName: order.restaurant?.name || 'Restaurant',
+                invoiceNumber: invoice.invoiceNumber,
+                total: order.totalPaise / 100,
+                invoiceUrl,
+            }));
+            logDeliveryResult({
+                channel: 'sms',
+                status: smsSent ? 'success' : 'failure',
+                orderId: order.id,
+                target: placedOrderPhone,
+                ...(smsSent ? {} : { reason: 'provider_returned_false' }),
+                startedAt,
+            });
+        }
+        catch (error) {
+            logDeliveryResult({
+                channel: 'sms',
+                status: 'failure',
+                orderId: order.id,
+                target: placedOrderPhone,
+                errorMessage: error instanceof Error ? error.message : String(error),
+                startedAt,
+            });
+        }
+    }
+    else if (!placedOrderPhone) {
+        logDeliveryResult({
+            channel: 'sms',
+            status: 'skipped',
+            orderId: order.id,
+            target: '',
+            reason: 'missing_order_placement_phone',
+            startedAt: new Date().toISOString(),
+        });
+    }
+    else if (!invoiceUrl) {
+        logDeliveryResult({
+            channel: 'sms',
+            status: 'skipped',
+            orderId: order.id,
+            target: placedOrderPhone,
+            reason: 'missing_invoice_url',
+            startedAt: new Date().toISOString(),
+        });
     }
     const sentVia = Array.from(new Set([
         ...(invoice.sentVia || []),

@@ -1,8 +1,9 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getKOTOperationalSummary = exports.updateKOTPriority = exports.updateKOTStatus = exports.createKOTTicketForOrder = exports.KOTError = void 0;
-const realtime_1 = require("../../utils/realtime");
-const database_1 = require("../../config/database");
+exports.getKOTOperationalSummary = exports.updateKOTPriority = exports.updateKOTStatus = exports.syncKOTTicketFromOrderStatus = exports.createKOTTicketForOrder = exports.KOTError = void 0;
+const realtime_1 = require("@/utils/realtime");
+const database_1 = require("@/config/database");
+const order_status_notification_service_1 = require("@/services/order-status-notification.service");
 class KOTError extends Error {
     statusCode;
     constructor(message, statusCode = 400) {
@@ -18,6 +19,15 @@ const statusToOrderStatus = {
     READY: 'READY',
     SERVED: 'SERVED',
 };
+const orderStatusToKOTStatus = {
+    PENDING: 'PLACED',
+    CONFIRMED: 'PLACED',
+    PREPARING: 'PREPARING',
+    READY: 'READY',
+    SERVED: 'SERVED',
+    COMPLETED: 'SERVED',
+    CANCELLED: 'SERVED',
+};
 const transitions = {
     PLACED: ['PREPARING'],
     PREPARING: ['READY'],
@@ -25,6 +35,35 @@ const transitions = {
     SERVED: [],
 };
 const ACTIVE_STATUSES = ['PLACED', 'PREPARING', 'READY'];
+const buildLifecycleTimestamps = (targetStatus, existing, now) => {
+    if (targetStatus === 'PLACED') {
+        return {
+            preparingAt: null,
+            readyAt: null,
+            servedAt: null,
+        };
+    }
+    if (targetStatus === 'PREPARING') {
+        return {
+            preparingAt: existing.preparingAt || now,
+            readyAt: null,
+            servedAt: null,
+        };
+    }
+    if (targetStatus === 'READY') {
+        return {
+            preparingAt: existing.preparingAt || now,
+            readyAt: existing.readyAt || now,
+            servedAt: null,
+        };
+    }
+    return {
+        preparingAt: existing.preparingAt || now,
+        readyAt: existing.readyAt || now,
+        servedAt: existing.servedAt || now,
+    };
+};
+const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 const toMinutes = (from, to) => Math.max(0, Math.round((to.getTime() - from.getTime()) / 60000));
 const average = (values) => {
     if (values.length === 0)
@@ -57,6 +96,144 @@ const createKOTTicketForOrder = async (tx, params) => {
     return ticket;
 };
 exports.createKOTTicketForOrder = createKOTTicketForOrder;
+const syncKOTTicketFromOrderStatus = async (params) => {
+    if (!params.restaurantId?.trim()) {
+        throw new KOTError('Restaurant ID is required', 400);
+    }
+    if (!params.orderId?.trim()) {
+        throw new KOTError('Order ID is required', 400);
+    }
+    if (params.skipForDeliveryOrder) {
+        return null;
+    }
+    const mappedStatus = orderStatusToKOTStatus[params.orderStatus];
+    const now = new Date();
+    const result = await database_1.prisma.$transaction(async (tx) => {
+        const ticket = await tx.kOTTicket.findFirst({
+            where: {
+                restaurantId: params.restaurantId,
+                orderId: params.orderId,
+            },
+            include: {
+                order: {
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        if (!ticket && !params.createIfMissing) {
+            return null;
+        }
+        if (!ticket) {
+            const timestamps = buildLifecycleTimestamps(mappedStatus, {
+                preparingAt: null,
+                readyAt: null,
+                servedAt: null,
+            }, now);
+            const created = await tx.kOTTicket.create({
+                data: {
+                    restaurantId: params.restaurantId,
+                    orderId: params.orderId,
+                    status: mappedStatus,
+                    priority: 0,
+                    ...(params.note ? { notes: params.note } : {}),
+                    createdByUserId: params.changedByUserId ?? null,
+                    ...timestamps,
+                },
+                include: {
+                    order: {
+                        include: {
+                            items: { include: { menuItem: true } },
+                            table: true,
+                            user: {
+                                select: {
+                                    id: true,
+                                    name: true,
+                                    email: true,
+                                },
+                            },
+                        },
+                    },
+                },
+            });
+            await tx.kOTTicketEvent.create({
+                data: {
+                    restaurantId: params.restaurantId,
+                    kotTicketId: created.id,
+                    toStatus: mappedStatus,
+                    changedByUserId: params.changedByUserId ?? null,
+                    note: params.note || `Synced from order status ${params.orderStatus}`,
+                },
+            });
+            return { changed: true, ticket: created };
+        }
+        if (ticket.status === mappedStatus) {
+            return { changed: false, ticket };
+        }
+        const timestamps = buildLifecycleTimestamps(mappedStatus, {
+            preparingAt: ticket.preparingAt,
+            readyAt: ticket.readyAt,
+            servedAt: ticket.servedAt,
+        }, now);
+        const updated = await tx.kOTTicket.update({
+            where: { id: ticket.id },
+            data: {
+                status: mappedStatus,
+                ...timestamps,
+            },
+            include: {
+                order: {
+                    include: {
+                        items: { include: { menuItem: true } },
+                        table: true,
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
+        await tx.kOTTicketEvent.create({
+            data: {
+                restaurantId: params.restaurantId,
+                kotTicketId: ticket.id,
+                fromStatus: ticket.status,
+                toStatus: mappedStatus,
+                changedByUserId: params.changedByUserId ?? null,
+                note: params.note || `Synced from order status ${params.orderStatus}`,
+            },
+        });
+        return { changed: true, ticket: updated };
+    });
+    if (!result)
+        return null;
+    if (result.changed) {
+        (0, realtime_1.emitRestaurantEvent)(params.restaurantId, {
+            type: 'kot.updated',
+            payload: {
+                ticket: result.ticket,
+                orderId: params.orderId,
+                status: result.ticket.status,
+                source: 'order.status.sync',
+            },
+        });
+    }
+    return result.ticket;
+};
+exports.syncKOTTicketFromOrderStatus = syncKOTTicketFromOrderStatus;
 const updateKOTStatus = async (params) => {
     if (!params.restaurantId?.trim()) {
         throw new KOTError('Restaurant ID is required', 400);
@@ -81,6 +258,15 @@ const updateKOTStatus = async (params) => {
         });
         if (!ticket) {
             throw new KOTError('KOT ticket not found', 404);
+        }
+        if (params.expectedOrderUpdatedAt) {
+            const expected = new Date(params.expectedOrderUpdatedAt);
+            if (Number.isNaN(expected.getTime())) {
+                throw new KOTError('Invalid expectedOrderUpdatedAt', 400);
+            }
+            if (ticket.order.updatedAt.getTime() !== expected.getTime()) {
+                throw new KOTError(staleWriteMessage, 409);
+            }
         }
         const fromStatus = ticket.status;
         if (fromStatus === params.status) {
@@ -117,23 +303,71 @@ const updateKOTStatus = async (params) => {
                 note: params.note ?? null,
             },
         });
-        await tx.order.update({
+        const updatedOrder = await tx.order.update({
             where: { id: ticket.orderId },
             data: {
                 status: statusToOrderStatus[params.status],
             },
+            include: {
+                table: true,
+                user: {
+                    select: {
+                        id: true,
+                        name: true,
+                        email: true,
+                    },
+                },
+                items: {
+                    include: {
+                        menuItem: true,
+                    },
+                },
+            },
         });
-        return updated;
+        return { ticket: updated, order: updatedOrder, previousOrderStatus: ticket.order.status };
     });
     (0, realtime_1.emitRestaurantEvent)(params.restaurantId, {
         type: 'kot.updated',
         payload: {
-            ticket: result,
+            ticket: result.ticket,
             orderId: params.orderId,
             status: params.status,
         },
     });
-    return result;
+    (0, realtime_1.emitRestaurantEvent)(params.restaurantId, {
+        type: 'order.updated',
+        userId: result.order.userId,
+        payload: {
+            order: {
+                id: result.order.id,
+                orderId: result.order.id,
+                order_id: result.order.id,
+                userId: result.order.userId,
+                tableId: result.order.tableId,
+                status: result.order.status,
+                paymentStatus: result.order.paymentStatus,
+                paymentProvider: result.order.paymentProvider,
+                paidAmountPaise: result.order.paidAmountPaise,
+                dueAmountPaise: result.order.dueAmountPaise,
+                totalPaise: result.order.totalPaise,
+                updatedAt: result.order.updatedAt,
+                createdAt: result.order.createdAt,
+                table: result.order.table,
+                user: result.order.user,
+                items: result.order.items,
+                subtotalPaise: result.order.subtotalPaise,
+                taxPaise: result.order.taxPaise,
+                discountPaise: result.order.discountPaise,
+            },
+        },
+    });
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: result.order.id,
+        previousStatus: result.previousOrderStatus,
+        nextStatus: result.order.status,
+        source: 'kot.update-status',
+    }).catch(() => undefined);
+    return result.ticket;
 };
 exports.updateKOTStatus = updateKOTStatus;
 const updateKOTPriority = async (params) => {

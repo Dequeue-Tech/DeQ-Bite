@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.cacheResponse = void 0;
-const redis_1 = require("../utils/redis");
+const redis_1 = require("@/utils/redis");
 const buildCacheKey = (prefix, req) => {
     const restaurantId = req.restaurant?.id || 'global';
     return `cache:${prefix}:${restaurantId}:${req.originalUrl}`;

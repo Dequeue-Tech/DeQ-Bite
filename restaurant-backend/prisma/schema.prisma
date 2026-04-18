@@ -22,6 +22,7 @@ model User {
   orders          Order[]
   restaurantUsers RestaurantUser[]
   customerProfiles CustomerProfile[]
+  pushSubscriptions PushSubscription[]
 
   @@map("users")
 }
@@ -67,6 +68,7 @@ model Restaurant {
   menuItems               MenuItem[]
   offers                  Offer[]
   orders                  Order[]
+  deliveryRiders          DeliveryRider[]
   users                   RestaurantUser[]
   tables                  Table[]
   earnings                Earning[]              @relation("earnings")
@@ -82,6 +84,7 @@ model Restaurant {
   kotTicketEvents         KOTTicketEvent[]
   analyticsSnapshots      AnalyticsSnapshot[]
   posSyncLogs             PosSyncLog[]
+  pushSubscriptions       PushSubscription[]
 
   @@map("restaurants")
 }
@@ -231,6 +234,24 @@ model Order {
   @@index([restaurantId, userId, isDelivery, createdAt])
 }
 
+model DeliveryRider {
+  id           String                  @id @default(cuid())
+  restaurantId String
+  branchId     String?
+  name         String
+  phone        String
+  vehicleType  String
+  availability RiderAvailabilityStatus @default(ONLINE)
+  active       Boolean                 @default(true)
+  createdAt    DateTime                @default(now())
+  updatedAt    DateTime                @updatedAt
+  restaurant   Restaurant              @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+
+  @@unique([restaurantId, phone])
+  @@index([restaurantId, branchId, availability, active])
+  @@map("delivery_riders")
+}
+
 model OrderItem {
   id         String   @id @default(cuid())
   orderId    String
@@ -259,6 +280,30 @@ model Invoice {
 
   @@map("invoices")
   @@index([issuedAt])
+}
+
+model PushSubscription {
+  id            String     @id @default(cuid())
+  restaurantId  String
+  userId        String
+  roleScope     String     @default("customer")
+  endpoint      String     @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  isActive      Boolean    @default(true)
+  failureCount  Int        @default(0)
+  lastSuccessAt DateTime?
+  lastFailureAt DateTime?
+  lastError     String?
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+  restaurant    Restaurant @relation(fields: [restaurantId], references: [id], onDelete: Cascade)
+  user          User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([restaurantId, roleScope, isActive])
+  @@index([restaurantId, userId, isActive])
+  @@map("push_subscriptions")
 }
 
 model Coupon {
@@ -678,6 +723,12 @@ enum DeliveryStatus {
   OUT_FOR_DELIVERY
   DELIVERED
   CANCELLED
+}
+
+enum RiderAvailabilityStatus {
+  ONLINE
+  BUSY
+  OFFLINE
 }
 
 enum SpiceLevel {

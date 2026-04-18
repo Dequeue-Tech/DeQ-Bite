@@ -9,30 +9,31 @@ const helmet_1 = __importDefault(require("helmet"));
 const morgan_1 = __importDefault(require("morgan"));
 const express_rate_limit_1 = __importDefault(require("express-rate-limit"));
 const dotenv_1 = __importDefault(require("dotenv"));
-const errorHandler_1 = require("./middleware/errorHandler");
-const logger_1 = require("./utils/logger");
-const restaurant_1 = require("./middleware/restaurant");
-const auth_1 = require("./middleware/auth");
-const tenantContext_1 = require("./middleware/tenantContext");
-const auth_2 = __importDefault(require("./routes/auth"));
-const payments_1 = __importDefault(require("./routes/payments"));
-const invoices_1 = __importDefault(require("./routes/invoices"));
-const pdf_1 = __importDefault(require("./routes/pdf"));
-const menu_1 = __importDefault(require("./routes/menu"));
-const categories_1 = __importDefault(require("./routes/categories"));
-const tables_1 = __importDefault(require("./routes/tables"));
-const orders_1 = __importDefault(require("./routes/orders"));
-const coupons_1 = __importDefault(require("./routes/coupons"));
-const restaurants_1 = __importDefault(require("./routes/restaurants"));
-const offers_1 = __importDefault(require("./routes/offers"));
-const platform_1 = __importDefault(require("./routes/platform"));
-const realtime_1 = __importDefault(require("./routes/realtime"));
-const delivery_1 = __importDefault(require("./routes/delivery"));
-const kot_routes_1 = __importDefault(require("./modules/kot/kot.routes"));
-const inventory_routes_1 = __importDefault(require("./modules/inventory/inventory.routes"));
-const crm_routes_1 = __importDefault(require("./modules/crm/crm.routes"));
-const analytics_routes_1 = __importDefault(require("./modules/analytics/analytics.routes"));
-const pos_routes_1 = __importDefault(require("./modules/pos/pos.routes"));
+const errorHandler_1 = require("@/middleware/errorHandler");
+const logger_1 = require("@/utils/logger");
+const restaurant_1 = require("@/middleware/restaurant");
+const auth_1 = require("@/middleware/auth");
+const tenantContext_1 = require("@/middleware/tenantContext");
+const auth_2 = __importDefault(require("@/routes/auth"));
+const payments_1 = __importDefault(require("@/routes/payments"));
+const invoices_1 = __importDefault(require("@/routes/invoices"));
+const pdf_1 = __importDefault(require("@/routes/pdf"));
+const menu_1 = __importDefault(require("@/routes/menu"));
+const categories_1 = __importDefault(require("@/routes/categories"));
+const tables_1 = __importDefault(require("@/routes/tables"));
+const orders_1 = __importDefault(require("@/routes/orders"));
+const coupons_1 = __importDefault(require("@/routes/coupons"));
+const restaurants_1 = __importDefault(require("@/routes/restaurants"));
+const offers_1 = __importDefault(require("@/routes/offers"));
+const platform_1 = __importDefault(require("@/routes/platform"));
+const realtime_1 = __importDefault(require("@/routes/realtime"));
+const push_1 = __importDefault(require("@/routes/push"));
+const delivery_1 = __importDefault(require("@/routes/delivery"));
+const kot_routes_1 = __importDefault(require("@/modules/kot/kot.routes"));
+const inventory_routes_1 = __importDefault(require("@/modules/inventory/inventory.routes"));
+const crm_routes_1 = __importDefault(require("@/modules/crm/crm.routes"));
+const analytics_routes_1 = __importDefault(require("@/modules/analytics/analytics.routes"));
+const pos_routes_1 = __importDefault(require("@/modules/pos/pos.routes"));
 dotenv_1.default.config();
 if (process.env.NODE_ENV === 'production') {
     if (!process.env.FIREBASE_PROJECT_ID || !process.env.FIREBASE_CLIENT_EMAIL || !process.env.FIREBASE_PRIVATE_KEY) {
@@ -93,7 +94,15 @@ const corsOptions = {
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-api-key', 'x-restaurant-subdomain', 'x-restaurant-slug'],
+    allowedHeaders: [
+        'Content-Type',
+        'Authorization',
+        'x-api-key',
+        'x-restaurant-subdomain',
+        'x-restaurant-slug',
+        'idempotency-key',
+        'x-expected-updated-at',
+    ],
 };
 app.use((0, cors_1.default)(corsOptions));
 const limiter = (0, express_rate_limit_1.default)({
@@ -162,6 +171,7 @@ tenantRouter.use('/inventory', inventory_routes_1.default);
 tenantRouter.use('/crm', crm_routes_1.default);
 tenantRouter.use('/analytics', analytics_routes_1.default);
 tenantRouter.use('/pos', pos_routes_1.default);
+tenantRouter.use('/push', push_1.default);
 tenantRouter.use('/', realtime_1.default);
 app.use('/api/restaurants/:restaurantId', tenantRouter);
 app.use('/api/restaurants', restaurants_1.default);

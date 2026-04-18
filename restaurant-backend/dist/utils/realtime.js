@@ -1,9 +1,10 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getBufferedEvents = exports.onUserEvent = exports.onRestaurantEvent = exports.emitRestaurantEvent = void 0;
+exports.getBufferedEvents = exports.onUserEvent = exports.onRestaurantEvent = exports.emitRoleScopedRestaurantEvent = exports.emitRestaurantEvent = void 0;
 const events_1 = require("events");
-const redis_1 = require("./redis");
-const logger_1 = require("./logger");
+const redis_1 = require("@/utils/redis");
+const logger_1 = require("@/utils/logger");
+const push_notification_service_1 = require("@/services/push-notification.service");
 const emitter = new events_1.EventEmitter();
 emitter.setMaxListeners(0);
 let redisBridgeInitialized = false;
@@ -70,6 +71,56 @@ const initRedisRealtimeBridge = () => {
 };
 const getRestaurantChannel = (restaurantId) => `restaurant:${restaurantId}`;
 const getUserChannel = (userId) => `user:${userId}`;
+const emitCriticalPushIfRequired = (event) => {
+    let eventType = null;
+    if (event.type === 'order.created')
+        eventType = 'order.created';
+    if (event.type === 'order.accepted')
+        eventType = 'order.accepted';
+    if (event.type === 'order.updated') {
+        const status = String(event.payload?.order?.status || '').toUpperCase();
+        eventType = status === 'COMPLETED' ? 'order.completed' : 'order.updated';
+    }
+    if (!eventType)
+        return;
+    const orderId = String(event.payload?.order?.id ||
+        event.payload?.orderId ||
+        event.payload?.order_id ||
+        '').trim();
+    if (!orderId)
+        return;
+    const status = String(event.payload?.order?.status || '').toUpperCase() || (eventType === 'order.completed' ? 'COMPLETED' : 'UNKNOWN');
+    const shortOrderCode = orderId.slice(0, 8).toUpperCase();
+    const title = (() => {
+        if (eventType === 'order.created')
+            return `Order #${shortOrderCode} placed`;
+        if (eventType === 'order.accepted')
+            return `Order #${shortOrderCode} accepted`;
+        if (eventType === 'order.completed')
+            return `Order #${shortOrderCode} completed`;
+        return `Order #${shortOrderCode} updated: ${status || 'UNKNOWN'}`;
+    })();
+    const body = (() => {
+        if (eventType === 'order.created')
+            return 'A new order was placed.';
+        if (eventType === 'order.accepted')
+            return 'Order has been accepted by the restaurant.';
+        if (eventType === 'order.completed')
+            return 'Order is completed and invoice is available.';
+        return `Order status is now ${status || 'UNKNOWN'}.`;
+    })();
+    const url = '/orders';
+    void (0, push_notification_service_1.notifyCriticalOrderPush)({
+        restaurantId: event.restaurantId,
+        ...(event.userId ? { userId: event.userId } : {}),
+        eventType,
+        orderId,
+        status,
+        title,
+        body,
+        url,
+    });
+};
 const emitRestaurantEvent = (restaurantId, event) => {
     initRedisRealtimeBridge();
     const nextEvent = {
@@ -79,6 +130,7 @@ const emitRestaurantEvent = (restaurantId, event) => {
         ...event,
     };
     publishLocalEvent(nextEvent);
+    emitCriticalPushIfRequired(nextEvent);
     logger_1.logger.info('Realtime event emitted', {
         eventId: nextEvent.eventId,
         type: nextEvent.type,
@@ -92,6 +144,13 @@ const emitRestaurantEvent = (restaurantId, event) => {
     }
 };
 exports.emitRestaurantEvent = emitRestaurantEvent;
+const emitRoleScopedRestaurantEvent = (restaurantId, event, roleScopes) => {
+    (0, exports.emitRestaurantEvent)(restaurantId, {
+        ...event,
+        roleScopes,
+    });
+};
+exports.emitRoleScopedRestaurantEvent = emitRoleScopedRestaurantEvent;
 const onRestaurantEvent = (restaurantId, listener) => {
     initRedisRealtimeBridge();
     const channel = getRestaurantChannel(restaurantId);

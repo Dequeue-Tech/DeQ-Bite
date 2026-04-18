@@ -1,8 +1,8 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.getAnalyticsOverview = exports.generateAnalyticsSnapshot = void 0;
-const database_1 = require("../../config/database");
-const redis_1 = require("../../utils/redis");
+const database_1 = require("@/config/database");
+const redis_1 = require("@/utils/redis");
 const cacheTtlSeconds = 120;
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 const toIsoDate = (value) => value.toISOString().split('T')[0];

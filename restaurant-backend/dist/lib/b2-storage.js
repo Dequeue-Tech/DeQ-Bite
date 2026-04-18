@@ -12,7 +12,7 @@ exports.getSignedDownloadUrl = getSignedDownloadUrl;
 exports.isB2Configured = isB2Configured;
 exports.getFileInfo = getFileInfo;
 const backblaze_b2_1 = __importDefault(require("backblaze-b2"));
-const logger_1 = require("../utils/logger");
+const logger_1 = require("@/utils/logger");
 let b2Client = null;
 let authPromise = null;
 function getB2Client() {

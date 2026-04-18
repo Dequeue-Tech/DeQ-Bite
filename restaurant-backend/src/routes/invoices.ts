@@ -6,16 +6,28 @@ import { requireRestaurant } from '@/middleware/restaurant';
 import { AppError, asyncHandler } from '@/middleware/errorHandler';
 import { generateInvoicePDF, savePDFToStorage } from '@/lib/pdf';
 import { sendInvoiceEmail } from '@/lib/email';
-import { sendInvoiceSMS } from '@/lib/sms';
+import { sendOrderCompletionSMS } from '@/lib/sms';
 import { AuthenticatedRequest, ApiResponse } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { accelerateCache } from '@/utils/accelerate-cache';
 import { emitRestaurantEvent } from '@/utils/realtime';
+import { resolveOrderPlacementContact } from '@/services/order-contact.service';
 
 const router = Router();
 
-const getInvoiceSmsPhone = (order: { user?: { phone?: string | null }; deliveryCustomerPhone?: string | null }) =>
-  order.user?.phone || order.deliveryCustomerPhone || null;
+const resolveInvoiceDeliveryContact = (order: any) => {
+  const placementContact = resolveOrderPlacementContact(order);
+  return {
+    name: placementContact.name || order?.user?.name || 'Guest',
+    email: placementContact.email || '',
+    phone: placementContact.phone || order?.deliveryCustomerPhone || order?.user?.phone || '',
+  };
+};
+
+const getInvoiceSmsPhone = (order: any) => {
+  const contact = resolveInvoiceDeliveryContact(order);
+  return contact.phone || null;
+};
 
 const emitInvoiceReady = (input: {
   restaurantId: string;
@@ -48,6 +60,37 @@ const generateInvoiceSchema = z.object({
   orderId: z.string().min(1, 'Order ID is required'),
   methods: z.array(z.enum(['EMAIL', 'SMS'])).default([]), // Default to empty array
 });
+
+const testOrderCompletionSmsSchema = z.object({
+  phone: z.string().min(8, 'Phone is required'),
+  data: z.object({
+    customerName: z.string().min(1, 'Customer name is required'),
+    restaurantName: z.string().min(1, 'Restaurant name is required'),
+    invoiceNumber: z.string().min(1, 'Invoice number is required'),
+    total: z.number().nonnegative('Total must be zero or greater'),
+    invoiceUrl: z.string().url('Invoice URL must be a valid URL'),
+  }),
+});
+
+// POST /api/invoices/test-sms - Dev helper to test completion SMS payload directly
+router.post('/test-sms', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    throw new AppError('Not found', 404);
+  }
+
+  const { phone, data } = testOrderCompletionSmsSchema.parse(req.body);
+  const smsSent = await sendOrderCompletionSMS(phone, data);
+
+  return res.status(200).json({
+    success: true,
+    message: smsSent ? 'Test SMS sent successfully' : 'Test SMS failed to send',
+    data: {
+      smsSent,
+      phone,
+      provider: process.env['SMS_PROVIDER'] || 'fast2sms',
+    },
+  });
+}));
 
 // POST /api/invoices/generate - Generate and send invoice
 router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
@@ -171,6 +214,7 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
     const taxPercent = order.subtotalPaise > 0
       ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
       : undefined;
+    const deliveryContact = resolveInvoiceDeliveryContact(order);
     const invoiceData = {
       // Restaurant fields — from DB
       restaurantName: order.restaurant.name,
@@ -182,9 +226,9 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
       ...(order.restaurant.gstNumber ? { gstNumber:         order.restaurant.gstNumber }  : {}),
       ...(taxPercent !== undefined   ? { taxPercent }                                      : {}),
       // Order fields
-      customerName: order.user.name,
-      customerEmail: order.user.email,
-      ...(order.user.phone ? { customerPhone: order.user.phone } : {}),
+      customerName: deliveryContact.name,
+      customerEmail: deliveryContact.email,
+      ...(deliveryContact.phone ? { customerPhone: deliveryContact.phone } : {}),
       invoiceNumber,
       orderDate: order.createdAt.toLocaleDateString('en-IN'),
       items: order.items.map((item: any) => ({
@@ -215,11 +259,11 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
     };
 
     // Send email if requested and email is available
-    if (requestedMethods.includes('EMAIL') && order.user.email) {
+    if (requestedMethods.includes('EMAIL') && deliveryContact.email) {
       results.emailSent = await sendInvoiceEmail(
-        order.user.email,
+        deliveryContact.email,
         {
-          customerName: order.user.name,
+          customerName: deliveryContact.name,
           invoiceNumber,
           orderDate: invoiceData.orderDate,
           total: order.totalPaise / 100,
@@ -232,13 +276,14 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
 
     // Send SMS if requested and phone is available
     if (requestedMethods.includes('SMS') && smsPhone) {
-      results.smsSent = await sendInvoiceSMS(
+      results.smsSent = await sendOrderCompletionSMS(
         smsPhone,
         {
-          customerName: order.user.name,
+          customerName: deliveryContact.name,
           invoiceNumber,
           total: order.totalPaise / 100,
           restaurantName: invoiceData.restaurantName,
+          invoiceUrl: invoice.pdfPath || null,
         }
       );
     }
@@ -312,7 +357,7 @@ router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (re
           issuedAt: invoice.issuedAt,
         },
         deliveryResults: results,
-        warnings: generateWarnings(requestedMethods, order.user.email, smsPhone, results),
+        warnings: generateWarnings(requestedMethods, deliveryContact.email, smsPhone, results),
       },
     };
 
@@ -482,8 +527,9 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
 
     // Prepare invoice data for resending
     const resendRestaurantName = invoice.order.restaurant?.name ?? 'Restaurant';
+    const deliveryContact = resolveInvoiceDeliveryContact(invoice.order);
     const invoiceData = {
-      customerName: invoice.order.user.name,
+      customerName: deliveryContact.name,
       invoiceNumber: invoice.invoiceNumber,
       orderDate: invoice.order.createdAt.toLocaleDateString('en-IN'),
       total: invoice.order.totalPaise / 100,
@@ -493,7 +539,7 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
     const smsPhone = getInvoiceSmsPhone(invoice.order);
 
     // Send email if requested
-    if (requestedMethods.includes('EMAIL') && invoice.order.user.email) {
+    if (requestedMethods.includes('EMAIL') && deliveryContact.email) {
       // For resending, we need to regenerate the PDF or read from storage
       const resendTaxPercent = invoice.order.subtotalPaise > 0
         ? Math.round((invoice.order.taxPaise / invoice.order.subtotalPaise) * 100)
@@ -509,12 +555,12 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
         items: [],
         subtotal: invoice.order.subtotalPaise / 100,
         tax: invoice.order.taxPaise / 100,
-        customerEmail: invoice.order.user.email,
+        customerEmail: deliveryContact.email,
         ...(smsPhone ? { customerPhone: smsPhone } : {}),
       });
 
       results.emailSent = await sendInvoiceEmail(
-        invoice.order.user.email,
+        deliveryContact.email,
         invoiceData,
         pdfBuffer
       );
@@ -522,9 +568,12 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
 
     // Send SMS if requested
     if (requestedMethods.includes('SMS') && smsPhone) {
-      results.smsSent = await sendInvoiceSMS(
+      results.smsSent = await sendOrderCompletionSMS(
         smsPhone,
-        invoiceData
+        {
+          ...invoiceData,
+          invoiceUrl: invoice.pdfPath || null,
+        }
       );
     }
 
@@ -569,7 +618,7 @@ router.post('/:invoiceId/resend', authenticate, requireRestaurant, asyncHandler(
       message: 'Invoice resent successfully',
       data: {
         deliveryResults: results,
-        warnings: generateWarnings(requestedMethods, invoice.order.user.email, smsPhone, results),
+        warnings: generateWarnings(requestedMethods, deliveryContact.email, smsPhone, results),
       },
     };
 
@@ -672,6 +721,7 @@ router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, requireRestaurant, a
   const rfTaxPercent = order.subtotalPaise > 0
     ? Math.round((order.taxPaise / order.subtotalPaise) * 100)
     : undefined;
+  const deliveryContact = resolveInvoiceDeliveryContact(order);
   const invoiceData = {
     restaurantName: order.restaurant?.name ?? 'Restaurant',
     ...(order.restaurant?.address   ? { restaurantAddress: order.restaurant.address }  : {}),
@@ -681,9 +731,9 @@ router.post('/:invoiceOrOrderId/refresh-pdf', authenticate, requireRestaurant, a
     ...(order.restaurant?.email     ? { restaurantEmail:   order.restaurant.email }     : {}),
     ...(order.restaurant?.gstNumber ? { gstNumber:         order.restaurant.gstNumber } : {}),
     ...(rfTaxPercent !== undefined  ? { taxPercent: rfTaxPercent }                      : {}),
-    customerName: order.user?.name || '',
-    customerEmail: order.user?.email || '',
-    ...(order.user?.phone ? { customerPhone: order.user.phone } : {}),
+    customerName: deliveryContact.name,
+    customerEmail: deliveryContact.email,
+    ...(deliveryContact.phone ? { customerPhone: deliveryContact.phone } : {}),
     invoiceNumber: invoice.invoiceNumber,
     orderDate: order.createdAt.toLocaleDateString('en-IN'),
     items: (order.items || []).map((it: any) => ({

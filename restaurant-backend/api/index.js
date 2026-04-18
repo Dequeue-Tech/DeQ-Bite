@@ -44,7 +44,7 @@ const connectDatabase = dbModule.connectDatabase;
 
 let dbConnectionPromise = null;
 
-const CORS_ALLOWED_HEADERS = 'Content-Type, Authorization, x-api-key, x-restaurant-subdomain, x-restaurant-slug';
+const CORS_ALLOWED_HEADERS = 'Content-Type, Authorization, x-api-key, x-restaurant-subdomain, x-restaurant-slug, idempotency-key, x-expected-updated-at';
 const CORS_ALLOWED_METHODS = 'GET, POST, PUT, DELETE, PATCH, OPTIONS';
 
 const normalizeOriginHeader = (originHeader) => {

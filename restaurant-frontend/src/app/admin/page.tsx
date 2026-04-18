@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { apiClient, AnalyticsChatMessage, Category, DeliveryOrder, DeliveryStatus, MenuItem, Order, RestaurantUserEntry } from '@/lib/api-client';
+import { apiClient, AnalyticsChatMessage, Category, DeliveryOrder, DeliveryRider, DeliveryStatus, MenuItem, Order, RestaurantUserEntry } from '@/lib/api-client';
 import { useAuthStore } from '@/store/auth';
 import { 
   ChefHat, Plus, Trash2, CheckCircle, TrendingUp, 
@@ -12,6 +12,7 @@ import {
 import toast from 'react-hot-toast';
 import { formatInr } from '@/lib/currency';
 import { subscribeToOrderEvents, subscribeToRestaurantEvents } from '@/lib/realtime-client';
+import { ensurePushSubscription, syncPushSubscriptionIfGranted } from '@/lib/push-notifications';
 import { 
   BarChart, Bar, XAxis, YAxis, Tooltip, 
   ResponsiveContainer, CartesianGrid 
@@ -25,6 +26,22 @@ type MenuForm = {
 };
 
 type OrderChannelFilter = 'ALL' | 'DINE_IN' | 'DELIVERY' | 'ZOMATO' | 'SWIGGY';
+
+type RiderDraft = {
+  riderId: string;
+  branchId?: string;
+};
+
+type AdminOrderNotification = {
+  id: string;
+  orderId: string;
+  title: string;
+  subtitle: string;
+  status: string;
+  alertType?: 'new-order' | 'accepted' | 'status-update' | 'payment-update' | 'invoice';
+  timestamp: number;
+  unread: boolean;
+};
 
 const orderChannelFilters: Array<{ value: OrderChannelFilter; label: string }> = [
   { value: 'ALL', label: 'All Orders' },
@@ -61,9 +78,12 @@ const getDeliveryStatusColor = (status: DeliveryStatus) => {
 
 const getPlainInstructions = (specialInstructions?: string) => {
   if (!specialInstructions) return '';
-  const marker = '[DELIVERY_META]';
-  const idx = specialInstructions.lastIndexOf(marker);
-  return (idx === -1 ? specialInstructions : specialInstructions.slice(0, idx)).trim();
+  const markerIndexes = ['[DELIVERY_META]', '[ORDER_CONTACT]', '[DELIVERY_EMAIL]']
+    .map((marker) => specialInstructions.lastIndexOf(marker))
+    .filter((idx) => idx >= 0);
+  if (markerIndexes.length === 0) return specialInstructions.trim();
+  const firstMarkerIndex = Math.min(...markerIndexes);
+  return specialInstructions.slice(0, firstMarkerIndex).trim();
 };
 
 const getMarketplaceBadgeText = (order: Pick<Order, 'sourceSystem' | 'externalOrderId'>) => {
@@ -98,6 +118,15 @@ const getOrderContextBadge = (
   };
 };
 
+const toRelativeTime = (timestamp: number) => {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 8) return 'just now';
+  if (seconds < 60) return `${seconds}s ago`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
+  if (seconds < 86400) return `${Math.floor(seconds / 3600)}h ago`;
+  return `${Math.floor(seconds / 86400)}d ago`;
+};
+
 export default function AdminPage() {
   const router = useRouter();
   const { user, getProfile } = useAuthStore();
@@ -130,15 +159,30 @@ export default function AdminPage() {
   const [deliveryStatusDraft, setDeliveryStatusDraft] = useState<Record<string, DeliveryStatus>>({});
   const [deliveryPaymentStatusDraft, setDeliveryPaymentStatusDraft] = useState<Record<string, Order['paymentStatus']>>({});
   const [deliveryPaymentAmountDraft, setDeliveryPaymentAmountDraft] = useState<Record<string, string>>({});
-  const [deliveryRiderDraft, setDeliveryRiderDraft] = useState<Record<string, { riderName: string; riderPhone: string }>>({});
+  const [deliveryRiderDraft, setDeliveryRiderDraft] = useState<Record<string, RiderDraft>>({});
   const [deliverySearch, setDeliverySearch] = useState('');
+  const [deliveryRiders, setDeliveryRiders] = useState<DeliveryRider[]>([]);
+  const [deliveryRidersLoading, setDeliveryRidersLoading] = useState(false);
+  const [riderBranchFilter, setRiderBranchFilter] = useState('');
+  const [isAddRiderOpen, setIsAddRiderOpen] = useState(false);
+  const [newRiderForm, setNewRiderForm] = useState({
+    name: '',
+    phone: '',
+    vehicleType: '',
+    branchId: '',
+  });
+  const [creatingRider, setCreatingRider] = useState(false);
   
   const [userEmail, setUserEmail] = useState('');
   const [userRole, setUserRole] = useState<'OWNER' | 'ADMIN' | 'STAFF'>('STAFF');
   const [paymentPolicy, setPaymentPolicy] = useState<{ paymentCollectionTiming: 'BEFORE_MEAL' | 'AFTER_MEAL'; cashPaymentEnabled: boolean } | null>(null);
   const [menuForm, setMenuForm] = useState<MenuForm>({ name: '', description: '', priceInr: '', categoryId: '' });
   const [notificationPermission, setNotificationPermission] = useState<NotificationPermission | 'unsupported'>('default');
-  const [adminNotifications, setAdminNotifications] = useState<Array<{ id: string; message: string; time: string }>>([]);
+  const [adminNotifications, setAdminNotifications] = useState<AdminOrderNotification[]>([]);
+  const [expandedNotificationOrderId, setExpandedNotificationOrderId] = useState<string | null>(null);
+  const [pulsingOrderIds, setPulsingOrderIds] = useState<Record<string, boolean>>({});
+  const [adminSoundEnabled, setAdminSoundEnabled] = useState(true);
+  const [adminPulseEnabled, setAdminPulseEnabled] = useState(true);
   const [adminAccessVerified, setAdminAccessVerified] = useState(false);
   const [isGeneratingAi, setIsGeneratingAi] = useState(false);
   const [aiInsights, setAiInsights] = useState<{type: string, title: string, desc: string}[] | null>(null);
@@ -210,7 +254,7 @@ export default function AdminPage() {
         if (!isActive) return;
         setOrdersPage(1);
         if (hasManagementAccess) {
-          await Promise.all([loadOrdersPage(1, 'ALL'), loadDeliveryOrders()]);
+          await Promise.all([loadOrdersPage(1, 'ALL'), loadDeliveryOrders(), loadDeliveryRiders()]);
         } else {
           await loadOrdersPage(1, 'ALL');
         }
@@ -244,8 +288,30 @@ export default function AdminPage() {
     try {
       const stored = localStorage.getItem('admin_order_notifications');
       if (stored) {
-        setAdminNotifications(JSON.parse(stored));
+        const parsed = JSON.parse(stored) as Array<any>;
+        const normalized = parsed
+          .map((entry) => ({
+            id: String(entry.id || `${entry.orderId || 'order'}-${Date.now()}`),
+            orderId: String(entry.orderId || entry.id || ''),
+            title: String(entry.title || entry.message || 'Order Update'),
+            subtitle: String(entry.subtitle || entry.message || ''),
+            status: String(entry.status || 'UPDATE'),
+            alertType:
+              entry.alertType === 'new-order' ||
+              entry.alertType === 'accepted' ||
+              entry.alertType === 'status-update' ||
+              entry.alertType === 'payment-update' ||
+              entry.alertType === 'invoice'
+                ? entry.alertType
+                : undefined,
+            timestamp: Number(entry.timestamp || Date.now()),
+            unread: Boolean(entry.unread ?? false),
+          }))
+          .filter((entry) => entry.orderId);
+        setAdminNotifications(normalized);
       }
+      setAdminSoundEnabled(localStorage.getItem('admin_notification_sound') !== 'off');
+      setAdminPulseEnabled(localStorage.getItem('admin_notification_haptics') !== 'off');
     } catch {
       // ignore
     }
@@ -253,39 +319,71 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (!hasStaffOrderAccess || typeof window === 'undefined') return;
+    const roleScope = hasManagementAccess ? 'admin' : 'staff';
+    syncPushSubscriptionIfGranted(roleScope).catch(() => undefined);
+  }, [hasStaffOrderAccess, hasManagementAccess]);
+
+  useEffect(() => {
+    if (!hasStaffOrderAccess || typeof window === 'undefined') return;
     const restaurantSlug = apiClient.getActiveRestaurantSlug();
     const cleanup = subscribeToOrderEvents({
       restaurant: restaurantSlug,
       scope: 'restaurant',
+      role: hasManagementAccess ? 'admin' : 'staff',
       onEvent: (event) => {
         if (event?.type === 'invoice.ready') {
-          const orderId = event?.payload?.orderId as string | undefined;
+          const orderId = (event?.payload?.orderId as string | undefined) || (event?.payload?.order_id as string | undefined);
           if (!orderId) return;
           enqueueAdminNotifications([
             {
               id: `invoice-${orderId}-${Date.now()}`,
-              message: `Invoice ready for order #${orderId.slice(0, 8).toUpperCase()}`,
-              time: new Date().toLocaleTimeString(),
+              orderId,
+              title: `Order #${orderId.slice(0, 8).toUpperCase()} - Invoice Ready`,
+              subtitle: 'Invoice generated and ready to download',
+              status: 'INVOICE_READY',
+              alertType: 'invoice',
+              timestamp: Date.now(),
+              unread: true,
             },
           ]);
           return;
         }
         const order = event?.payload?.order;
         if (!order?.id) return;
-        handleRealtimeOrderUpdate(order, event?.type);
+        handleRealtimeOrderUpdate(order, event?.type, event?.eventId);
+      },
+      onReconnect: ({ lastSyncTimestamp }) => {
+        if (!lastSyncTimestamp) return;
+        loadOrdersDelta(lastSyncTimestamp).catch(() => undefined);
+        if (!isStaffOnly) {
+          loadDeliveryOrdersDelta(lastSyncTimestamp).catch(() => undefined);
+        }
       },
     });
 
     return cleanup;
-  }, [hasStaffOrderAccess]);
+  }, [hasStaffOrderAccess, hasManagementAccess, isStaffOnly]);
 
   useEffect(() => {
     if (!hasManagementAccess || typeof window === 'undefined') return;
     const restaurantSlug = apiClient.getActiveRestaurantSlug();
     const cleanup = subscribeToRestaurantEvents({
       restaurant: restaurantSlug,
-      eventTypes: ['restaurant.users.updated'],
+      role: 'admin',
+      eventTypes: ['restaurant.users.updated', 'rider.pool.updated'],
       onEvent: (event) => {
+        if (event?.type === 'rider.pool.updated') {
+          const rider = event?.payload?.rider as DeliveryRider | undefined;
+          if (!rider?.id) return;
+          setDeliveryRiders((prev) => {
+            const index = prev.findIndex((entry) => entry.id === rider.id);
+            if (index === -1) return [rider, ...prev];
+            const next = [...prev];
+            next[index] = rider;
+            return next;
+          });
+          return;
+        }
         const membership = event?.payload?.membership as RestaurantUserEntry | undefined;
         if (!membership?.membershipId || !membership.user?.id) return;
         upsertRestaurantUser(membership);
@@ -303,18 +401,8 @@ export default function AdminPage() {
   useEffect(() => {
     if (!hasStaffOrderAccess || isStaffOnly || activeTab !== 'delivery') return;
     loadDeliveryOrders();
-  }, [hasStaffOrderAccess, isStaffOnly, activeTab]);
-
-  useEffect(() => {
-    if (!hasStaffOrderAccess) return;
-    const timer = setInterval(() => {
-      loadOrdersPage(ordersPage, orderChannelFilter);
-      if (!isStaffOnly && activeTab === 'delivery') {
-        loadDeliveryOrders();
-      }
-    }, 30_000);
-    return () => clearInterval(timer);
-  }, [hasStaffOrderAccess, isStaffOnly, ordersPage, orderChannelFilter, activeTab]);
+    loadDeliveryRiders(riderBranchFilter || undefined);
+  }, [hasStaffOrderAccess, isStaffOnly, activeTab, riderBranchFilter]);
 
   const loadBaseData = async () => {
     try {
@@ -371,22 +459,58 @@ export default function AdminPage() {
     }
   };
 
-  const enqueueAdminNotifications = (newNotifs: Array<{ id: string; message: string; time: string }>) => {
+  const loadOrdersDelta = async (updatedAfter: string) => {
+    const response = await apiClient.getRestaurantOrders(orderChannelFilter, updatedAfter);
+    if (!response.success || !response.data?.length) return;
+    response.data.forEach((order) => applyOrderUpdate(order));
+  };
+
+  const loadDeliveryOrdersDelta = async (updatedAfter: string) => {
+    const response = await apiClient.getDeliveryOrders(updatedAfter);
+    if (!response.success || !response.data?.length) return;
+    response.data.forEach((order) => applyDeliveryUpdate(order));
+  };
+
+  const loadDeliveryRiders = async (branchId?: string) => {
+    try {
+      setDeliveryRidersLoading(true);
+      const response = await apiClient.getDeliveryRiders(branchId);
+      if (response.success) {
+        setDeliveryRiders(response.data || []);
+      }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to load riders');
+    } finally {
+      setDeliveryRidersLoading(false);
+    }
+  };
+
+  const enqueueAdminNotifications = (newNotifs: AdminOrderNotification[]) => {
     if (!newNotifs.length) return;
 
-    const playOrderTone = () => {
+    const playOrderTone = (variant: 'new-order' | 'default') => {
       if (typeof window === 'undefined') return;
       try {
         const audioContext = new (window.AudioContext || (window as any).webkitAudioContext)();
-        const oscillator = audioContext.createOscillator();
-        const gain = audioContext.createGain();
-        oscillator.type = 'sine';
-        oscillator.frequency.value = 880;
-        gain.gain.value = 0.05;
-        oscillator.connect(gain);
-        gain.connect(audioContext.destination);
-        oscillator.start();
-        oscillator.stop(audioContext.currentTime + 0.12);
+        const scheduleTone = (frequency: number, startOffset: number, duration: number) => {
+          const oscillator = audioContext.createOscillator();
+          const gain = audioContext.createGain();
+          oscillator.type = 'sine';
+          oscillator.frequency.value = frequency;
+          gain.gain.value = 0.055;
+          oscillator.connect(gain);
+          gain.connect(audioContext.destination);
+          const startAt = audioContext.currentTime + startOffset;
+          oscillator.start(startAt);
+          oscillator.stop(startAt + duration);
+        };
+
+        if (variant === 'new-order') {
+          scheduleTone(1260, 0, 0.12);
+          scheduleTone(920, 0.17, 0.16);
+          return;
+        }
+        scheduleTone(880, 0, 0.12);
       } catch {
         // ignore audio errors
       }
@@ -396,7 +520,7 @@ export default function AdminPage() {
       newNotifs.slice(0, 3).forEach((note) => {
         try {
           new Notification('Order Update', {
-            body: note.message,
+            body: `${note.title}${note.subtitle ? ` - ${note.subtitle}` : ''}`,
             tag: note.id,
           });
         } catch {
@@ -405,11 +529,23 @@ export default function AdminPage() {
       });
     }
 
-    newNotifs.forEach((note) => toast(note.message));
-    playOrderTone();
+    newNotifs.forEach((note) => toast(note.title));
+    if (adminSoundEnabled) {
+      const hasNewOrderAlert = newNotifs.some((note) => note.alertType === 'new-order');
+      playOrderTone(hasNewOrderAlert ? 'new-order' : 'default');
+    }
 
     setAdminNotifications((prev) => {
-      const merged = [...newNotifs, ...prev].slice(0, 20);
+      // Deduplicate by notification ID to prevent repeats
+      const seen = new Set<string>();
+      const merged = [...newNotifs, ...prev]
+        .filter((note) => {
+          if (seen.has(note.id)) return false;
+          seen.add(note.id);
+          return true;
+        })
+        .sort((a, b) => b.timestamp - a.timestamp)
+        .slice(0, 80);
       if (typeof window !== 'undefined') {
         localStorage.setItem('admin_order_notifications', JSON.stringify(merged));
       }
@@ -475,9 +611,15 @@ export default function AdminPage() {
     });
   };
 
-  const handleRealtimeOrderUpdate = (incoming: Partial<Order> & { id: string }, eventType?: string) => {
-    const notifications: Array<{ id: string; message: string; time: string }> = [];
+  const handleRealtimeOrderUpdate = (
+    incoming: Partial<Order> & { id: string },
+    eventType?: string,
+    eventId?: string
+  ) => {
+    const notifications: AdminOrderNotification[] = [];
     let added = false;
+    const isCreatedEvent = eventType === 'order.created';
+    const isAcceptedEvent = eventType === 'order.accepted';
 
     setOrders((prev) => {
       const index = prev.findIndex((order) => order.id === incoming.id);
@@ -492,29 +634,62 @@ export default function AdminPage() {
           }
         : (incoming as Order);
 
-      if (!existing) {
-        const message =
-          eventType === 'order.created'
-            ? `New order #${incoming.id.slice(0, 8).toUpperCase()} placed`
-            : `Order #${incoming.id.slice(0, 8).toUpperCase()} updated`;
+      if (isCreatedEvent) {
         notifications.push({
-          id: `${incoming.id}-new-${Date.now()}`,
-          message,
-          time: new Date().toLocaleTimeString(),
+          id: eventId || `${incoming.id}-new-${Date.now()}`,
+          orderId: incoming.id,
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Placed`,
+          subtitle: 'A new order has arrived and needs acceptance',
+          status: incoming.status || 'PENDING',
+          alertType: 'new-order',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } else if (isAcceptedEvent) {
+        notifications.push({
+          id: eventId || `${incoming.id}-accepted-${Date.now()}`,
+          orderId: incoming.id,
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Accepted`,
+          subtitle: 'Order moved from Pending to Accepted',
+          status: incoming.status || nextOrder.status || 'CONFIRMED',
+          alertType: 'accepted',
+          timestamp: Date.now(),
+          unread: true,
+        });
+      } else if (!existing) {
+        notifications.push({
+          id: eventId || `${incoming.id}-new-${Date.now()}`,
+          orderId: incoming.id,
+          title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Updated`,
+          subtitle: 'An order was updated',
+          status: incoming.status || 'PENDING',
+          alertType: 'status-update',
+          timestamp: Date.now(),
+          unread: true,
         });
       } else {
-        if (incoming.status && incoming.status !== existing.status) {
+        if (incoming.status && incoming.status !== existing.status && !isAcceptedEvent) {
           notifications.push({
             id: `${incoming.id}-status-${Date.now()}`,
-            message: `Order #${incoming.id.slice(0, 8).toUpperCase()} moved to ${incoming.status}`,
-            time: new Date().toLocaleTimeString(),
+            orderId: incoming.id,
+            title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - ${incoming.status.replace(/_/g, ' ')}`,
+            subtitle: `Status changed from ${existing.status} to ${incoming.status}`,
+            status: incoming.status,
+            alertType: 'status-update',
+            timestamp: Date.now(),
+            unread: true,
           });
         }
         if (incoming.paymentStatus && incoming.paymentStatus !== existing.paymentStatus) {
           notifications.push({
             id: `${incoming.id}-payment-${Date.now()}`,
-            message: `Payment for order #${incoming.id.slice(0, 8).toUpperCase()} is ${incoming.paymentStatus}`,
-            time: new Date().toLocaleTimeString(),
+            orderId: incoming.id,
+            title: `Order #${incoming.id.slice(0, 8).toUpperCase()} - Payment ${incoming.paymentStatus}`,
+            subtitle: `Payment status updated from ${existing.paymentStatus} to ${incoming.paymentStatus}`,
+            status: incoming.paymentStatus,
+            alertType: 'payment-update',
+            timestamp: Date.now(),
+            unread: true,
           });
         }
       }
@@ -536,6 +711,16 @@ export default function AdminPage() {
     }
 
     if (added) {
+      if (adminPulseEnabled) {
+        setPulsingOrderIds((prev) => ({ ...prev, [incoming.id]: true }));
+        setTimeout(() => {
+          setPulsingOrderIds((prev) => {
+            const next = { ...prev };
+            delete next[incoming.id];
+            return next;
+          });
+        }, 1200);
+      }
       setOrdersTotal((prev) => {
         const nextTotal = prev + 1;
         setOrdersTotalPages(Math.max(1, Math.ceil(nextTotal / ordersLimit)));
@@ -577,6 +762,43 @@ export default function AdminPage() {
       );
     });
   }, [deliveryOrders, deliverySearch]);
+
+  const adminNotificationGroups = useMemo(() => {
+    const grouped = new Map<
+      string,
+      {
+        orderId: string;
+        latest: AdminOrderNotification;
+        history: AdminOrderNotification[];
+        unread: boolean;
+      }
+    >();
+
+    adminNotifications.forEach((note) => {
+      const existing = grouped.get(note.orderId);
+      if (!existing) {
+        grouped.set(note.orderId, {
+          orderId: note.orderId,
+          latest: note,
+          history: [note],
+          unread: note.unread,
+        });
+        return;
+      }
+      existing.history.push(note);
+      if (note.timestamp > existing.latest.timestamp) {
+        existing.latest = note;
+      }
+      existing.unread = existing.unread || note.unread;
+    });
+
+    return Array.from(grouped.values())
+      .sort((a, b) => b.latest.timestamp - a.latest.timestamp)
+      .map((group) => ({
+        ...group,
+        history: group.history.sort((a, b) => b.timestamp - a.timestamp),
+      }));
+  }, [adminNotifications]);
 
   const ordersByStatus = useMemo(() => {
     return orders.reduce((acc, order) => {
@@ -660,7 +882,12 @@ export default function AdminPage() {
   const updateOrderStatus = async (orderId: string, status: Order['status']) => {
     try {
       setUpdatingOrderId(orderId);
-      const response = await apiClient.updateOrderStatus(orderId, status);
+      const expectedUpdatedAt = orders.find((entry) => entry.id === orderId)?.updatedAt;
+      const response = await apiClient.updateOrderStatus(
+        orderId,
+        status,
+        expectedUpdatedAt ? { expectedUpdatedAt } : undefined
+      );
       if (!response.success) throw new Error(response.error || 'Failed to update order status');
       toast.success(`Order updated to ${status}`);
       if (response.data) {
@@ -705,55 +932,59 @@ export default function AdminPage() {
   const saveOrderChanges = async (order: Order) => {
     const newOrderStatus = orderStatusDraft[order.id] || order.status;
     const newPaymentStatus = paymentStatusDraft[order.id] || order.paymentStatus;
-    
-    const promises: Array<Promise<any>> = [];
-    let hasChanges = false;
-    
-    if (newOrderStatus !== order.status) {
-      promises.push(apiClient.updateOrderStatus(order.id, newOrderStatus));
-      hasChanges = true;
-    }
-    
-    if (newPaymentStatus !== order.paymentStatus) {
-      let amountPaise: number | undefined;
-      if (newPaymentStatus === 'PARTIALLY_PAID') {
-        const amountRaw = (paymentAmountDraft[order.id] || '').trim();
-        if (!amountRaw) return toast.error('Enter a valid paid amount in INR');
-        const amountInr = Number(amountRaw);
-        if (!Number.isFinite(amountInr) || amountInr <= 0) return toast.error('Enter a valid paid amount in INR');
-        amountPaise = Math.round(amountInr * 100);
-        if (amountPaise >= order.totalPaise) return toast.error('Paid amount must be less than order total');
-      }
-      promises.push(apiClient.updatePaymentStatus({
-        orderId: order.id, 
-        paymentStatus: newPaymentStatus, 
-        ...(newPaymentStatus === 'PARTIALLY_PAID' ? { paidAmountPaise: amountPaise } : {})
-      }));
-      hasChanges = true;
+    const shouldUpdateStatus = newOrderStatus !== order.status;
+    const shouldUpdatePayment = newPaymentStatus !== order.paymentStatus;
+
+    if (shouldUpdatePayment && newPaymentStatus === 'PARTIALLY_PAID') {
+      const amountRaw = (paymentAmountDraft[order.id] || '').trim();
+      if (!amountRaw) return toast.error('Enter a valid paid amount in INR');
+      const amountInr = Number(amountRaw);
+      if (!Number.isFinite(amountInr) || amountInr <= 0) return toast.error('Enter a valid paid amount in INR');
+      const amountPaise = Math.round(amountInr * 100);
+      if (amountPaise >= order.totalPaise) return toast.error('Paid amount must be less than order total');
     }
 
-    if (!hasChanges) {
-      toast('No changes detected', { icon: 'ℹ️' });
+    if (!shouldUpdateStatus && !shouldUpdatePayment) {
+      toast('No changes detected', { icon: 'i' });
       return;
     }
 
     try {
       setUpdatingOrderId(order.id);
-      const results = await Promise.all(promises);
-      let merged: Order | null = null;
-      results.forEach((result) => {
-        if (result?.success && result.data) {
-          merged = merged ? { ...merged, ...result.data } : result.data;
-        } else if (result?.id) {
-          merged = merged ? { ...merged, ...result } : result;
+      let merged: Order = order;
+
+      if (shouldUpdateStatus) {
+        const statusResult = await apiClient.updateOrderStatus(order.id, newOrderStatus, {
+          expectedUpdatedAt: merged.updatedAt,
+        });
+        if (!statusResult.success || !statusResult.data) {
+          throw new Error(statusResult.error || 'Failed to update order status');
         }
-      });
-      if (merged) {
-        applyOrderUpdate(merged);
+        merged = { ...merged, ...statusResult.data };
       }
+
+      if (shouldUpdatePayment) {
+        let paidAmountPaise: number | undefined;
+        if (newPaymentStatus === 'PARTIALLY_PAID') {
+          const amountRaw = (paymentAmountDraft[order.id] || '').trim();
+          paidAmountPaise = Math.round(Number(amountRaw) * 100);
+        }
+        const paymentResult = await apiClient.updatePaymentStatus({
+          orderId: order.id,
+          paymentStatus: newPaymentStatus,
+          expectedUpdatedAt: merged.updatedAt,
+          ...(newPaymentStatus === 'PARTIALLY_PAID' ? { paidAmountPaise } : {}),
+        });
+        merged = { ...merged, ...paymentResult };
+      }
+
+      applyOrderUpdate(merged);
       toast.success('Order successfully updated');
-    } catch (error: any) { toast.error(error?.message || 'Failed to update order'); } 
-    finally { setUpdatingOrderId(null); }
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to update order');
+    } finally {
+      setUpdatingOrderId(null);
+    }
   };
 
   const applyDeliveryUpdate = (incoming: DeliveryOrder) => {
@@ -775,7 +1006,11 @@ export default function AdminPage() {
 
     try {
       setUpdatingDeliveryOrderId(order.id);
-      const response = await apiClient.updateDeliveryOrderStatus(order.id, nextStatus);
+      const response = await apiClient.updateDeliveryOrderStatus(
+        order.id,
+        nextStatus,
+        { expectedUpdatedAt: order.updatedAt }
+      );
       if (!response.success || !response.data) {
         throw new Error(response.error || 'Failed to update delivery status');
       }
@@ -810,6 +1045,7 @@ export default function AdminPage() {
       const updatedOrder = await apiClient.updatePaymentStatus({
         orderId: order.id,
         paymentStatus: nextPaymentStatus,
+        expectedUpdatedAt: order.updatedAt,
         ...(nextPaymentStatus === 'PARTIALLY_PAID' ? { paidAmountPaise } : {}),
       });
       applyDeliveryUpdate(updatedOrder as DeliveryOrder);
@@ -823,14 +1059,21 @@ export default function AdminPage() {
 
   const saveDeliveryRider = async (order: DeliveryOrder) => {
     const rider = deliveryRiderDraft[order.id];
-    if (!rider?.riderName || !rider?.riderPhone) {
-      toast.error('Rider name and phone are required');
+    if (!rider?.riderId) {
+      toast.error('Select a rider from this restaurant pool');
       return;
     }
 
     try {
       setUpdatingDeliveryOrderId(order.id);
-      const response = await apiClient.assignDeliveryRider(order.id, rider);
+      const response = await apiClient.assignDeliveryRider(
+        order.id,
+        {
+          riderId: rider.riderId,
+          ...(rider.branchId ? { branchId: rider.branchId } : {}),
+        },
+        { expectedUpdatedAt: order.updatedAt }
+      );
       if (!response.success || !response.data) {
         throw new Error(response.error || 'Failed to assign rider');
       }
@@ -843,12 +1086,49 @@ export default function AdminPage() {
     }
   };
 
+  const createRiderInline = async () => {
+    const name = newRiderForm.name.trim();
+    const phone = newRiderForm.phone.trim();
+    const vehicleType = newRiderForm.vehicleType.trim();
+    if (!name || !phone || !vehicleType) {
+      toast.error('Name, phone, and vehicle type are required');
+      return;
+    }
+
+    try {
+      setCreatingRider(true);
+      const response = await apiClient.createDeliveryRider({
+        name,
+        phone,
+        vehicleType,
+        ...(newRiderForm.branchId.trim() ? { branchId: newRiderForm.branchId.trim() } : {}),
+      });
+      if (!response.success || !response.data) {
+        throw new Error(response.error || 'Failed to create rider');
+      }
+      toast.success('Rider added to this restaurant');
+      setIsAddRiderOpen(false);
+      setNewRiderForm({ name: '', phone: '', vehicleType: '', branchId: '' });
+      await loadDeliveryRiders(riderBranchFilter || undefined);
+    } catch (error: any) {
+      toast.error(error?.message || 'Failed to create rider');
+    } finally {
+      setCreatingRider(false);
+    }
+  };
+
   const requestNotificationPermission = async () => {
     if (typeof window === 'undefined' || !('Notification' in window)) return toast.error('Browser notifications are not supported');
-    const permission = await Notification.requestPermission();
-    setNotificationPermission(permission);
-    if (permission === 'granted') toast.success('Admin notifications enabled');
-    else if (permission === 'denied') toast.error('Notifications blocked.');
+    try {
+      await ensurePushSubscription(hasManagementAccess ? 'admin' : 'staff');
+      setNotificationPermission('granted');
+      toast.success('Admin notifications enabled');
+    } catch (error: any) {
+      const permission = typeof Notification !== 'undefined' ? Notification.permission : 'default';
+      setNotificationPermission(permission as NotificationPermission);
+      if (permission === 'denied') toast.error('Notifications blocked.');
+      else toast.error(error?.message || 'Unable to enable notifications');
+    }
   };
 
   const createMenuItem = async () => {
@@ -912,7 +1192,11 @@ export default function AdminPage() {
   const confirmCashPayment = async (orderId: string) => {
     try {
       setConfirmingCashOrderId(orderId);
-      const order = await apiClient.confirmCashPayment(orderId);
+      const expectedUpdatedAt = orders.find((entry) => entry.id === orderId)?.updatedAt;
+      const order = await apiClient.confirmCashPayment(
+        orderId,
+        expectedUpdatedAt ? { expectedUpdatedAt } : undefined
+      );
       toast.success('Cash payment confirmed');
       if (order) {
         applyOrderUpdate(order);
@@ -1546,39 +1830,127 @@ export default function AdminPage() {
                 </div>
               </div>
 
-              {adminNotifications.length > 0 && (
-                <div className="mb-5 bg-gray-50 border border-gray-100 rounded-xl p-3 sm:p-4">
-                  <div className="flex items-center justify-between mb-2">
-                    <p className="text-xs sm:text-sm font-semibold text-gray-900">Recent Updates</p>
+              {adminNotificationGroups.length > 0 && (
+                <div className="mb-5 bg-white rounded-2xl border border-gray-200 p-0 shadow-sm overflow-hidden">
+                  <div className="sticky top-0 z-10 bg-white border-b border-gray-100 px-4 py-3 flex items-center justify-between">
+                    {/* <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => {
+                          const next = !adminSoundEnabled;
+                          setAdminSoundEnabled(next);
+                          localStorage.setItem('admin_notification_sound', next ? 'on' : 'off');
+                        }}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                          adminSoundEnabled ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'
+                        }`}
+                      >
+                        Sound
+                      </button>
+                      <button
+                        onClick={() => {
+                          const next = !adminPulseEnabled;
+                          setAdminPulseEnabled(next);
+                          localStorage.setItem('admin_notification_haptics', next ? 'on' : 'off');
+                        }}
+                        className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border ${
+                          adminPulseEnabled ? 'bg-gray-900 text-white border-gray-900' : 'bg-white text-gray-600 border-gray-200'
+                        }`}
+                      >
+                        Haptics
+                      </button>
+                    </div> */}
                     <button
                       onClick={() => {
                         setAdminNotifications([]);
-                        if (typeof window !== 'undefined') {
-                          localStorage.removeItem('admin_order_notifications');
-                        }
+                        localStorage.setItem('admin_order_notifications', JSON.stringify([]));
                       }}
-                      className="text-[10px] sm:text-xs text-gray-500 hover:text-gray-700"
+                      className="text-[11px] font-semibold text-gray-600 hover:text-gray-900"
                     >
-                      Clear
+                      Clear all
                     </button>
                   </div>
-                  <div className="space-y-1.5">
-                    {adminNotifications.slice(0, 5).map((note) => (
-                      <div key={note.id} className="text-[11px] sm:text-xs text-gray-600 flex items-center justify-between gap-3">
-                        <span className="truncate">{note.message}</span>
-                        <span className="text-[10px] sm:text-xs text-gray-400 whitespace-nowrap">{note.time}</span>
-                      </div>
-                    ))}
+                  <div className="max-h-[360px] overflow-y-auto thin-scrollbar px-3 py-3 space-y-2">
+                    {adminNotificationGroups.map((group) => {
+                      const status = group.latest.status.toUpperCase();
+                      const accentClass =
+                        status.includes('CANCEL') || status.includes('FAILED')
+                          ? 'border-l-red-500'
+                          : status.includes('DELIVER')
+                            ? 'border-l-green-500'
+                            : status.includes('OUT_FOR_DELIVERY')
+                              ? 'border-l-orange-500'
+                              : status.includes('PREPAR')
+                                ? 'border-l-blue-500'
+                                : 'border-l-yellow-500';
+                      return (
+                        <div
+                          key={group.orderId}
+                          className={`border border-gray-200 border-l-4 ${accentClass} rounded-xl p-3 transition-colors ${
+                            group.unread ? 'bg-orange-50/40' : 'bg-white'
+                          }`}
+                        >
+                          <button
+                            className="w-full flex items-start justify-between gap-2 text-left"
+                            onClick={() => {
+                              setExpandedNotificationOrderId((prev) => (prev === group.orderId ? null : group.orderId));
+                              setAdminNotifications((prev) => {
+                                const next = prev.map((note) =>
+                                  note.orderId === group.orderId ? { ...note, unread: false } : note
+                                );
+                                localStorage.setItem('admin_order_notifications', JSON.stringify(next));
+                                return next;
+                              });
+                            }}
+                          >
+                            <div className="min-w-0">
+                              <p className="text-sm font-black text-gray-900 truncate">{group.latest.title}</p>
+                              {/* <p className="text-xs text-gray-500 truncate">{group.latest.subtitle}</p> */}
+                            </div>
+                            <span className="text-[10px] font-semibold text-gray-400 whitespace-nowrap">
+                              {toRelativeTime(group.latest.timestamp)}
+                            </span>
+                          </button>
+                          {expandedNotificationOrderId === group.orderId && (
+                            <div className="mt-2 pt-2 border-t border-gray-100 space-y-1.5">
+                              {group.history.map((entry) => (
+                                <div key={entry.id} className="flex items-center justify-between gap-2 text-xs text-gray-600">
+                                  <span className="truncate">{entry.subtitle}</span>
+                                  <span className="text-[10px] text-gray-400 whitespace-nowrap">
+                                    {toRelativeTime(entry.timestamp)}
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}
 
               {ordersLoading ? (
-                <p className="text-sm text-gray-500">Loading orders...</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
+                  {Array.from({ length: 6 }).map((_, idx) => (
+                    <div key={`order-skeleton-${idx}`} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[28px] p-4 sm:p-5">
+                      <div className="animate-pulse space-y-3">
+                        <div className="h-4 w-1/3 rounded bg-gray-200" />
+                        <div className="h-12 rounded-2xl bg-gray-100" />
+                        <div className="h-20 rounded-2xl bg-gray-100" />
+                        <div className="h-10 rounded-xl bg-gray-200" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : (
                 <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
                   {orders.map((order) => (
-                    <div key={order.id} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[28px] p-4 sm:p-5 hover:border-orange-200 transition-all flex flex-col h-full shadow-[0_4px_20px_rgb(0,0,0,0.03)] group">
+                    <div
+                      key={order.id}
+                      className={`bg-white border border-gray-100 rounded-2xl sm:rounded-[28px] p-4 sm:p-5 hover:border-orange-200 transition-all flex flex-col h-full shadow-[0_4px_20px_rgb(0,0,0,0.03)] group ${
+                        pulsingOrderIds[order.id] ? 'staff-order-pulse' : ''
+                      }`}
+                    >
                       {(() => {
                         const contextBadge = getOrderContextBadge(order);
                         return (
@@ -1700,7 +2072,7 @@ export default function AdminPage() {
             <div className="bg-white rounded-[24px] sm:rounded-[32px] p-5 sm:p-6 shadow-sm border border-gray-100">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-6">
                 <h2 className="text-lg sm:text-xl font-black text-gray-900">Delivery Control Center</h2>
-                <div className="flex gap-2 w-full sm:w-auto">
+                <div className="flex flex-wrap gap-2 w-full sm:w-auto">
                   <div className="relative w-full sm:w-80">
                     <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" />
                     <input
@@ -1711,8 +2083,23 @@ export default function AdminPage() {
                       className="w-full pl-9 pr-4 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20"
                     />
                   </div>
+                  <input
+                    value={riderBranchFilter}
+                    onChange={(e) => setRiderBranchFilter(e.target.value)}
+                    placeholder="Branch ID (optional)"
+                    className="w-full sm:w-44 px-3 py-2 bg-gray-50 border-none rounded-xl text-sm font-medium focus:ring-2 focus:ring-orange-500/20"
+                  />
                   <button
-                    onClick={loadDeliveryOrders}
+                    onClick={() => setIsAddRiderOpen(true)}
+                    className="px-4 py-2 rounded-xl bg-blue-600 text-white text-sm font-bold hover:bg-blue-700 transition-colors"
+                  >
+                    + Add New Rider
+                  </button>
+                  <button
+                    onClick={() => {
+                      void loadDeliveryOrders();
+                      void loadDeliveryRiders(riderBranchFilter || undefined);
+                    }}
                     className="px-4 py-2 rounded-xl bg-gray-900 text-white text-sm font-bold hover:bg-black transition-colors"
                   >
                     Refresh
@@ -1721,7 +2108,18 @@ export default function AdminPage() {
               </div>
 
               {deliveryLoading ? (
-                <p className="text-sm text-gray-500">Loading delivery orders...</p>
+                <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-5 sm:gap-6">
+                  {Array.from({ length: 6 }).map((_, idx) => (
+                    <div key={`delivery-skeleton-${idx}`} className="bg-white border border-gray-100 rounded-2xl sm:rounded-[28px] p-4 sm:p-5">
+                      <div className="animate-pulse space-y-3">
+                        <div className="h-4 w-1/3 rounded bg-gray-200" />
+                        <div className="h-16 rounded-2xl bg-gray-100" />
+                        <div className="h-24 rounded-2xl bg-gray-100" />
+                        <div className="h-10 rounded-xl bg-gray-200" />
+                      </div>
+                    </div>
+                  ))}
+                </div>
               ) : filteredDeliveryOrders.length === 0 ? (
                 <div className="bg-gray-50 rounded-2xl p-8 text-center border border-gray-100 border-dashed">
                   <p className="text-sm font-semibold text-gray-500">No delivery orders found.</p>
@@ -1731,8 +2129,7 @@ export default function AdminPage() {
                   {filteredDeliveryOrders.map((order) => {
                     const instructions = getPlainInstructions(order.specialInstructions);
                     const riderDraft = deliveryRiderDraft[order.id];
-                    const riderName = riderDraft?.riderName ?? order.deliveryMeta?.riderName ?? '';
-                    const riderPhone = riderDraft?.riderPhone ?? order.deliveryMeta?.riderPhone ?? '';
+                    const selectedRiderId = riderDraft?.riderId || '';
                     const selectedStatus = deliveryStatusDraft[order.id] || order.deliveryMeta.deliveryStatus;
                     const selectedPaymentStatus = deliveryPaymentStatusDraft[order.id] || order.paymentStatus;
 
@@ -1874,31 +2271,41 @@ export default function AdminPage() {
 
                               <div className="pt-3 border-t border-gray-200">
                                 <p className="text-[10px] font-bold text-gray-500 uppercase mb-2 flex items-center gap-1"><Bike className="h-3 w-3" /> Rider Assignment</p>
-                                <input
-                                  value={riderName}
-                                  onChange={(e) =>
-                                    setDeliveryRiderDraft((p) => ({
-                                      ...p,
-                                      [order.id]: { riderName: e.target.value, riderPhone },
-                                    }))
-                                  }
-                                  placeholder="Rider name"
-                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 mb-2"
-                                />
-                                <input
-                                  value={riderPhone}
-                                  onChange={(e) =>
-                                    setDeliveryRiderDraft((p) => ({
-                                      ...p,
-                                      [order.id]: { riderName, riderPhone: e.target.value },
-                                    }))
-                                  }
-                                  placeholder="Rider phone"
-                                  className="w-full bg-white border border-gray-200 rounded-xl px-3 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 mb-2"
-                                />
+                                <div className="relative mb-2">
+                                  <select
+                                    value={selectedRiderId}
+                                    onChange={(e) => {
+                                      const selected = deliveryRiders.find((rider) => rider.id === e.target.value);
+                                      setDeliveryRiderDraft((p) => ({
+                                        ...p,
+                                        [order.id]: {
+                                          riderId: e.target.value,
+                                          ...(selected?.branchId ? { branchId: selected.branchId } : {}),
+                                        },
+                                      }));
+                                    }}
+                                    className="w-full bg-white border border-gray-200 rounded-xl pl-3 pr-8 py-2 text-xs font-bold focus:ring-2 focus:ring-blue-500/20 appearance-none"
+                                  >
+                                    <option value="">Select restaurant rider</option>
+                                    {deliveryRiders.map((rider) => (
+                                      <option key={rider.id} value={rider.id}>
+                                        {`${rider.name} • ${rider.vehicleType} • ${rider.availability}`}
+                                      </option>
+                                    ))}
+                                  </select>
+                                  <ChevronDown className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+                                </div>
+                                {order.deliveryMeta?.riderName ? (
+                                  <p className="text-[11px] font-semibold text-gray-500 mb-2">
+                                    Assigned: {order.deliveryMeta.riderName} {order.deliveryMeta.riderPhone ? `• ${order.deliveryMeta.riderPhone}` : ''}
+                                  </p>
+                                ) : null}
+                                {deliveryRidersLoading ? (
+                                  <p className="text-[11px] text-gray-400 mb-2">Loading rider pool...</p>
+                                ) : null}
                                 <button
                                   onClick={() => saveDeliveryRider(order)}
-                                  disabled={updatingDeliveryOrderId === order.id}
+                                  disabled={updatingDeliveryOrderId === order.id || !selectedRiderId}
                                   className="w-full bg-blue-600 text-white rounded-xl py-2 text-xs font-bold hover:bg-blue-700 transition-colors disabled:opacity-50 shadow-sm"
                                 >
                                   {updatingDeliveryOrderId === order.id ? 'Assigning...' : 'Assign Rider'}
@@ -1913,6 +2320,55 @@ export default function AdminPage() {
                   })}
                 </div>
               )}
+            </div>
+          </div>
+        )}
+
+        {isAddRiderOpen && (
+          <div className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center bg-gray-900/40 backdrop-blur-sm p-4">
+            <div className="bg-white w-full max-w-md rounded-[28px] p-6 shadow-2xl border border-gray-100">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="text-lg font-black text-gray-900">Add New Rider</h3>
+                <button
+                  onClick={() => setIsAddRiderOpen(false)}
+                  className="p-2 rounded-full bg-gray-100 text-gray-500 hover:text-gray-900"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
+              <div className="space-y-3">
+                <input
+                  value={newRiderForm.name}
+                  onChange={(e) => setNewRiderForm((prev) => ({ ...prev, name: e.target.value }))}
+                  placeholder="Rider name"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20"
+                />
+                <input
+                  value={newRiderForm.phone}
+                  onChange={(e) => setNewRiderForm((prev) => ({ ...prev, phone: e.target.value }))}
+                  placeholder="Phone number"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20"
+                />
+                <input
+                  value={newRiderForm.vehicleType}
+                  onChange={(e) => setNewRiderForm((prev) => ({ ...prev, vehicleType: e.target.value }))}
+                  placeholder="Vehicle type"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20"
+                />
+                <input
+                  value={newRiderForm.branchId}
+                  onChange={(e) => setNewRiderForm((prev) => ({ ...prev, branchId: e.target.value }))}
+                  placeholder="Branch ID (optional)"
+                  className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2.5 text-sm font-semibold focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <button
+                onClick={() => void createRiderInline()}
+                disabled={creatingRider}
+                className="w-full mt-5 bg-blue-600 text-white rounded-xl py-3 text-sm font-bold hover:bg-blue-700 disabled:opacity-50"
+              >
+                {creatingRider ? 'Adding Rider...' : 'Save Rider'}
+              </button>
             </div>
           </div>
         )}
@@ -2111,3 +2567,4 @@ export default function AdminPage() {
     </div>
   );
 }
+

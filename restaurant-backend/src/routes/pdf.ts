@@ -5,6 +5,7 @@ import { AppError, asyncHandler } from '@/middleware/errorHandler';
 import { generateInvoicePDF, savePDFToStorage, downloadPDFFromStorage, getPDFDownloadUrl, isPrivateBucket } from '@/lib/pdf';
 import { AuthenticatedRequest } from '@/types/api';
 import { logger } from '@/utils/logger';
+import { resolveOrderPlacementContact } from '@/services/order-contact.service';
 
 const router = Router();
 
@@ -164,11 +165,12 @@ router.get('/invoice/:invoiceId', asyncHandler(async (req: AuthenticatedRequest,
 
     const order: any = fullInvoice.order;
     const invoiceNumber = fullInvoice.invoiceNumber || `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+    const placementContact = resolveOrderPlacementContact(order);
 
     const pdfBuffer = generateInvoicePDF({
-      customerName: order.user?.name || '',
-      customerEmail: order.user?.email || '',
-      customerPhone: order.user?.phone || '',
+      customerName: placementContact.name || order.user?.name || '',
+      customerEmail: placementContact.email || '',
+      customerPhone: placementContact.phone || '',
       invoiceNumber,
       orderDate: order.createdAt.toLocaleDateString('en-IN'),
       items: (order.items || []).map((it: any) => ({

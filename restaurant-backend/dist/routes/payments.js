@@ -2,18 +2,24 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("../config/database");
-const auth_1 = require("../middleware/auth");
-const errorHandler_1 = require("../middleware/errorHandler");
-const payments_1 = require("../lib/payments");
-const logger_1 = require("../utils/logger");
-const audit_1 = require("../utils/audit");
-const pdf_1 = require("../lib/pdf");
-const restaurant_1 = require("../middleware/restaurant");
-const realtime_1 = require("../utils/realtime");
-const cache_1 = require("../middleware/cache");
-const order_completion_service_1 = require("../services/order-completion.service");
+const database_1 = require("@/config/database");
+const auth_1 = require("@/middleware/auth");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const payments_1 = require("@/lib/payments");
+const logger_1 = require("@/utils/logger");
+const audit_1 = require("@/utils/audit");
+const pdf_1 = require("@/lib/pdf");
+const restaurant_1 = require("@/middleware/restaurant");
+const realtime_1 = require("@/utils/realtime");
+const cache_1 = require("@/middleware/cache");
+const order_completion_service_1 = require("@/services/order-completion.service");
+const order_status_notification_service_1 = require("@/services/order-status-notification.service");
+const idempotency_1 = require("@/utils/idempotency");
+const order_lock_1 = require("@/utils/order-lock");
+const kot_service_1 = require("@/modules/kot/kot.service");
+const order_contact_service_1 = require("@/services/order-contact.service");
 const router = (0, express_1.Router)();
+const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
 const createPaymentSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
     paymentProvider: zod_1.z.enum(['RAZORPAY', 'PAYTM', 'PHONEPE']).optional(),
@@ -93,13 +99,14 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
     });
     if (!existingInvoice) {
         const invoiceNumber = `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
-        const customerName = order.user?.name || 'Guest';
-        const customerEmail = order.user?.email || undefined;
-        const customerPhone = order.user?.phone || '';
+        const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
+        const customerName = placementContact.name || order.user?.name || 'Guest';
+        const customerEmail = placementContact.email || undefined;
+        const customerPhone = placementContact.phone || '';
         const tableNumber = order.table?.number ? String(order.table.number) : 'N/A';
         const invoiceData = {
             customerName,
-            customerEmail,
+            ...(customerEmail ? { customerEmail } : {}),
             customerPhone,
             invoiceNumber,
             orderDate: order.createdAt.toLocaleDateString('en-IN'),
@@ -156,6 +163,8 @@ const ensureInvoiceAndEarningForFullyPaidOrder = async (orderId) => {
 const buildOrderEventPayload = (order) => {
     const payloadOrder = {
         id: order.id,
+        orderId: order.id,
+        order_id: order.id,
         userId: order.userId,
         tableId: order.tableId,
         status: order.status,
@@ -180,6 +189,56 @@ const buildOrderEventPayload = (order) => {
     if (typeof order.discountPaise === 'number')
         payloadOrder.discountPaise = order.discountPaise;
     return { order: payloadOrder };
+};
+const emitAcceptedNotificationIfNeeded = (previousStatus, order) => {
+    if (previousStatus !== 'PENDING' || order.status !== 'CONFIRMED') {
+        return;
+    }
+    (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
+        type: 'order.accepted',
+        userId: order.userId,
+        payload: {
+            ...buildOrderEventPayload(order),
+            message: 'Your order has been accepted.',
+        },
+    });
+};
+const ensureMutationIdempotency = async (req, scope) => {
+    const key = (0, idempotency_1.extractIdempotencyKey)(req);
+    if (!key) {
+        return {
+            ok: false,
+            statusCode: 400,
+            error: 'Idempotency-Key header is required for order mutations',
+        };
+    }
+    const claimed = await (0, idempotency_1.claimIdempotencyKey)({ scope, key });
+    if (!claimed) {
+        return {
+            ok: false,
+            statusCode: 409,
+            error: 'Duplicate order mutation ignored',
+        };
+    }
+    return { ok: true };
+};
+const ensureOrderVersion = (req, currentUpdatedAt) => {
+    const expectedUpdatedAt = (0, order_lock_1.extractExpectedUpdatedAt)(req);
+    if (!expectedUpdatedAt) {
+        return {
+            ok: false,
+            statusCode: 400,
+            error: 'expectedUpdatedAt is required for order mutations',
+        };
+    }
+    if ((0, order_lock_1.hasVersionConflict)({ expectedUpdatedAt, currentUpdatedAt })) {
+        return {
+            ok: false,
+            statusCode: 409,
+            error: staleWriteMessage,
+        };
+    }
+    return { ok: true };
 };
 router.get('/providers', restaurant_1.requireRestaurant, (0, cache_1.cacheResponse)(300, 'payments:providers'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const providers = [
@@ -366,12 +425,28 @@ router.post('/verify', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
         },
     });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-    await (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
+    void (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
         logger_1.logger.error('Order completion notification pipeline failed after payment verify', {
             orderId: order.id,
             message: error instanceof Error ? error.message : String(error),
         });
     });
+    await (0, kot_service_1.syncKOTTicketFromOrderStatus)({
+        restaurantId: updatedOrder.restaurantId,
+        orderId: updatedOrder.id,
+        orderStatus: updatedOrder.status,
+        changedByUserId: req.user?.id,
+        note: `Synced from payment verification (${updatedOrder.status})`,
+        createIfMissing: !updatedOrder.isDelivery,
+        skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
+    });
+    emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.verify',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,
@@ -410,7 +485,7 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
     const refund = await provider.refund(order.paymentTransactionId, refundAmountPaise, reason || 'Customer requested refund');
     const nextPaid = Math.max(order.paidAmountPaise - refundAmountPaise, 0);
     const computed = computeDueAndStatus(order.totalPaise, nextPaid);
-    await database_1.prisma.$transaction([
+    const [updatedOrder] = await database_1.prisma.$transaction([
         database_1.prisma.order.update({
             where: { id: orderId },
             data: {
@@ -447,22 +522,25 @@ router.post('/refund', auth_1.authenticate, restaurant_1.requireRestaurant, (0, 
             reason,
         },
     });
+    await (0, kot_service_1.syncKOTTicketFromOrderStatus)({
+        restaurantId: updatedOrder.restaurantId,
+        orderId: updatedOrder.id,
+        orderStatus: updatedOrder.status,
+        changedByUserId: req.user?.id,
+        note: `Synced from payment refund (${updatedOrder.status})`,
+        createIfMissing: !updatedOrder.isDelivery,
+        skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
+    });
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.refund',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: order.userId,
-        payload: buildOrderEventPayload({
-            id: order.id,
-            userId: order.userId,
-            tableId: order.tableId,
-            status: nextPaid === 0 ? 'CANCELLED' : order.status,
-            paymentStatus: nextPaid === 0 ? 'REFUNDED' : computed.paymentStatus,
-            paymentProvider: order.paymentProvider,
-            paidAmountPaise: computed.paidAmountPaise,
-            dueAmountPaise: computed.dueAmountPaise,
-            totalPaise: order.totalPaise,
-            updatedAt: new Date(),
-            createdAt: order.createdAt,
-        }),
+        payload: buildOrderEventPayload(updatedOrder),
     });
     logger_1.logger.info('Payment refunded successfully', {
         orderId,
@@ -527,6 +605,10 @@ router.get('/status/:orderId', auth_1.authenticate, restaurant_1.requireRestaura
     res.json(response);
 }));
 router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const idempotency = await ensureMutationIdempotency(req, `payments:cash-confirm:${req.restaurant.id}`);
+    if (!idempotency.ok) {
+        throw new errorHandler_1.AppError(idempotency.error, idempotency.statusCode);
+    }
     const payload = cashConfirmSchema.parse(req.body);
     const order = await database_1.prisma.order.findFirst({
         where: {
@@ -540,6 +622,10 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
     });
     if (!order) {
         throw new errorHandler_1.AppError('Cash order not found or already fully paid', 404);
+    }
+    const versionCheck = ensureOrderVersion(req, order.updatedAt);
+    if (!versionCheck.ok) {
+        throw new errorHandler_1.AppError(versionCheck.error, versionCheck.statusCode);
     }
     const amountToAdd = Math.min(payload.amountPaise ?? order.dueAmountPaise, order.dueAmountPaise);
     const nextPaid = order.paidAmountPaise + amountToAdd;
@@ -582,12 +668,28 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
         },
     });
     await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-    await (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
+    void (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
         logger_1.logger.error('Order completion notification pipeline failed after cash confirm', {
             orderId: order.id,
             message: error instanceof Error ? error.message : String(error),
         });
     });
+    await (0, kot_service_1.syncKOTTicketFromOrderStatus)({
+        restaurantId: updatedOrder.restaurantId,
+        orderId: updatedOrder.id,
+        orderStatus: updatedOrder.status,
+        changedByUserId: req.user?.id,
+        note: `Synced from cash confirmation (${updatedOrder.status})`,
+        createIfMissing: !updatedOrder.isDelivery,
+        skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
+    });
+    emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.cash-confirm',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,
@@ -602,6 +704,10 @@ router.post('/cash/confirm', auth_1.authenticate, restaurant_1.requireRestaurant
     });
 }));
 router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, restaurant_1.authorizeRestaurantRole)('OWNER', 'ADMIN'), (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    const idempotency = await ensureMutationIdempotency(req, `payments:update-status:${req.restaurant.id}`);
+    if (!idempotency.ok) {
+        throw new errorHandler_1.AppError(idempotency.error, idempotency.statusCode);
+    }
     const payload = updatePaymentStatusSchema.parse(req.body);
     const order = await database_1.prisma.order.findFirst({
         where: {
@@ -611,6 +717,10 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
     });
     if (!order) {
         throw new errorHandler_1.AppError('Order not found', 404);
+    }
+    const versionCheck = ensureOrderVersion(req, order.updatedAt);
+    if (!versionCheck.ok) {
+        throw new errorHandler_1.AppError(versionCheck.error, versionCheck.statusCode);
     }
     const totalPaise = order.totalPaise;
     let paidAmountPaise = order.paidAmountPaise;
@@ -663,13 +773,29 @@ router.put('/status', auth_1.authenticate, restaurant_1.requireRestaurant, (0, r
     });
     if (payload.paymentStatus === 'COMPLETED') {
         await ensureInvoiceAndEarningForFullyPaidOrder(order.id);
-        await (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
+        void (0, order_completion_service_1.processOrderCompletionNotifications)(order.id).catch((error) => {
             logger_1.logger.error('Order completion notification pipeline failed after payment status update', {
                 orderId: order.id,
                 message: error instanceof Error ? error.message : String(error),
             });
         });
     }
+    await (0, kot_service_1.syncKOTTicketFromOrderStatus)({
+        restaurantId: updatedOrder.restaurantId,
+        orderId: updatedOrder.id,
+        orderStatus: updatedOrder.status,
+        changedByUserId: req.user?.id,
+        note: `Synced from payment status ${payload.paymentStatus}`,
+        createIfMissing: !updatedOrder.isDelivery,
+        skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
+    });
+    emitAcceptedNotificationIfNeeded(order.status, updatedOrder);
+    await (0, order_status_notification_service_1.notifyOrderStatusChange)({
+        orderId: updatedOrder.id,
+        previousStatus: order.status,
+        nextStatus: updatedOrder.status,
+        source: 'payments.update-status',
+    }).catch(() => undefined);
     (0, realtime_1.emitRestaurantEvent)(order.restaurantId, {
         type: 'order.updated',
         userId: updatedOrder.userId,

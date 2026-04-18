@@ -1,11 +1,12 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const database_1 = require("../config/database");
-const firebase_user_1 = require("../lib/firebase-user");
-const errorHandler_1 = require("../middleware/errorHandler");
-const pdf_1 = require("../lib/pdf");
-const logger_1 = require("../utils/logger");
+const database_1 = require("@/config/database");
+const firebase_user_1 = require("@/lib/firebase-user");
+const errorHandler_1 = require("@/middleware/errorHandler");
+const pdf_1 = require("@/lib/pdf");
+const logger_1 = require("@/utils/logger");
+const order_contact_service_1 = require("@/services/order-contact.service");
 const router = (0, express_1.Router)();
 router.get('/invoice/:invoiceId', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { invoiceId } = req.params;
@@ -134,10 +135,11 @@ router.get('/invoice/:invoiceId', (0, errorHandler_1.asyncHandler)(async (req, r
         }
         const order = fullInvoice.order;
         const invoiceNumber = fullInvoice.invoiceNumber || `INV-${Date.now()}-${order.id.substring(0, 8).toUpperCase()}`;
+        const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
         const pdfBuffer = (0, pdf_1.generateInvoicePDF)({
-            customerName: order.user?.name || '',
-            customerEmail: order.user?.email || '',
-            customerPhone: order.user?.phone || '',
+            customerName: placementContact.name || order.user?.name || '',
+            customerEmail: placementContact.email || '',
+            customerPhone: placementContact.phone || '',
             invoiceNumber,
             orderDate: order.createdAt.toLocaleDateString('en-IN'),
             items: (order.items || []).map((it) => ({

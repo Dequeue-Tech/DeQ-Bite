@@ -1,4 +1,4 @@
-import axios, { AxiosInstance, AxiosResponse } from 'axios';
+import axios, { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios';
 import {
   ApplicationVerifier,
   ConfirmationResult,
@@ -235,6 +235,34 @@ export interface DeliveryMeta {
   riderPhone?: string;
   deliveryStatus: DeliveryStatus;
 }
+
+export interface DeliveryRider {
+  id: string;
+  restaurantId: string;
+  branchId?: string | null;
+  name: string;
+  phone: string;
+  vehicleType: string;
+  availability: 'ONLINE' | 'BUSY' | 'OFFLINE';
+  active: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PushRoleScope = 'admin' | 'staff' | 'customer' | 'rider';
+
+export interface PushSubscriptionPayload {
+  endpoint: string;
+  keys: {
+    p256dh: string;
+    auth: string;
+  };
+}
+
+export type MutationConsistencyOptions = {
+  expectedUpdatedAt?: string;
+  idempotencyKey?: string;
+};
 
 export interface DeliveryOrder extends Order {
   deliveryMeta: DeliveryMeta;
@@ -542,6 +570,44 @@ class ApiClient {
     'favicon.ico',
   ]);
 
+  private createIdempotencyKey = () => {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `idem-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+  };
+
+  private buildMutationConfig(options?: MutationConsistencyOptions): AxiosRequestConfig {
+    const headers: Record<string, string> = {
+      'Idempotency-Key': options?.idempotencyKey || this.createIdempotencyKey(),
+    };
+    if (options?.expectedUpdatedAt) {
+      headers['x-expected-updated-at'] = options.expectedUpdatedAt;
+    }
+    return { headers };
+  }
+
+  private toFriendlyErrorMessage(error: any): string {
+    const status = error?.response?.status;
+    const serverMessage =
+      typeof error?.response?.data?.error === 'string' ? error.response.data.error : '';
+
+    if (!status) {
+      return "You're offline. Reconnecting…";
+    }
+    if (status === 500) {
+      return 'Something went wrong on our end. Please try again.';
+    }
+    if (status === 409) {
+      return 'This order was just updated by someone else. Refreshing…';
+    }
+    if (status === 401) {
+      return 'Your session expired. Please log in again.';
+    }
+
+    return serverMessage || error?.message || 'Request failed';
+  }
+
   private decodeJwtPayload(token: string): Record<string, unknown> | null {
     const parts = token.split('.');
     if (parts.length !== 3) return null;
@@ -619,7 +685,7 @@ class ApiClient {
             window.location.href = '/auth/signin';
           }
         }
-        return Promise.reject(error);
+        return Promise.reject(new Error(this.toFriendlyErrorMessage(error)));
       }
     );
   }
@@ -749,6 +815,36 @@ class ApiClient {
     const hasQuery = base.includes('?');
     const connector = hasQuery ? '&' : '?';
     return `${base}${connector}token=${encodeURIComponent(token)}`;
+  }
+
+  async getPushVapidPublicKey(): Promise<string> {
+    const response = await this.api.get<ApiResponse<{ publicKey: string }>>(
+      this.buildTenantEndpoint('/push/vapid-public-key')
+    );
+    if (response.data.success && response.data.data?.publicKey) {
+      return response.data.data.publicKey;
+    }
+    throw new Error(response.data.error || 'Push public key unavailable');
+  }
+
+  async subscribeToPush(payload: { roleScope: PushRoleScope; subscription: PushSubscriptionPayload }): Promise<void> {
+    const response = await this.api.post<ApiResponse>(
+      this.buildTenantEndpoint('/push/subscribe'),
+      payload
+    );
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to save push subscription');
+    }
+  }
+
+  async unsubscribeFromPush(endpoint: string): Promise<void> {
+    const response = await this.api.delete<ApiResponse>(
+      this.buildTenantEndpoint('/push/unsubscribe'),
+      { data: { endpoint } }
+    );
+    if (!response.data.success) {
+      throw new Error(response.data.error || 'Failed to remove push subscription');
+    }
   }
 
   async syncFirebaseSession(payload: { name?: string; phone?: string } = {}, token?: string): Promise<User> {
@@ -1073,12 +1169,11 @@ class ApiClient {
     couponCode?: string;
     paymentProvider?: 'RAZORPAY' | 'PAYTM' | 'PHONEPE' | 'CASH';
   }): Promise<ApiResponse<Order>> {
-    console.log('Sending order data to backend:', orderData);
-    console.log('API URL:', this.api.defaults.baseURL);
-    console.log('Headers:', this.api.defaults.headers);
-    
-    const response = await this.api.post<ApiResponse<Order>>(this.buildTenantEndpoint('/orders'), orderData);
-    console.log('Order creation response:', response);
+    const response = await this.api.post<ApiResponse<Order>>(
+      this.buildTenantEndpoint('/orders'),
+      orderData,
+      this.buildMutationConfig()
+    );
     return response.data;
   }
 
@@ -1087,20 +1182,25 @@ class ApiClient {
     return response.data;
   }
 
-  async getOrdersPage(page = 1, limit = 20): Promise<ApiResponse<Order[]>> {
+  async getOrdersPage(page = 1, limit = 20, updatedAfter?: string): Promise<ApiResponse<Order[]>> {
     const params = new URLSearchParams({
       page: String(page),
       limit: String(limit),
     });
+    if (updatedAfter) params.set('updatedAfter', updatedAfter);
     const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint(`/orders?${params.toString()}`));
     return response.data;
   }
 
-  async getRestaurantOrders(channel: 'ALL' | 'DINE_IN' | 'DELIVERY' | MarketplaceSourceSystem = 'ALL'): Promise<ApiResponse<Order[]>> {
+  async getRestaurantOrders(
+    channel: 'ALL' | 'DINE_IN' | 'DELIVERY' | MarketplaceSourceSystem = 'ALL',
+    updatedAfter?: string
+  ): Promise<ApiResponse<Order[]>> {
     const params = new URLSearchParams();
     if (channel !== 'ALL') {
       params.set('channel', channel);
     }
+    if (updatedAfter) params.set('updatedAfter', updatedAfter);
     const suffix = params.toString() ? `?${params.toString()}` : '';
     const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint(`/orders/restaurant/all${suffix}`));
     return response.data;
@@ -1109,7 +1209,8 @@ class ApiClient {
   async getRestaurantOrdersPage(
     page = 1,
     limit = 20,
-    channel: 'ALL' | 'DINE_IN' | 'DELIVERY' | MarketplaceSourceSystem = 'ALL'
+    channel: 'ALL' | 'DINE_IN' | 'DELIVERY' | MarketplaceSourceSystem = 'ALL',
+    updatedAfter?: string
   ): Promise<ApiResponse<Order[]>> {
     const params = new URLSearchParams({
       page: String(page),
@@ -1118,6 +1219,7 @@ class ApiClient {
     if (channel !== 'ALL') {
       params.set('channel', channel);
     }
+    if (updatedAfter) params.set('updatedAfter', updatedAfter);
     const response = await this.api.get<ApiResponse<Order[]>>(this.buildTenantEndpoint(`/orders/restaurant/all?${params.toString()}`));
     return response.data;
   }
@@ -1127,42 +1229,116 @@ class ApiClient {
     return response.data;
   }
 
-  async updateOrderStatus(id: string, status: string): Promise<ApiResponse<Order>> {
-    const response = await this.api.put<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${id}/status`), { status });
+  async updateOrderStatus(id: string, status: string, options?: MutationConsistencyOptions): Promise<ApiResponse<Order>> {
+    const response = await this.api.put<ApiResponse<Order>>(
+      this.buildTenantEndpoint(`/orders/${id}/status`),
+      { status, ...(options?.expectedUpdatedAt ? { expectedUpdatedAt: options.expectedUpdatedAt } : {}) },
+      this.buildMutationConfig(options)
+    );
     return response.data;
   }
 
-  async cancelOrder(id: string): Promise<ApiResponse<Order>> {
-    const response = await this.api.put<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${id}/cancel`));
+  async cancelOrder(id: string, options?: MutationConsistencyOptions): Promise<ApiResponse<Order>> {
+    const response = await this.api.put<ApiResponse<Order>>(
+      this.buildTenantEndpoint(`/orders/${id}/cancel`),
+      options?.expectedUpdatedAt ? { expectedUpdatedAt: options.expectedUpdatedAt } : {},
+      this.buildMutationConfig(options)
+    );
     return response.data;
   }
 
   async addOrderItems(orderId: string, payload: {
     items: { menuItemId: string; quantity: number; notes?: string }[];
     specialInstructions?: string;
-  }): Promise<ApiResponse<Order>> {
-    const response = await this.api.post<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${orderId}/items`), payload);
+  }, options?: MutationConsistencyOptions): Promise<ApiResponse<Order>> {
+    const response = await this.api.post<ApiResponse<Order>>(
+      this.buildTenantEndpoint(`/orders/${orderId}/items`),
+      { ...payload, ...(options?.expectedUpdatedAt ? { expectedUpdatedAt: options.expectedUpdatedAt } : {}) },
+      this.buildMutationConfig(options)
+    );
     return response.data;
   }
 
-  async applyCouponToOrder(orderId: string, couponCode: string): Promise<ApiResponse<Order>> {
-    const response = await this.api.post<ApiResponse<Order>>(this.buildTenantEndpoint(`/orders/${orderId}/apply-coupon`), { couponCode });
+  async applyCouponToOrder(orderId: string, couponCode: string, options?: MutationConsistencyOptions): Promise<ApiResponse<Order>> {
+    const response = await this.api.post<ApiResponse<Order>>(
+      this.buildTenantEndpoint(`/orders/${orderId}/apply-coupon`),
+      { couponCode, ...(options?.expectedUpdatedAt ? { expectedUpdatedAt: options.expectedUpdatedAt } : {}) },
+      this.buildMutationConfig(options)
+    );
     return response.data;
   }
 
   // Delivery methods
-  async getDeliveryOrders(): Promise<ApiResponse<DeliveryOrder[]>> {
-    const response = await this.api.get<ApiResponse<DeliveryOrder[]>>(this.buildTenantEndpoint('/delivery/orders/restaurant/all'));
+  async getDeliveryOrders(updatedAfter?: string): Promise<ApiResponse<DeliveryOrder[]>> {
+    const params = new URLSearchParams();
+    if (updatedAfter) params.set('updatedAfter', updatedAfter);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    const response = await this.api.get<ApiResponse<DeliveryOrder[]>>(
+      this.buildTenantEndpoint(`/delivery/orders/restaurant/all${suffix}`)
+    );
     return response.data;
   }
 
-  async assignDeliveryRider(orderId: string, payload: { riderName: string; riderPhone: string }): Promise<ApiResponse<DeliveryOrder>> {
-    const response = await this.api.put<ApiResponse<DeliveryOrder>>(this.buildTenantEndpoint(`/delivery/orders/${orderId}/assign-rider`), payload);
+  async assignDeliveryRider(
+    orderId: string,
+    payload: { riderName?: string; riderPhone?: string; riderId?: string; branchId?: string },
+    options?: MutationConsistencyOptions
+  ): Promise<ApiResponse<DeliveryOrder>> {
+    const response = await this.api.put<ApiResponse<DeliveryOrder>>(
+      this.buildTenantEndpoint(`/delivery/orders/${orderId}/assign-rider`),
+      { ...payload, ...(options?.expectedUpdatedAt ? { expectedUpdatedAt: options.expectedUpdatedAt } : {}) },
+      this.buildMutationConfig(options)
+    );
     return response.data;
   }
 
-  async updateDeliveryOrderStatus(orderId: string, deliveryStatus: DeliveryStatus): Promise<ApiResponse<DeliveryOrder>> {
-    const response = await this.api.put<ApiResponse<DeliveryOrder>>(this.buildTenantEndpoint(`/delivery/orders/${orderId}/status`), { deliveryStatus });
+  async updateDeliveryOrderStatus(
+    orderId: string,
+    deliveryStatus: DeliveryStatus,
+    options?: MutationConsistencyOptions
+  ): Promise<ApiResponse<DeliveryOrder>> {
+    const response = await this.api.put<ApiResponse<DeliveryOrder>>(
+      this.buildTenantEndpoint(`/delivery/orders/${orderId}/status`),
+      { deliveryStatus, ...(options?.expectedUpdatedAt ? { expectedUpdatedAt: options.expectedUpdatedAt } : {}) },
+      this.buildMutationConfig(options)
+    );
+    return response.data;
+  }
+
+  async getDeliveryRiders(branchId?: string): Promise<ApiResponse<DeliveryRider[]>> {
+    const params = new URLSearchParams();
+    if (branchId) params.set('branchId', branchId);
+    const suffix = params.toString() ? `?${params.toString()}` : '';
+    const response = await this.api.get<ApiResponse<DeliveryRider[]>>(
+      this.buildTenantEndpoint(`/delivery/riders${suffix}`)
+    );
+    return response.data;
+  }
+
+  async createDeliveryRider(payload: {
+    name: string;
+    phone: string;
+    vehicleType: string;
+    branchId?: string;
+    availability?: 'ONLINE' | 'BUSY' | 'OFFLINE';
+  }): Promise<ApiResponse<DeliveryRider>> {
+    const response = await this.api.post<ApiResponse<DeliveryRider>>(
+      this.buildTenantEndpoint('/delivery/riders'),
+      payload,
+      this.buildMutationConfig()
+    );
+    return response.data;
+  }
+
+  async updateDeliveryRiderStatus(
+    riderId: string,
+    availability: 'ONLINE' | 'BUSY' | 'OFFLINE'
+  ): Promise<ApiResponse<DeliveryRider>> {
+    const response = await this.api.put<ApiResponse<DeliveryRider>>(
+      this.buildTenantEndpoint(`/delivery/riders/${riderId}/status`),
+      { availability },
+      this.buildMutationConfig()
+    );
     return response.data;
   }
 
@@ -1217,11 +1393,21 @@ class ApiClient {
     throw new Error(response.data.error || 'Failed to fetch KOT ticket');
   }
 
-  async updateKotStatus(orderId: string, status: KOTStatus, note?: string): Promise<KOTTicket> {
-    const response = await this.api.patch<ApiResponse<KOTTicket>>(this.buildTenantEndpoint(`/kot/tickets/order/${orderId}/status`), {
-      status,
-      note,
-    });
+  async updateKotStatus(
+    orderId: string,
+    status: KOTStatus,
+    note?: string,
+    options?: MutationConsistencyOptions
+  ): Promise<KOTTicket> {
+    const response = await this.api.patch<ApiResponse<KOTTicket>>(
+      this.buildTenantEndpoint(`/kot/tickets/order/${orderId}/status`),
+      {
+        status,
+        note,
+        ...(options?.expectedUpdatedAt ? { expectedOrderUpdatedAt: options.expectedUpdatedAt } : {}),
+      },
+      this.buildMutationConfig(options)
+    );
     if (response.data.success && response.data.data) {
       return response.data.data;
     }
@@ -1648,8 +1834,12 @@ class ApiClient {
     throw new Error(response.data.error || 'Failed to update payment policy');
   }
 
-  async confirmCashPayment(orderId: string): Promise<any> {
-    const response = await this.api.post<ApiResponse<{ order: Order }>>(this.buildTenantEndpoint('/payments/cash/confirm'), { orderId });
+  async confirmCashPayment(orderId: string, options?: MutationConsistencyOptions): Promise<any> {
+    const response = await this.api.post<ApiResponse<{ order: Order }>>(
+      this.buildTenantEndpoint('/payments/cash/confirm'),
+      { orderId, ...(options?.expectedUpdatedAt ? { expectedUpdatedAt: options.expectedUpdatedAt } : {}) },
+      this.buildMutationConfig(options)
+    );
     if (response.data.success) {
       return response.data.data?.order;
     }
@@ -1660,8 +1850,17 @@ class ApiClient {
     orderId: string;
     paymentStatus: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED' | 'REFUNDED' | 'PARTIALLY_PAID';
     paidAmountPaise?: number;
+    expectedUpdatedAt?: string;
+    idempotencyKey?: string;
   }): Promise<Order> {
-    const response = await this.api.put<ApiResponse<{ order: Order }>>(this.buildTenantEndpoint('/payments/status'), payload);
+    const response = await this.api.put<ApiResponse<{ order: Order }>>(
+      this.buildTenantEndpoint('/payments/status'),
+      payload,
+      this.buildMutationConfig({
+        expectedUpdatedAt: payload.expectedUpdatedAt,
+        idempotencyKey: payload.idempotencyKey,
+      })
+    );
     if (response.data.success) {
       return response.data.data?.order as Order;
     }

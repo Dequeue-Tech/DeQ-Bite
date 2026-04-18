@@ -1,14 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
-const auth_1 = require("../middleware/auth");
-const restaurant_1 = require("../middleware/restaurant");
-const realtime_1 = require("../utils/realtime");
-const logger_1 = require("../utils/logger");
+const auth_1 = require("@/middleware/auth");
+const restaurant_1 = require("@/middleware/restaurant");
+const realtime_1 = require("@/utils/realtime");
+const logger_1 = require("@/utils/logger");
 const router = (0, express_1.Router)();
+const allowedRoleScopes = new Set(['admin', 'staff', 'customer', 'rider']);
 router.get('/events', auth_1.authenticate, restaurant_1.requireRestaurant, (req, res) => {
     const requestedScope = typeof req.query['scope'] === 'string' ? req.query['scope'].trim().toLowerCase() : 'restaurant';
     const scope = requestedScope === 'user' || requestedScope === 'both' ? requestedScope : 'restaurant';
+    const requestedRole = typeof req.query['role'] === 'string' ? req.query['role'].trim().toLowerCase() : '';
+    const roleScope = allowedRoleScopes.has(requestedRole) ? requestedRole : null;
     const userId = req.user?.id;
     const restaurantId = req.restaurant.id;
     const eventsRaw = typeof req.query['events'] === 'string' ? req.query['events'] : '';
@@ -32,12 +35,18 @@ router.get('/events', auth_1.authenticate, restaurant_1.requireRestaurant, (req,
         }
         if (scope === 'user' && event.userId !== userId)
             return;
+        if (roleScope && Array.isArray(event.roleScopes) && event.roleScopes.length > 0) {
+            if (!event.roleScopes.includes(roleScope)) {
+                return;
+            }
+        }
         const idLine = event.eventId ? `id: ${event.eventId}\n` : '';
         res.write(`${idLine}event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
         logger_1.logger.info('Realtime event delivered', {
             eventId: event.eventId,
             eventType: event.type,
             scope,
+            roleScope,
             restaurantId,
             userId,
         });

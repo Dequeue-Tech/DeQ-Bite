@@ -6,7 +6,7 @@ import { authorizeRestaurantRole, requireRestaurant } from '@/middleware/restaur
 import { AuthenticatedRequest } from '@/types/api';
 import { logger } from '@/utils/logger';
 import { emitRestaurantEvent } from '@/utils/realtime';
-import { createKOTTicketForOrder } from '@/modules/kot/kot.service';
+import { createKOTTicketForOrder, syncKOTTicketFromOrderStatus } from '@/modules/kot/kot.service';
 import { deductInventoryForOrder, InventoryError } from '@/modules/inventory/inventory.service';
 import { syncCustomerOrderProfile } from '@/modules/crm/crm.service';
 import {
@@ -16,6 +16,9 @@ import {
   MarketplaceSourceSystem,
 } from '@/modules/pos/marketplace-order-meta';
 import { processOrderCompletionNotifications } from '@/services/order-completion.service';
+import { notifyOrderStatusChange } from '@/services/order-status-notification.service';
+import { extractIdempotencyKey, claimIdempotencyKey } from '@/utils/idempotency';
+import { extractExpectedUpdatedAt, hasVersionConflict } from '@/utils/order-lock';
 
 const router = Router();
 const TAX_RATE = 0.08;
@@ -105,6 +108,8 @@ const calculateDiscountFromCoupon = (coupon: any, subtotalPaise: number) => {
 const buildOrderEventPayload = (order: any) => {
   const payloadOrder: any = {
     id: order.id,
+    orderId: order.id,
+    order_id: order.id,
     userId: order.userId,
     tableId: order.tableId,
     status: order.status,
@@ -131,6 +136,21 @@ const buildOrderEventPayload = (order: any) => {
   }
 
   return { order: payloadOrder };
+};
+
+const emitAcceptedNotificationIfNeeded = (previousStatus: string, order: any) => {
+  if (previousStatus !== 'PENDING' || order.status !== 'CONFIRMED') {
+    return;
+  }
+
+  emitRestaurantEvent(order.restaurantId, {
+    type: 'order.accepted',
+    userId: order.userId,
+    payload: {
+      ...buildOrderEventPayload(order),
+      message: 'Your order has been accepted.',
+    },
+  });
 };
 
 const applyCoupon = async (restaurantId: string, code: string, subtotalPaise: number) => {
@@ -166,8 +186,58 @@ const applyCoupon = async (restaurantId: string, code: string, subtotalPaise: nu
   return { couponId: coupon.id, discountPaise, normalizedCode };
 };
 
+const staleWriteMessage = 'This order was just updated by someone else. Refreshing…';
+
+const ensureMutationIdempotency = async (req: AuthenticatedRequest, scope: string) => {
+  const key = extractIdempotencyKey(req);
+  if (!key) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'Idempotency-Key header is required for order mutations',
+    } as const;
+  }
+
+  const claimed = await claimIdempotencyKey({ scope, key });
+  if (!claimed) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: 'Duplicate order mutation ignored',
+    } as const;
+  }
+
+  return { ok: true } as const;
+};
+
+const ensureOrderVersion = (req: AuthenticatedRequest, currentUpdatedAt: Date) => {
+  const expectedUpdatedAt = extractExpectedUpdatedAt(req);
+  if (!expectedUpdatedAt) {
+    return {
+      ok: false,
+      statusCode: 400,
+      error: 'expectedUpdatedAt is required for order mutations',
+    } as const;
+  }
+
+  if (hasVersionConflict({ expectedUpdatedAt, currentUpdatedAt })) {
+    return {
+      ok: false,
+      statusCode: 409,
+      error: staleWriteMessage,
+    } as const;
+  }
+
+  return { ok: true } as const;
+};
+
 router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
+    const idempotency = await ensureMutationIdempotency(req, `orders:create:${req.restaurant!.id}`);
+    if (!idempotency.ok) {
+      return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+    }
+
     const { tableId, items, specialInstructions, couponCode, paymentProvider } = req.body;
     const userId = req.user?.id;
 
@@ -419,6 +489,11 @@ router.post('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 // Add dishes to an ongoing order
 router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
+    const idempotency = await ensureMutationIdempotency(req, `orders:add-items:${req.restaurant!.id}`);
+    if (!idempotency.ok) {
+      return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+    }
+
     const { id } = req.params;
     const userId = req.user?.id;
     const { items, specialInstructions } = req.body;
@@ -441,6 +516,10 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
 
     if (!existingOrder) {
       return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    const versionCheck = ensureOrderVersion(req, existingOrder.updatedAt);
+    if (!versionCheck.ok) {
+      return res.status(versionCheck.statusCode).json({ success: false, error: versionCheck.error });
     }
 
     if (['COMPLETED', 'CANCELLED'].includes(existingOrder.status)) {
@@ -535,6 +614,25 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
       }),
     ]);
 
+    if (updatedOrder.status !== existingOrder.status) {
+      await syncKOTTicketFromOrderStatus({
+        restaurantId: updatedOrder.restaurantId,
+        orderId: updatedOrder.id,
+        orderStatus: updatedOrder.status,
+        changedByUserId: req.user?.id,
+        note: `Synced from order status ${updatedOrder.status}`,
+        createIfMissing: !updatedOrder.isDelivery,
+        skipForDeliveryOrder: Boolean(updatedOrder.isDelivery),
+      });
+      emitAcceptedNotificationIfNeeded(existingOrder.status, updatedOrder);
+      await notifyOrderStatusChange({
+        orderId: updatedOrder.id,
+        previousStatus: existingOrder.status,
+        nextStatus: updatedOrder.status,
+        source: 'orders.add-items',
+      }).catch(() => undefined);
+    }
+
     emitRestaurantEvent(updatedOrder.restaurantId, {
       type: 'order.updated',
       userId: updatedOrder.userId,
@@ -554,6 +652,11 @@ router.post('/:id/items', requireRestaurant, async (req: AuthenticatedRequest, r
 // Apply or replace coupon for an existing unpaid order
 router.post('/:id/apply-coupon', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
+    const idempotency = await ensureMutationIdempotency(req, `orders:apply-coupon:${req.restaurant!.id}`);
+    if (!idempotency.ok) {
+      return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+    }
+
     const { id } = req.params;
     const { couponCode } = req.body as { couponCode?: string };
 
@@ -580,6 +683,10 @@ router.post('/:id/apply-coupon', requireRestaurant, async (req: AuthenticatedReq
 
     if (!existingOrder) {
       return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    const versionCheck = ensureOrderVersion(req, existingOrder.updatedAt);
+    if (!versionCheck.ok) {
+      return res.status(versionCheck.statusCode).json({ success: false, error: versionCheck.error });
     }
 
     if (existingOrder.paymentStatus === 'COMPLETED') {
@@ -664,6 +771,14 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 
     const pageRaw = Number(req.query['page']);
     const limitRaw = Number(req.query['limit']);
+    const updatedAfterRaw = typeof req.query['updatedAfter'] === 'string' ? req.query['updatedAfter'] : '';
+    const updatedAfter = updatedAfterRaw ? new Date(updatedAfterRaw) : null;
+    const hasValidUpdatedAfter = Boolean(updatedAfter && !Number.isNaN(updatedAfter.getTime()));
+    const baseWhere: Prisma.OrderWhereInput = {
+      userId,
+      restaurantId: req.restaurant!.id,
+      ...(hasValidUpdatedAfter ? { updatedAt: { gt: updatedAfter! } } : {}),
+    };
     const hasPaging = Number.isFinite(pageRaw) || Number.isFinite(limitRaw);
     const page = Number.isFinite(pageRaw) && pageRaw > 0 ? Math.floor(pageRaw) : 1;
     const limit = Number.isFinite(limitRaw) && limitRaw > 0 ? Math.min(Math.floor(limitRaw), 100) : 20;
@@ -672,10 +787,7 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
       const skip = (page - 1) * limit;
       const [orders, total] = await Promise.all([
         prisma.order.findMany({
-          where: {
-            userId,
-            restaurantId: req.restaurant!.id,
-          },
+          where: baseWhere,
           include: {
             items: { include: { menuItem: true } },
             table: true,
@@ -687,10 +799,7 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
           take: limit,
         }),
         prisma.order.count({
-          where: {
-            userId,
-            restaurantId: req.restaurant!.id,
-          },
+          where: baseWhere,
         }),
       ]);
 
@@ -710,10 +819,7 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
     const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
     const orders = await prisma.order.findMany({
-      where: {
-        userId,
-        restaurantId: req.restaurant!.id,
-      },
+      where: baseWhere,
       include: {
         items: { include: { menuItem: true } },
         table: true,
@@ -734,10 +840,19 @@ router.get('/', requireRestaurant, async (req: AuthenticatedRequest, res) => {
 router.get('/restaurant/all', requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
   try {
     const channel = parseOrderChannelFilter(req.query['channel']);
+    const updatedAfterRaw = typeof req.query['updatedAfter'] === 'string' ? req.query['updatedAfter'] : '';
+    const updatedAfter = updatedAfterRaw ? new Date(updatedAfterRaw) : null;
+    const hasValidUpdatedAfter = Boolean(updatedAfter && !Number.isNaN(updatedAfter.getTime()));
     const where = buildRestaurantOrderWhere({
       restaurantId: req.restaurant!.id,
       channel,
     });
+    const whereWithDelta: Prisma.OrderWhereInput = hasValidUpdatedAfter
+      ? {
+          ...where,
+          updatedAt: { gt: updatedAfter! },
+        }
+      : where;
 
     const pageRaw = Number(req.query['page']);
     const limitRaw = Number(req.query['limit']);
@@ -749,7 +864,7 @@ router.get('/restaurant/all', requireRestaurant, authorizeRestaurantRole('OWNER'
       const skip = (page - 1) * limit;
       const [orders, total] = await Promise.all([
         prisma.order.findMany({
-          where,
+          where: whereWithDelta,
           include: {
             user: { select: { id: true, name: true, email: true } },
             items: { include: { menuItem: true } },
@@ -762,7 +877,7 @@ router.get('/restaurant/all', requireRestaurant, authorizeRestaurantRole('OWNER'
           take: limit,
         }),
         prisma.order.count({
-          where,
+          where: whereWithDelta,
         }),
       ]);
 
@@ -784,7 +899,7 @@ router.get('/restaurant/all', requireRestaurant, authorizeRestaurantRole('OWNER'
     const cursor = req.query['cursor'] ? { id: String(req.query['cursor']) } : undefined;
 
     const orders = await prisma.order.findMany({
-      where,
+      where: whereWithDelta,
       include: {
         user: { select: { id: true, name: true, email: true } },
         items: { include: { menuItem: true } },
@@ -843,6 +958,11 @@ router.get('/:id', requireRestaurant, async (req: AuthenticatedRequest, res) => 
 
 router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'ADMIN', 'STAFF'), async (req: AuthenticatedRequest, res) => {
   try {
+    const idempotency = await ensureMutationIdempotency(req, `orders:update-status:${req.restaurant!.id}`);
+    if (!idempotency.ok) {
+      return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+    }
+
     const { id } = req.params;
     const { status } = req.body as { status?: string };
 
@@ -858,6 +978,10 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
 
     if (!existing) {
       return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    const versionCheck = ensureOrderVersion(req, existing.updatedAt);
+    if (!versionCheck.ok) {
+      return res.status(versionCheck.statusCode).json({ success: false, error: versionCheck.error });
     }
 
     if (
@@ -880,6 +1004,23 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
       },
     });
 
+    await syncKOTTicketFromOrderStatus({
+      restaurantId: order.restaurantId,
+      orderId: order.id,
+      orderStatus: order.status,
+      changedByUserId: req.user?.id,
+      note: `Synced from order status ${order.status}`,
+      createIfMissing: !order.isDelivery,
+      skipForDeliveryOrder: Boolean(order.isDelivery),
+    });
+    emitAcceptedNotificationIfNeeded(existing.status, order);
+    await notifyOrderStatusChange({
+      orderId: order.id,
+      previousStatus: existing.status,
+      nextStatus: order.status,
+      source: 'orders.update-status',
+    }).catch(() => undefined);
+
     emitRestaurantEvent(order.restaurantId, {
       type: 'order.updated',
       userId: order.userId,
@@ -887,7 +1028,7 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
     });
 
     if (order.status === 'COMPLETED') {
-      await processOrderCompletionNotifications(order.id).catch((error) => {
+      void processOrderCompletionNotifications(order.id).catch((error) => {
         logger.error('Order completion notification pipeline failed after order status update', {
           orderId: order.id,
           message: error instanceof Error ? error.message : String(error),
@@ -903,6 +1044,11 @@ router.put('/:id/status', requireRestaurant, authorizeRestaurantRole('OWNER', 'A
 
 router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, res) => {
   try {
+    const idempotency = await ensureMutationIdempotency(req, `orders:cancel:${req.restaurant!.id}`);
+    if (!idempotency.ok) {
+      return res.status(idempotency.statusCode).json({ success: false, error: idempotency.error });
+    }
+
     const { id } = req.params;
     if (!id) {
       return res.status(400).json({ success: false, error: 'Order ID is required' });
@@ -914,11 +1060,15 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
 
     const order = await prisma.order.findFirst({
       where: { id, userId, restaurantId: req.restaurant!.id },
-      select: { status: true, paidAmountPaise: true },
+      select: { status: true, paidAmountPaise: true, updatedAt: true },
     });
 
     if (!order) {
       return res.status(404).json({ success: false, error: 'Order not found' });
+    }
+    const versionCheck = ensureOrderVersion(req, order.updatedAt);
+    if (!versionCheck.ok) {
+      return res.status(versionCheck.statusCode).json({ success: false, error: versionCheck.error });
     }
 
     if (!['PENDING', 'CONFIRMED'].includes(order.status)) {
@@ -942,6 +1092,7 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
         id: true,
         userId: true,
         restaurantId: true,
+        isDelivery: true,
         status: true,
         paymentStatus: true,
         paymentProvider: true,
@@ -952,6 +1103,22 @@ router.put('/:id/cancel', requireRestaurant, async (req: AuthenticatedRequest, r
         createdAt: true,
       },
     });
+
+    await syncKOTTicketFromOrderStatus({
+      restaurantId: cancelled.restaurantId,
+      orderId: cancelled.id,
+      orderStatus: cancelled.status,
+      changedByUserId: req.user?.id,
+      note: 'Synced from order cancellation',
+      createIfMissing: !cancelled.isDelivery,
+      skipForDeliveryOrder: Boolean(cancelled.isDelivery),
+    });
+    await notifyOrderStatusChange({
+      orderId: cancelled.id,
+      previousStatus: order.status,
+      nextStatus: cancelled.status,
+      source: 'orders.cancel',
+    }).catch(() => undefined);
 
     emitRestaurantEvent(cancelled.restaurantId, {
       type: 'order.updated',

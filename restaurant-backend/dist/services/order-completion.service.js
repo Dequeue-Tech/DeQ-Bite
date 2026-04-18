@@ -1,13 +1,13 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.processOrderCompletionNotifications = void 0;
-const database_1 = require("@/config/database");
-const pdf_1 = require("@/lib/pdf");
-const email_1 = require("@/lib/email");
-const sms_1 = require("@/lib/sms");
-const realtime_1 = require("@/utils/realtime");
-const logger_1 = require("@/utils/logger");
-const order_contact_service_1 = require("@/services/order-contact.service");
+const database_1 = require("../config/database");
+const pdf_1 = require("../lib/pdf");
+const email_1 = require("../lib/email");
+const sms_1 = require("../lib/sms");
+const realtime_1 = require("../utils/realtime");
+const logger_1 = require("../utils/logger");
+const order_contact_service_1 = require("../services/order-contact.service");
 const DELIVERY_METHODS = ['EMAIL', 'SMS'];
 const withRetries = async (label, fn, retries = 2) => {
     let attempt = 0;
@@ -137,11 +137,21 @@ const processOrderCompletionNotifications = async (orderId) => {
         return;
     if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED')
         return;
-    const { invoice } = await ensureInvoiceRecord(order);
+    const { invoice, invoiceData } = await ensureInvoiceRecord(order);
     let invoiceUrl = invoice.pdfPath || null;
+    let invoicePdfBuffer = invoice.pdfData
+        ? Buffer.from(invoice.pdfData)
+        : null;
     if (invoice.pdfName) {
         try {
             invoiceUrl = await (0, pdf_1.getPDFDownloadUrl)(invoice.pdfName);
+        }
+        catch {
+        }
+    }
+    if (!invoicePdfBuffer) {
+        try {
+            invoicePdfBuffer = await withRetries('invoice-pdf-regenerate', async () => (0, pdf_1.generateInvoicePDF)(invoiceData));
         }
         catch {
         }
@@ -152,7 +162,7 @@ const processOrderCompletionNotifications = async (orderId) => {
     const placedOrderEmail = placementContact.email;
     const placedOrderPhone = placementContact.phone;
     const placedOrderName = placementContact.name || 'Guest';
-    if (!emailSent && placedOrderEmail) {
+    if (!emailSent && placedOrderEmail && invoicePdfBuffer) {
         const startedAt = new Date().toISOString();
         try {
             emailSent = await withRetries('invoice-email-send', async () => (0, email_1.sendOrderCompletionEmail)({
@@ -162,10 +172,9 @@ const processOrderCompletionNotifications = async (orderId) => {
                 invoiceNumber: invoice.invoiceNumber,
                 orderId: order.id,
                 totalInr: order.totalPaise / 100,
-                invoiceUrl,
                 orderDate: order.createdAt.toLocaleDateString('en-IN'),
                 tableNumber: order.table?.number || 0,
-            }));
+            }, invoicePdfBuffer));
             logDeliveryResult({
                 channel: 'email',
                 status: emailSent ? 'success' : 'failure',
@@ -193,6 +202,16 @@ const processOrderCompletionNotifications = async (orderId) => {
             orderId: order.id,
             target: '',
             reason: 'missing_order_placement_email',
+            startedAt: new Date().toISOString(),
+        });
+    }
+    else if (!invoicePdfBuffer) {
+        logDeliveryResult({
+            channel: 'email',
+            status: 'skipped',
+            orderId: order.id,
+            target: placedOrderEmail,
+            reason: 'missing_invoice_pdf',
             startedAt: new Date().toISOString(),
         });
     }

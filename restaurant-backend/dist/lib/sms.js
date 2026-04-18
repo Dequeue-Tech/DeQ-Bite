@@ -8,7 +8,7 @@ exports.sendOrderConfirmationSMS = sendOrderConfirmationSMS;
 exports.sendOrderCompletionSMS = sendOrderCompletionSMS;
 const axios_1 = __importDefault(require("axios"));
 const twilio_1 = __importDefault(require("twilio"));
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 const shortenUrl = async (longUrl) => {
     try {
         const response = await axios_1.default.get("https://tinyurl.com/api/create.php", {
@@ -279,7 +279,9 @@ This is an automated message.`;
 }
 async function sendOrderCompletionSMS(phone, data) {
     const shortUrl = await shortenUrl(data.invoiceUrl);
-    const message = `Hi ${data.customerName}, thanks for dining at ${data.restaurantName}. View your invoice: ${shortUrl} - ${data.restaurantName}`;
+    const message = `Hi ${data.customerName},
+Thanks for dining at ${data.restaurantName}.
+View your invoice: ${shortUrl} - ${data.restaurantName}`;
     return sendSMS({ to: phone, message });
 }
 //# sourceMappingURL=sms.js.map

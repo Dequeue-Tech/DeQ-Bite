@@ -2,17 +2,17 @@
 Object.defineProperty(exports, "__esModule", { value: true });
 const express_1 = require("express");
 const zod_1 = require("zod");
-const database_1 = require("@/config/database");
-const auth_1 = require("@/middleware/auth");
-const restaurant_1 = require("@/middleware/restaurant");
-const errorHandler_1 = require("@/middleware/errorHandler");
-const pdf_1 = require("@/lib/pdf");
-const email_1 = require("@/lib/email");
-const sms_1 = require("@/lib/sms");
-const logger_1 = require("@/utils/logger");
-const accelerate_cache_1 = require("@/utils/accelerate-cache");
-const realtime_1 = require("@/utils/realtime");
-const order_contact_service_1 = require("@/services/order-contact.service");
+const database_1 = require("../config/database");
+const auth_1 = require("../middleware/auth");
+const restaurant_1 = require("../middleware/restaurant");
+const errorHandler_1 = require("../middleware/errorHandler");
+const pdf_1 = require("../lib/pdf");
+const email_1 = require("../lib/email");
+const sms_1 = require("../lib/sms");
+const logger_1 = require("../utils/logger");
+const accelerate_cache_1 = require("../utils/accelerate-cache");
+const realtime_1 = require("../utils/realtime");
+const order_contact_service_1 = require("../services/order-contact.service");
 const router = (0, express_1.Router)();
 const resolveInvoiceDeliveryContact = (order) => {
     const placementContact = (0, order_contact_service_1.resolveOrderPlacementContact)(order);
@@ -56,7 +56,7 @@ const testOrderCompletionSmsSchema = zod_1.z.object({
         invoiceUrl: zod_1.z.string().url('Invoice URL must be a valid URL'),
     }),
 });
-router.post('/test-sms', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+router.post('/test-sms', (0, errorHandler_1.asyncHandler)(async (req, res) => {
     if (process.env.NODE_ENV === 'production') {
         throw new errorHandler_1.AppError('Not found', 404);
     }

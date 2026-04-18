@@ -161,14 +161,24 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   if (!order) return;
   if (order.status !== 'COMPLETED' || order.paymentStatus !== 'COMPLETED') return;
 
-  const { invoice } = await ensureInvoiceRecord(order);
+  const { invoice, invoiceData } = await ensureInvoiceRecord(order);
   let invoiceUrl = invoice.pdfPath || null;
+  let invoicePdfBuffer: Buffer | null = invoice.pdfData
+    ? Buffer.from(invoice.pdfData as Uint8Array)
+    : null;
 
   if (invoice.pdfName) {
     try {
       invoiceUrl = await getPDFDownloadUrl(invoice.pdfName);
     } catch {
       // fall back to stored path when signed URL generation fails
+    }
+  }
+  if (!invoicePdfBuffer) {
+    try {
+      invoicePdfBuffer = await withRetries('invoice-pdf-regenerate', async () => generateInvoicePDF(invoiceData));
+    } catch {
+      // keep null and skip email delivery below if PDF generation still fails
     }
   }
 
@@ -180,7 +190,7 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
   const placedOrderPhone = placementContact.phone;
   const placedOrderName = placementContact.name || 'Guest';
 
-  if (!emailSent && placedOrderEmail) {
+  if (!emailSent && placedOrderEmail && invoicePdfBuffer) {
     const startedAt = new Date().toISOString();
     try {
       emailSent = await withRetries('invoice-email-send', async () =>
@@ -191,10 +201,9 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
           invoiceNumber: invoice.invoiceNumber,
           orderId: order.id,
           totalInr: order.totalPaise / 100,
-          invoiceUrl,
           orderDate: order.createdAt.toLocaleDateString('en-IN'),
           tableNumber: order.table?.number || 0,
-        })
+        }, invoicePdfBuffer)
       );
       logDeliveryResult({
         channel: 'email',
@@ -221,6 +230,15 @@ export const processOrderCompletionNotifications = async (orderId: string) => {
       orderId: order.id,
       target: '',
       reason: 'missing_order_placement_email',
+      startedAt: new Date().toISOString(),
+    });
+  } else if (!invoicePdfBuffer) {
+    logDeliveryResult({
+      channel: 'email',
+      status: 'skipped',
+      orderId: order.id,
+      target: placedOrderEmail,
+      reason: 'missing_invoice_pdf',
       startedAt: new Date().toISOString(),
     });
   }

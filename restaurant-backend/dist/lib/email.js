@@ -9,7 +9,7 @@ exports.sendInvoiceEmail = sendInvoiceEmail;
 exports.sendOrderCompletionEmail = sendOrderCompletionEmail;
 exports.sendOrderConfirmationEmail = sendOrderConfirmationEmail;
 const nodemailer_1 = __importDefault(require("nodemailer"));
-const logger_1 = require("@/utils/logger");
+const logger_1 = require("../utils/logger");
 const getMissingEmailConfig = () => {
     const missing = [];
     if (!process.env.SMTP_HOST)

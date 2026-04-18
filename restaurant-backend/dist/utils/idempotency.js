@@ -1,7 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.claimIdempotencyKey = exports.extractIdempotencyKey = void 0;
-const redis_1 = require("@/utils/redis");
+const redis_1 = require("./redis");
 const FALLBACK_IDEMPOTENCY_KEYS = new Map();
 const DEFAULT_TTL_SECONDS = 5 * 60;
 const cleanupFallbackMap = () => {

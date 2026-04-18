@@ -46,6 +46,32 @@ const generateInvoiceSchema = zod_1.z.object({
     orderId: zod_1.z.string().min(1, 'Order ID is required'),
     methods: zod_1.z.array(zod_1.z.enum(['EMAIL', 'SMS'])).default([]),
 });
+const testOrderCompletionSmsSchema = zod_1.z.object({
+    phone: zod_1.z.string().min(8, 'Phone is required'),
+    data: zod_1.z.object({
+        customerName: zod_1.z.string().min(1, 'Customer name is required'),
+        restaurantName: zod_1.z.string().min(1, 'Restaurant name is required'),
+        invoiceNumber: zod_1.z.string().min(1, 'Invoice number is required'),
+        total: zod_1.z.number().nonnegative('Total must be zero or greater'),
+        invoiceUrl: zod_1.z.string().url('Invoice URL must be a valid URL'),
+    }),
+});
+router.post('/test-sms', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+        throw new errorHandler_1.AppError('Not found', 404);
+    }
+    const { phone, data } = testOrderCompletionSmsSchema.parse(req.body);
+    const smsSent = await (0, sms_1.sendOrderCompletionSMS)(phone, data);
+    return res.status(200).json({
+        success: true,
+        message: smsSent ? 'Test SMS sent successfully' : 'Test SMS failed to send',
+        data: {
+            smsSent,
+            phone,
+            provider: process.env['SMS_PROVIDER'] || 'fast2sms',
+        },
+    });
+}));
 router.post('/generate', auth_1.authenticate, restaurant_1.requireRestaurant, (0, errorHandler_1.asyncHandler)(async (req, res) => {
     const { orderId, methods } = generateInvoiceSchema.parse(req.body);
     const requestedMethods = methods || [];

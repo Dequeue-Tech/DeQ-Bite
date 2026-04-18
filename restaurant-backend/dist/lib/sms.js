@@ -279,9 +279,7 @@ This is an automated message.`;
 }
 async function sendOrderCompletionSMS(phone, data) {
     const shortUrl = await shortenUrl(data.invoiceUrl);
-    const message = `Hi ${data.customerName},
-  Thanks for dining with ${data.restaurantName}!  
-  You can view your invoice here: ${shortUrl}`;
+    const message = `Hi ${data.customerName}, thanks for dining at ${data.restaurantName}. View your invoice: ${shortUrl} - ${data.restaurantName}`;
     return sendSMS({ to: phone, message });
 }
 //# sourceMappingURL=sms.js.map

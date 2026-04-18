@@ -61,6 +61,37 @@ const generateInvoiceSchema = z.object({
   methods: z.array(z.enum(['EMAIL', 'SMS'])).default([]), // Default to empty array
 });
 
+const testOrderCompletionSmsSchema = z.object({
+  phone: z.string().min(8, 'Phone is required'),
+  data: z.object({
+    customerName: z.string().min(1, 'Customer name is required'),
+    restaurantName: z.string().min(1, 'Restaurant name is required'),
+    invoiceNumber: z.string().min(1, 'Invoice number is required'),
+    total: z.number().nonnegative('Total must be zero or greater'),
+    invoiceUrl: z.string().url('Invoice URL must be a valid URL'),
+  }),
+});
+
+// POST /api/invoices/test-sms - Dev helper to test completion SMS payload directly
+router.post('/test-sms', asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
+  if (process.env.NODE_ENV === 'production') {
+    throw new AppError('Not found', 404);
+  }
+
+  const { phone, data } = testOrderCompletionSmsSchema.parse(req.body);
+  const smsSent = await sendOrderCompletionSMS(phone, data);
+
+  return res.status(200).json({
+    success: true,
+    message: smsSent ? 'Test SMS sent successfully' : 'Test SMS failed to send',
+    data: {
+      smsSent,
+      phone,
+      provider: process.env['SMS_PROVIDER'] || 'fast2sms',
+    },
+  });
+}));
+
 // POST /api/invoices/generate - Generate and send invoice
 router.post('/generate', authenticate, requireRestaurant, asyncHandler(async (req: AuthenticatedRequest, res: Response) => {
   const { orderId, methods } = generateInvoiceSchema.parse(req.body);

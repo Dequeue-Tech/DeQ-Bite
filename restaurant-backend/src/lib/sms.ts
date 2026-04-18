@@ -350,8 +350,8 @@ export async function sendOrderCompletionSMS(
 ): Promise<boolean> {
   const shortUrl = await shortenUrl(data.invoiceUrl);
   const message = `Hi ${data.customerName},
-  Thanks for dining with ${data.restaurantName}!  
-  You can view your invoice here: ${shortUrl}`
+Thanks for dining at ${data.restaurantName}.
+View your invoice: ${shortUrl} - ${data.restaurantName}`;
 
   return sendSMS({ to: phone, message });
 }
